@@ -73,6 +73,7 @@ class OptimizationServiceFactory:
         optimization_backend_session: IOptimizationBackendSession | None = None,
         experiment_tracker: IExperimentTracker | None = None,
         config_persister: IConfigurationPersistence | None = None,
+        hooks: LifecycleHooks | None = None,
     ):
         """Initialize factory with optional dependency overrides.
 
@@ -82,12 +83,14 @@ class OptimizationServiceFactory:
             optimization_backend_session: Backend runtime coordination implementation
             experiment_tracker: Experiment tracking implementation
             config_persister: Configuration persistence implementation
+            hooks: Optional lifecycle hooks fired around created runs
         """
         self._build_factory = build_factory or BuildFactory()
         self._study_repository_override = study_repository
         self._optimization_backend_session_override = optimization_backend_session
         self._experiment_tracker_override = experiment_tracker
         self._config_persister_override = config_persister
+        self._hooks = hooks
 
     def create_optimization_orchestrator(
         self, settings: SearchJobConfig
@@ -124,6 +127,7 @@ class OptimizationServiceFactory:
                 optimization_backend_session=optimization_backend_session,
                 experiment_tracker=experiment_tracker,
                 config_persister=config_persister,
+                hooks=self._hooks,
             )
 
             logger.debug("Optimization orchestrator created successfully")

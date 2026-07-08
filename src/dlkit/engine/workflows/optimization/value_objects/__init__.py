@@ -35,9 +35,7 @@ from .protocols import (
     IOptimizationBackendSession,
     IPruningStrategy,
     IStudyRepository,
-    IStudyRunContext,
     ITrialExecutor,
-    ITrialRunContext,
 )
 
 __all__ = [
@@ -57,8 +55,6 @@ __all__ = [
     "IHyperparameterSampler",
     "IPruningStrategy",
     "IExperimentTracker",
-    "IStudyRunContext",
-    "ITrialRunContext",
     "IConfigurationPersistence",
     "ITrialExecutor",
     "IObjectiveFunction",

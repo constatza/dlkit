@@ -10,17 +10,23 @@ Covers:
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, dataclass
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
 
 from dlkit.common.results import TrainingResult
+from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.multi_run import (
     IMultiRunOrchestrator,
     MultiRunOrchestrator,
     RunVariant,
 )
+from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
+from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.config.run_settings import RunSettings
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -58,13 +64,57 @@ def mock_executor(mock_training_result: TrainingResult) -> MagicMock:
 
 
 @pytest.fixture
-def mock_build_factory() -> MagicMock:
-    """Mock BuildFactory.
+def job_config_settings() -> JobConfig:
+    """Real JobConfig, required by TrackingDecorator.execute_within_run's isinstance check.
+
+    Returns:
+        JobConfig: Minimal but valid job config with mlflow tracking configured.
+    """
+    return JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(name="test_experiment", run_name="test_run"),
+        tracking=TrackingSettings(backend="mlflow"),
+    )
+
+
+@pytest.fixture
+def runtime_components() -> RuntimeComponents:
+    """Real RuntimeComponents, required since TrackingDecorator calls dataclasses.replace().
+
+    Returns:
+        RuntimeComponents: Components with a mock trainer/datamodule and a
+        placeholder model. ``job_config_settings.model`` is None, so model
+        hyperparameter logging no-ops without needing a real Lightning module.
+    """
+
+    @dataclass(frozen=True, slots=True)
+    class DummyModel:
+        pass
+
+    trainer = MagicMock()
+    trainer.callbacks = []
+
+    return RuntimeComponents(
+        model=cast("Any", DummyModel()),
+        datamodule=MagicMock(),
+        trainer=trainer,
+        meta={},
+    )
+
+
+@pytest.fixture
+def mock_build_factory(runtime_components: RuntimeComponents) -> MagicMock:
+    """Mock BuildFactory whose build_components() returns a real RuntimeComponents.
+
+    Args:
+        runtime_components: Components fixture returned for every variant.
 
     Returns:
         MagicMock: Build factory mock.
     """
-    return MagicMock()
+    build_factory = MagicMock()
+    build_factory.build_components = MagicMock(return_value=runtime_components)
+    return build_factory
 
 
 @pytest.fixture
@@ -89,6 +139,8 @@ def mock_tracker() -> tuple[MagicMock, MagicMock]:
     tracker.__enter__ = MagicMock(return_value=tracker)
     tracker.__exit__ = MagicMock(return_value=False)
     tracker.create_run = MagicMock(return_value=child_cm)
+    tracker.get_tracking_uri = MagicMock(return_value=None)
+    tracker.is_local = MagicMock(return_value=False)
 
     return tracker, run_ctx
 
@@ -118,23 +170,29 @@ def orchestrator(
 
 
 @pytest.fixture
-def variant_a() -> RunVariant:
+def variant_a(job_config_settings: JobConfig) -> RunVariant:
     """First RunVariant for sweep tests.
+
+    Args:
+        job_config_settings: Real JobConfig shared across variants.
 
     Returns:
         RunVariant: Variant with run_name 'variant_a'.
     """
-    return RunVariant(settings=MagicMock(), run_name="variant_a")
+    return RunVariant(settings=job_config_settings, run_name="variant_a")
 
 
 @pytest.fixture
-def variant_b() -> RunVariant:
+def variant_b(job_config_settings: JobConfig) -> RunVariant:
     """Second RunVariant for sweep tests.
+
+    Args:
+        job_config_settings: Real JobConfig shared across variants.
 
     Returns:
         RunVariant: Variant with run_name 'variant_b'.
     """
-    return RunVariant(settings=MagicMock(), run_name="variant_b")
+    return RunVariant(settings=job_config_settings, run_name="variant_b")
 
 
 # ---------------------------------------------------------------------------
@@ -161,9 +219,13 @@ def test_run_variant_stores_run_name(variant_a: RunVariant) -> None:
     assert variant_a.run_name == "variant_a"
 
 
-def test_run_variant_default_tags_is_empty_dict() -> None:
-    """RunVariant.tags defaults to an empty dict when not supplied."""
-    variant = RunVariant(settings=MagicMock(), run_name="x")
+def test_run_variant_default_tags_is_empty_dict(job_config_settings: JobConfig) -> None:
+    """RunVariant.tags defaults to an empty dict when not supplied.
+
+    Args:
+        job_config_settings: Real JobConfig fixture.
+    """
+    variant = RunVariant(settings=job_config_settings, run_name="x")
     assert variant.tags == {}
 
 

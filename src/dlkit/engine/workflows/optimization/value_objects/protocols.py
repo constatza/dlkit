@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from typing import Any, Protocol, runtime_checkable
 
-from .models import OptimizationDirection, OptimizationResult, Study, Trial
+from .models import OptimizationDirection, Study, Trial
 
 
 class IStudyRepository(ABC):
@@ -209,7 +209,7 @@ class IExperimentTracker(AbstractContextManager, ABC):
     """
 
     @abstractmethod
-    def create_study_run(self, study: Study) -> AbstractContextManager[IStudyRunContext]:
+    def create_study_run(self, study: Study) -> AbstractContextManager[Any]:
         """Create a parent run for the entire optimization study.
 
         Args:
@@ -221,9 +221,7 @@ class IExperimentTracker(AbstractContextManager, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def create_trial_run(
-        self, trial: Trial, parent_context: IStudyRunContext
-    ) -> AbstractContextManager[ITrialRunContext]:
+    def create_trial_run(self, trial: Trial, parent_context: Any) -> AbstractContextManager[Any]:
         """Create a nested run for a single trial.
 
         Args:
@@ -237,8 +235,8 @@ class IExperimentTracker(AbstractContextManager, ABC):
 
     @abstractmethod
     def create_best_retrain_run(
-        self, study: Study, parent_context: IStudyRunContext
-    ) -> AbstractContextManager[ITrialRunContext]:
+        self, study: Study, parent_context: Any
+    ) -> AbstractContextManager[Any]:
         """Create a nested run for best parameter retraining.
 
         Args:
@@ -250,85 +248,19 @@ class IExperimentTracker(AbstractContextManager, ABC):
         """
         raise NotImplementedError
 
+    def execution_tracker(self) -> Any:
+        """Return the underlying execution-side tracker, if any.
 
-class IStudyRunContext(ABC):
-    """Context for study-level experiment tracking."""
+        Default no-op override point (mirrors ``IExperimentTracker.configure``
+        in ``dlkit.engine.tracking.interfaces``): concrete backends that also
+        expose an ``engine.tracking``-compatible tracker (e.g. MLflow) override
+        this to hand it to callers such as best-retrain execution; backends
+        without one (e.g. null tracking) keep the default ``None``.
 
-    @abstractmethod
-    def log_study_metadata(self, study: Study) -> None:
-        """Log study-level metadata.
-
-        Args:
-            study: Study domain model
+        Returns:
+            Backend-specific tracker instance, or None.
         """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_study_summary(self, result: OptimizationResult) -> None:
-        """Log final study summary.
-
-        Args:
-            result: Optimization result
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_best_trial_settings(self, settings: Any) -> None:
-        """Log best trial settings as TOML artifact.
-
-        Args:
-            settings: `SearchJobConfig`-derived settings object for the best trial
-        """
-        raise NotImplementedError
-
-
-class ITrialRunContext(ABC):
-    """Context for trial-level experiment tracking."""
-
-    @abstractmethod
-    def log_trial_hyperparameters(self, hyperparameters: dict[str, Any]) -> None:
-        """Log trial hyperparameters.
-
-        Args:
-            hyperparameters: Trial hyperparameters
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_trial_metrics(self, metrics: dict[str, Any]) -> None:
-        """Log trial metrics.
-
-        Args:
-            metrics: Trial metrics
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_trial_artifacts(self, artifacts: dict[str, Any]) -> None:
-        """Log trial artifacts.
-
-        Args:
-            artifacts: Trial artifacts
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_trial_settings(self, settings: Any) -> None:
-        """Log complete trial settings as TOML artifact.
-
-        Args:
-            settings: `SearchJobConfig`-derived settings object for this trial
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def log_model_hyperparameters(self, settings: Any) -> None:
-        """Log model hyperparameters from `settings.model`.
-
-        Args:
-            settings: `SearchJobConfig`-derived settings object with `model` configuration
-        """
-        raise NotImplementedError
+        return None
 
 
 class IConfigurationPersistence(ABC):

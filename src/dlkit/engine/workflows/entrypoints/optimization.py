@@ -41,7 +41,9 @@ def optimize(
         opt_settings = cast(SearchJobConfig, context.settings)
         base_factory = OptimizationServiceFactory()
         experiment_tracker = base_factory.create_experiment_tracker(opt_settings, hooks=hooks)
-        strategy_factory = OptimizationServiceFactory(experiment_tracker=experiment_tracker)
+        strategy_factory = OptimizationServiceFactory(
+            experiment_tracker=experiment_tracker, hooks=hooks
+        )
         optimization_strategy = strategy_factory.create_optimization_strategy(opt_settings)
 
         def run() -> OptimizationResult:

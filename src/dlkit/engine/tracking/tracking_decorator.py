@@ -151,7 +151,11 @@ class TrackingDecorator(ITrainingExecutor):
         settings: JobConfig,
         tracking_uri: str | None = None,
     ) -> TrainingResult:
-        """Execute training with tracking - separated for SRP compliance.
+        """Open a run and execute training within it - separated for SRP compliance.
+
+        Opens a new MLflow run via the tracker, fires ``on_run_created`` (only
+        this method knows the run is newly-created), then delegates the rest
+        of the tracking lifecycle to :meth:`_run_within_context`.
 
         Args:
             execution_components: Pre-built training components passed to the executor
@@ -165,77 +169,178 @@ class TrackingDecorator(ITrainingExecutor):
         Raises:
             WorkflowError: If training or tracking fails
         """
+        # Get run configuration (includes merged tags)
+        logger.debug("Extracting run config")
+        run_config = self._extract_run_config(settings)
+        model_class: str = str(
+            getattr(getattr(settings, "model", None), "name", None) or "<unknown>"
+        )
+        logger.info(
+            "MLflow run | experiment={} run={} model={}",
+            run_config.get("experiment_name") or "DLKit",
+            run_config.get("run_name") or "<auto>",
+            model_class,
+        )
+
+        # Execute training within tracking context
+        logger.debug("Creating MLflow run")
+        with self._tracker.create_run(**run_config) as run_context:
+            logger.debug("MLflow run created successfully")
+
+            # Fire on_run_created hook (only fired here: this method is the
+            # one that just created the run)
+            if self._hooks and self._hooks.on_run_created:
+                self._hooks.on_run_created(run_context.run_id, tracking_uri)
+
+            return self._run_within_context(
+                execution_components,
+                tracked_components,
+                settings,
+                run_context,
+                tracking_uri,
+            )
+
+    def _run_within_context(
+        self,
+        execution_components: RuntimeComponents,
+        tracked_components: RuntimeComponents,
+        settings: JobConfig,
+        run_context: IRunContext,
+        tracking_uri: str | None = None,
+    ) -> TrainingResult:
+        """Run the full tracking lifecycle against an already-open run context.
+
+        Everything ``_execute_with_tracking`` does apart from opening the run
+        and firing ``on_run_created``: metadata/configuration logging,
+        callback injection, delegating to the wrapped executor,
+        ``on_training_complete``/``extra_params``/``extra_tags``/
+        ``extra_artifacts`` hooks, metric/artifact logging, and result
+        enrichment. Parameterized by ``run_context`` so callers that already
+        opened a run themselves (e.g. an HPO best-retrain or a multirun child
+        run reusing the same tracker instance) can get full train()-parity
+        logging without this class opening a second, wrongly-nested run.
+
+        Args:
+            execution_components: Pre-built training components passed to the executor
+            tracked_components: Tracking-enriched component view used for artifact policy
+            settings: Global training settings
+            run_context: Already-open run context to log against
+            tracking_uri: Resolved MLflow tracking URI if available
+
+        Returns:
+            TrainingResult enriched with tracking metadata
+
+        Raises:
+            WorkflowError: If training or tracking fails
+        """
         try:
-            # Get run configuration (includes merged tags)
-            logger.debug("Extracting run config")
-            run_config = self._extract_run_config(settings)
-            model_class: str = str(
-                getattr(getattr(settings, "model", None), "name", None) or "<unknown>"
+            # Log metadata and configuration
+            self._log_tracking_metadata(run_context, tracking_uri)
+            self._log_configuration(tracked_components, settings, run_context)
+
+            # Inject MLflow callbacks into trainer
+            self._inject_mlflow_callbacks(tracked_components, run_context, settings)
+
+            # Execute core training
+            result = self._executor.execute(execution_components, settings)
+
+            # Fire on_training_complete hook
+            if self._hooks and self._hooks.on_training_complete:
+                self._hooks.on_training_complete(result)
+
+            # Log extra params and tags from hooks (post-training, receive result)
+            if self._hooks and self._hooks.extra_params:
+                run_context.log_params(self._hooks.extra_params(result))
+            if self._hooks and self._hooks.extra_tags:
+                for key, value in self._hooks.extra_tags(result).items():
+                    run_context.set_tag(key, value)
+
+            # Log final summary metrics (delegate to MetricLogger)
+            self._metric_logger.log_summary_metrics(result, run_context)
+
+            # Log training artifacts (delegate to ArtifactLogger)
+            self._artifact_logger.log_training_artifacts(tracked_components, settings, run_context)
+
+            # Log user-defined custom artifacts and params (delegate to ArtifactLogger)
+            self._artifact_logger.log_user_artifacts(settings, run_context, result)
+
+            # Log extra artifacts from hooks
+            if self._hooks and self._hooks.extra_artifacts:
+                for path in self._hooks.extra_artifacts(result):
+                    run_context.log_artifact(path)
+
+            # Enrich result with tracking metadata (delegate to ResultEnricher)
+            enriched_result = self._result_enricher.enrich_result(
+                result, settings, tracking_uri, run_context=run_context
             )
-            logger.info(
-                "MLflow run | experiment={} run={} model={}",
-                run_config.get("experiment_name") or "DLKit",
-                run_config.get("run_name") or "<auto>",
-                model_class,
-            )
-
-            # Execute training within tracking context
-            logger.debug("Creating MLflow run")
-            enriched_result = None
-            with self._tracker.create_run(**run_config) as run_context:
-                logger.debug("MLflow run created successfully")
-
-                # Fire on_run_created hook
-                if self._hooks and self._hooks.on_run_created:
-                    self._hooks.on_run_created(run_context.run_id, tracking_uri)
-
-                # Log metadata and configuration
-                self._log_tracking_metadata(run_context, tracking_uri)
-                self._log_configuration(tracked_components, settings, run_context)
-
-                # Inject MLflow callbacks into trainer
-                self._inject_mlflow_callbacks(tracked_components, run_context, settings)
-
-                # Execute core training
-                result = self._executor.execute(execution_components, settings)
-
-                # Fire on_training_complete hook
-                if self._hooks and self._hooks.on_training_complete:
-                    self._hooks.on_training_complete(result)
-
-                # Log extra params and tags from hooks (post-training, receive result)
-                if self._hooks and self._hooks.extra_params:
-                    run_context.log_params(self._hooks.extra_params(result))
-                if self._hooks and self._hooks.extra_tags:
-                    for key, value in self._hooks.extra_tags(result).items():
-                        run_context.set_tag(key, value)
-
-                # Log final summary metrics (delegate to MetricLogger)
-                self._metric_logger.log_summary_metrics(result, run_context)
-
-                # Log training artifacts (delegate to ArtifactLogger)
-                self._artifact_logger.log_training_artifacts(
-                    tracked_components, settings, run_context
-                )
-
-                # Log user-defined custom artifacts and params (delegate to ArtifactLogger)
-                self._artifact_logger.log_user_artifacts(settings, run_context, result)
-
-                # Log extra artifacts from hooks
-                if self._hooks and self._hooks.extra_artifacts:
-                    for path in self._hooks.extra_artifacts(result):
-                        run_context.log_artifact(path)
-
-                # Enrich result with tracking metadata (delegate to ResultEnricher)
-                enriched_result = self._result_enricher.enrich_result(
-                    result, settings, tracking_uri, run_context=run_context
-                )
             if enriched_result is None:
                 raise RuntimeError("Tracking result enrichment failed unexpectedly")
             return enriched_result
 
         except Exception as e:
             raise_error("Training with tracking failed", e, stage="tracking")
+
+    def execute_within_run(
+        self,
+        components: RuntimeComponents,
+        settings: object,
+        *,
+        run_context: IRunContext,
+        tracking_uri: str | None = None,
+    ) -> TrainingResult:
+        """Execute training against a run the caller already opened.
+
+        This is the "already inside an open run" counterpart to
+        :meth:`execute`: it never calls ``self._tracker.configure(...)``,
+        never enters/exits ``with self._tracker:``, never calls
+        ``self._tracker.create_run(...)``, and never fires ``on_run_created``
+        (the caller already knows the run_id at the point it opened
+        ``run_context`` - firing it here would be redundant, and firing it a
+        second time for the same run would be wrong).
+
+        Callers must pass the SAME tracker instance that opened
+        ``run_context``. Nested-run detection (``MLflowResourceManager
+        ._state.active_run_stack``) is tracked per tracker *instance*, not
+        globally, so calling this method with a different tracker instance
+        than the one that produced ``run_context`` would not raise, but any
+        code relying on this decorator's own nested-run bookkeeping (e.g.
+        ``_should_use_nested_runs``) would silently disagree with the actual
+        parent/child relationship. This method is designed for callers such
+        as HPO's best-retrain leg or a multirun sweep orchestrator that open
+        a child run themselves and want the same full artifact-logging
+        parity that a plain ``train()`` call gets via :meth:`execute`.
+
+        Args:
+            components: Pre-built training components.
+            settings: Global training settings (must be a JobConfig instance).
+            run_context: Already-open run context to log against.
+            tracking_uri: Resolved MLflow tracking URI if available.
+
+        Returns:
+            TrainingResult enriched with tracking metadata.
+
+        Raises:
+            WorkflowError: If training or tracking fails.
+            TypeError: If settings is not a JobConfig instance.
+        """
+        if not isinstance(settings, JobConfig):
+            raise TypeError(
+                "TrackingDecorator.execute_within_run requires a JobConfig, "
+                f"got {type(settings).__name__}"
+            )
+        is_local = self._tracker.is_local() if hasattr(self._tracker, "is_local") else False
+        tracked_components = self._with_artifact_policy(
+            components,
+            tracking_enabled=True,
+            is_local=is_local,
+        )
+        return self._run_within_context(
+            components,
+            tracked_components,
+            settings,
+            run_context,
+            tracking_uri,
+        )
 
     def _setup_tracking(
         self,

@@ -7,6 +7,9 @@ training and optimization flows.
 - `interfaces.py`: tracker and run-context protocols
 - `artifacts.py`: typed artifact payloads, manifests, policies, and publisher/collector protocols
 - `tracking_decorator.py`: training executor decorator
+- `lightweight_execution.py`: bare-executor training for high-volume repeated runs
+  (Optuna trials) that intentionally skip full artifact logging, plus
+  `fire_post_training_hooks` for firing `LifecycleHooks` on that lightweight path
 - `mlflow_tracker.py`: MLflow-backed tracker
 - `mlflow_run_context.py`: concrete run-context implementation
 - `binary_artifact.py`: binary-safe temp-file staging for bytes artifacts (e.g. plot PNGs)
@@ -27,7 +30,15 @@ training and optimization flows.
   `str` content is uploaded via MLflow's `log_text` (UTF-8 text); `bytes` content is routed through
   `binary_artifact.log_binary_artifact`, which stages it to a temp file in binary mode and uploads via
   `log_artifact` — `log_text` writes through a UTF-8 text handle and corrupts non-text bytes.
-- Training tracking is applied through `TrackingDecorator`.
+- Training tracking is applied through `TrackingDecorator`. `execute()` owns opening
+  the MLflow run; `execute_within_run(components, settings, *, run_context,
+  tracking_uri=None)` runs the identical logging/callback/hook pipeline against a run
+  the caller already opened, and never fires `on_run_created` (the caller does, since
+  it already has the run_id) or calls `create_run` itself. This is how search/HPO's
+  best-retrain and `MultiRunOrchestrator`'s sweep children get full `train()`-parity
+  artifact logging without opening a second, wrongly-nested run — the caller must pass
+  the same tracker instance that opened `run_context`, since nested-run detection in
+  `MLflowResourceManager` is per-instance, not global.
 - MLflow backend selection uses `TrackingSettings.uri` when provided. Environment variables are not consulted for DLKit URI resolution.
 - `TrackingDecorator` is installed only when `tracking.backend == "mlflow"` is configured.
 - Training logs model artifacts under `model` and checkpoints under `checkpoints`; model registry writes are explicit public API calls, not training side effects.

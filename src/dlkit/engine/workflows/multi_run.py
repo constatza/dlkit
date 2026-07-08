@@ -7,13 +7,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from dlkit.common import TrainingResult
+from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
+from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training.interfaces import ITrainingExecutor
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.engine.workflows.factories.build_strategy import WorkflowSettings
 
 if TYPE_CHECKING:
-    from dlkit.engine.artifacts import IMetricSink
     from dlkit.engine.tracking.interfaces import IRunContext
 
 
@@ -75,6 +76,7 @@ class MultiRunOrchestrator:
         build_factory: Builds RuntimeComponents from settings.
         executor: Executes training given pre-built components.
         tracker: MLflow tracker for parent/child run management.
+        hooks: Optional lifecycle hooks fired around each child run.
     """
 
     def __init__(
@@ -82,10 +84,12 @@ class MultiRunOrchestrator:
         build_factory: BuildFactory,
         executor: ITrainingExecutor,
         tracker: MLflowTracker,
+        hooks: LifecycleHooks | None = None,
     ) -> None:
         self._build_factory = build_factory
-        self._executor = executor
         self._tracker = tracker
+        self._hooks = hooks
+        self._tracking_decorator = TrackingDecorator(executor, tracker, hooks=hooks)
 
     def run_sweep(
         self,
@@ -122,6 +126,13 @@ class MultiRunOrchestrator:
     def _run_one(self, variant: RunVariant) -> TrainingResult:
         """Execute one variant as a nested child run.
 
+        Fires ``on_run_created`` immediately after opening the child run
+        (this method is the one that knows the run was just created), then
+        delegates the full train()-parity tracking lifecycle — settings and
+        dataset logging, plot/checkpoint callbacks, metric/artifact logging,
+        and the remaining LifecycleHooks — to
+        :meth:`TrackingDecorator.execute_within_run`.
+
         Args:
             variant: The run specification to execute.
 
@@ -133,25 +144,14 @@ class MultiRunOrchestrator:
             nested=True,
             tags=variant.tags,
         ) as child_run:
+            tracking_uri = self._tracker.get_tracking_uri()
+            if self._hooks and self._hooks.on_run_created:
+                self._hooks.on_run_created(child_run.run_id, tracking_uri)
+
             components = self._build_factory.build_components(variant.settings)
-            self._inject_epoch_logger(components, child_run)
-            return self._executor.execute(components, variant.settings)
-
-    @staticmethod
-    def _inject_epoch_logger(components: object, run_context: IMetricSink) -> None:
-        """Append MLflowEpochLogger to trainer callbacks before training starts.
-
-        Mirrors TrialExecutor._inject_mlflow_logger() from the HPO workflow.
-
-        Args:
-            components: RuntimeComponents with a mutable trainer.callbacks list.
-            run_context: IRunContext used as the metric sink.
-        """
-        from dlkit.engine.adapters.lightning.callbacks import MLflowEpochLogger
-
-        trainer = getattr(components, "trainer", None)
-        if not trainer:
-            return
-        if not hasattr(trainer, "callbacks"):
-            trainer.callbacks = []
-        trainer.callbacks.append(MLflowEpochLogger(run_context))
+            return self._tracking_decorator.execute_within_run(
+                components,
+                variant.settings,
+                run_context=child_run,
+                tracking_uri=tracking_uri,
+            )

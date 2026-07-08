@@ -13,19 +13,32 @@ from typing import Any, cast
 
 from dlkit.common import TrainingResult
 from dlkit.common.errors import WorkflowError
-from dlkit.engine.training.components import RuntimeComponents
+from dlkit.common.hooks import LifecycleHooks
+from dlkit.engine.tracking.lightweight_execution import (
+    execute_lightweight,
+    fire_post_training_hooks,
+)
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._trial_helpers import complete_trial, fail_trial, prune_trial
+from .infrastructure.tracking import (
+    log_best_trial_settings,
+    log_study_metadata,
+    log_study_summary,
+    log_trial_artifacts,
+    log_trial_hyperparameters,
+    log_trial_metrics,
+    log_trial_outcome,
+    log_trial_settings,
+)
 from .value_objects import (
     IConfigurationPersistence,
     IExperimentTracker,
     IHyperparameterApplicator,
     IOptimizationBackendSession,
     IStudyRepository,
-    ITrialRunContext,
     OptimizationDirection,
     OptimizationResult,
     Study,
@@ -179,8 +192,7 @@ class TrialExecutor:
         trial: Trial,
         base_settings: SearchJobConfig,
         hyperparameters: dict[str, Any],
-        trial_context: ITrialRunContext | None = None,
-        enable_checkpointing: bool = False,
+        trial_context: Any | None = None,
     ) -> TrainingResult:
         """Execute a single optimization trial.
 
@@ -189,7 +201,6 @@ class TrialExecutor:
             base_settings: Base configuration settings
             hyperparameters: Hyperparameters for this trial
             trial_context: Optional trial run context for metric logging
-            enable_checkpointing: Whether to enable checkpointing (default False)
 
         Returns:
             Training result from trial execution
@@ -207,11 +218,9 @@ class TrialExecutor:
             # Build components for this trial
             components = self._build_factory.build_components(trial_settings)
 
-            # Execute training with optional metric logging and checkpoint control
+            # Execute training with lightweight tracking (no checkpoints, epoch metrics only).
             # Pruning integrates through the optimization backend/trial context path.
-            training_result = self._execute_training(
-                components, trial_settings, trial_context, enable_checkpointing
-            )
+            training_result = execute_lightweight(components, trial_settings, trial_context)
 
             logger.info(
                 "Completed optimization trial {} with objective {}",
@@ -228,6 +237,49 @@ class TrialExecutor:
         except Exception as e:
             logger.error("Optimization trial {} failed: {}", trial.trial_number, e)
             raise TrialFailedException(f"Trial execution failed: {e}") from e
+
+    def execute_best_retrain(
+        self,
+        base_settings: SearchJobConfig,
+        hyperparameters: dict[str, Any],
+        *,
+        run_context: Any,
+        tracker: Any,
+        tracking_uri: str | None,
+        hooks: LifecycleHooks | None,
+    ) -> tuple[SearchJobConfig, TrainingResult]:
+        """Execute the best-trial retrain with full tracking parity.
+
+        Unlike :meth:`execute_trial`, which uses the lightweight execution path
+        (no checkpoints, epoch metrics only) for high-volume trial throughput,
+        this retrains the best trial through :class:`TrackingDecorator`, giving
+        it the same checkpoint/artifact/plot logging as a plain ``train()`` call.
+
+        Args:
+            base_settings: Base configuration settings.
+            hyperparameters: Best trial's hyperparameters to apply.
+            run_context: Already-open run context to log against.
+            tracker: Underlying execution-side tracker matching ``run_context``.
+            tracking_uri: Resolved tracking URI if available.
+            hooks: Optional lifecycle hooks fired around training completion.
+
+        Returns:
+            Tuple of the resolved trial settings and the enriched training result.
+        """
+        from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
+        from dlkit.engine.training.vanilla_executor import VanillaExecutor
+
+        trial_settings = self.apply_hyperparameters(base_settings, hyperparameters)
+        components = self._build_factory.build_components(trial_settings)
+
+        decorator = TrackingDecorator(VanillaExecutor(), tracker, hooks=hooks)
+        result = decorator.execute_within_run(
+            components,
+            trial_settings,
+            run_context=run_context,
+            tracking_uri=tracking_uri,
+        )
+        return trial_settings, result
 
     def apply_hyperparameters(
         self,
@@ -256,101 +308,6 @@ class TrialExecutor:
                 f"Failed to apply hyperparameters: {e}",
                 {"stage": "hyperparameter_application"},
             ) from e
-
-    def _execute_training(
-        self,
-        components: RuntimeComponents,
-        settings: SearchJobConfig,
-        trial_context: ITrialRunContext | None = None,
-        enable_checkpointing: bool = False,
-    ) -> TrainingResult:
-        """Execute training with given components and optional checkpoint control.
-
-        Args:
-            components: Built training components
-            settings: Training settings
-            trial_context: Optional trial run context for metric logging
-            enable_checkpointing: Whether to enable checkpointing (default False for trials)
-
-        Returns:
-            Training result
-        """
-        # Disable checkpointing for optimization trials (only enable for best model)
-        if not enable_checkpointing:
-            self._disable_checkpoints(components)
-
-        # Inject MLflow epoch logger if trial context is provided
-        if trial_context is not None:
-            self._inject_mlflow_logger(components, trial_context)
-
-        # Use existing VanillaExecutor for actual training
-        from dlkit.engine.training.vanilla_executor import VanillaExecutor
-
-        executor = VanillaExecutor()
-        return executor.execute(components, settings)
-
-    def _disable_checkpoints(self, components: RuntimeComponents) -> None:
-        """Remove checkpoint callbacks from trainer (SRP: single responsibility).
-
-        During optimization, we don't want to save checkpoints for every trial
-        as they take up disk space. We only checkpoint the final best model.
-
-        Args:
-            components: Build components with trainer
-        """
-        from pytorch_lightning.callbacks import ModelCheckpoint
-
-        trainer = getattr(components, "trainer", None)
-        if not trainer or not hasattr(trainer, "callbacks"):
-            return
-
-        try:
-            original_count = len(trainer.callbacks)
-            trainer.callbacks = [
-                cb for cb in trainer.callbacks if not isinstance(cb, ModelCheckpoint)
-            ]
-            removed_count = original_count - len(trainer.callbacks)
-
-            if removed_count > 0:
-                logger.debug(
-                    "Disabled %s checkpoint callback(s) for optimization trial", removed_count
-                )
-
-        except Exception as e:
-            logger.warning("Failed to disable checkpoints: {}", e)
-
-    def _inject_mlflow_logger(self, components: RuntimeComponents, trial_context: Any) -> None:
-        """Inject MLflow epoch logger callback for metric logging during optimization.
-
-        Args:
-            components: Build components
-            trial_context: Trial run context with run_id for logging
-        """
-        try:
-            trainer = getattr(components, "trainer", None)
-            if not trainer:
-                return
-
-            # Create callback that logs metrics with epoch numbers instead of steps
-            from dlkit.engine.adapters.lightning.callbacks import MLflowEpochLogger
-
-            # The trial_context from MLflowTrackingAdapter wraps a run_context
-            # We need to pass the underlying run_context to the callback
-            run_context = getattr(trial_context, "_run_context", trial_context)
-
-            epoch_logger = MLflowEpochLogger(run_context)
-
-            # Add callback to trainer
-            if not hasattr(trainer, "callbacks"):
-                trainer.callbacks = []
-            trainer.callbacks.append(epoch_logger)
-            logger.debug(
-                "Injected MLflow epoch logger for run '{}'",
-                getattr(run_context, "run_id", "unknown"),
-            )
-
-        except Exception as e:
-            logger.warning("Failed to inject MLflow epoch logger for trial: {}", e)
 
     def extract_objective_value(self, training_result: TrainingResult) -> float:
         """Extract objective value from training result.
@@ -395,6 +352,7 @@ class OptimizationOrchestrator:
         optimization_backend_session: IOptimizationBackendSession,
         experiment_tracker: IExperimentTracker | None = None,
         config_persister: IConfigurationPersistence | None = None,
+        hooks: LifecycleHooks | None = None,
     ):
         """Initialize optimization orchestrator.
 
@@ -404,12 +362,14 @@ class OptimizationOrchestrator:
             optimization_backend_session: Runtime optimization backend session
             experiment_tracker: Optional experiment tracking
             config_persister: Optional configuration persistence
+            hooks: Optional lifecycle hooks fired around trial/retrain training
         """
         self._study_manager = study_manager
         self._trial_executor = trial_executor
         self._optimization_backend_session = optimization_backend_session
         self._experiment_tracker = experiment_tracker
         self._config_persister = config_persister
+        self._hooks = hooks
 
     def execute_optimization(
         self,
@@ -477,8 +437,7 @@ class OptimizationOrchestrator:
         study: Study,
         trial: Trial,
         base_settings: SearchJobConfig,
-        trial_context: ITrialRunContext | None,
-        enable_checkpointing: bool,
+        trial_context: Any | None,
         pre_sampled_hyperparameters: dict[str, Any] | None = None,
     ) -> tuple[Study, Trial, SearchJobConfig, TrainingResult | None]:
         """Execute one trial iteration through the shared tracked/untracked path.
@@ -492,7 +451,6 @@ class OptimizationOrchestrator:
             trial: Trial to execute
             base_settings: Base configuration settings
             trial_context: Optional tracking context for metric logging (None if untracked)
-            enable_checkpointing: Whether checkpointing is enabled for this trial
             pre_sampled_hyperparameters: Optional hyperparameters sampled by the caller
                 for log-before-training workflows.
 
@@ -510,8 +468,8 @@ class OptimizationOrchestrator:
         trial_settings = self._trial_executor.apply_hyperparameters(base_settings, hyperparameters)
 
         if trial_context is not None:
-            trial_context.log_trial_settings(trial_settings)
-            trial_context.log_trial_hyperparameters(hyperparameters)
+            log_trial_settings(trial_settings, trial_context)
+            log_trial_hyperparameters(hyperparameters, trial, trial_context)
 
         try:
             training_result = self._trial_executor.execute_trial(
@@ -519,7 +477,6 @@ class OptimizationOrchestrator:
                 base_settings,
                 hyperparameters,
                 trial_context,
-                enable_checkpointing=enable_checkpointing,
             )
             objective_value = self._trial_executor.extract_objective_value(training_result)
             trial = complete_trial(
@@ -532,8 +489,10 @@ class OptimizationOrchestrator:
             study = study.add_trial(trial)
 
             if trial_context is not None:
-                trial_context.log_trial_metrics(training_result.metrics or {})
-                trial_context.log_trial_artifacts(training_result.artifacts or {})
+                log_trial_metrics(training_result.metrics or {}, trial_context)
+                log_trial_artifacts(training_result.artifacts or {}, trial_context)
+                log_trial_outcome(trial, trial_context)
+                fire_post_training_hooks(self._hooks, trial_context, training_result)
 
             return study, trial, trial_settings, training_result
 
@@ -575,7 +534,7 @@ class OptimizationOrchestrator:
             start_time = time.time()
 
             # Log study metadata
-            study_context.log_study_metadata(study)
+            log_study_metadata(study, study_context)
 
             # Execute trials
             for trial_number in range(study.target_trials):
@@ -592,7 +551,6 @@ class OptimizationOrchestrator:
                         trial,
                         base_settings,
                         trial_context,
-                        enable_checkpointing=False,
                         pre_sampled_hyperparameters=hyperparameters,
                     )
 
@@ -610,25 +568,9 @@ class OptimizationOrchestrator:
                         best_trial.trial_number,
                     )
 
-                    # Execute best retrain with retrain context for metric logging
-                    best_settings = self._trial_executor.apply_hyperparameters(
-                        base_settings, best_trial.hyperparameters
+                    best_settings, best_training_result = self._retrain_best_trial(
+                        base_settings, best_trial, retrain_context
                     )
-                    # Enable checkpointing for best model retraining
-                    best_training_result = self._trial_executor.execute_trial(
-                        best_trial,
-                        base_settings,
-                        best_trial.hyperparameters,
-                        retrain_context,
-                        enable_checkpointing=True,
-                    )
-
-                    # Log best retrain configuration and results
-                    retrain_context.log_trial_settings(best_settings)
-                    retrain_context.log_model_hyperparameters(best_settings)
-                    retrain_context.log_trial_hyperparameters(best_trial.hyperparameters)
-                    retrain_context.log_trial_metrics(best_training_result.metrics or {})
-                    retrain_context.log_trial_artifacts(best_training_result.artifacts or {})
 
             # Complete study
             study = study.complete_study()
@@ -644,11 +586,61 @@ class OptimizationOrchestrator:
             )
 
             # Log study summary and best trial configuration
-            study_context.log_study_summary(result)
+            log_study_summary(result, study_context)
             if best_trial and best_settings:
-                study_context.log_best_trial_settings(best_settings)
+                log_best_trial_settings(best_settings, study_context)
 
             return result
+
+    def _retrain_best_trial(
+        self,
+        base_settings: SearchJobConfig,
+        best_trial: Trial,
+        retrain_context: Any,
+    ) -> tuple[SearchJobConfig, TrainingResult]:
+        """Retrain the best trial, using full tracking parity when a run is active.
+
+        When ``retrain_context`` is a real (non-null) run, delegates to
+        :meth:`TrialExecutor.execute_best_retrain` for ``TrackingDecorator``
+        parity (checkpoints, plots, settings/model logging), then layers on
+        the optimization-specific hyperparameters/outcome logging that
+        ``TrackingDecorator`` doesn't know about. Otherwise falls back to the
+        plain lightweight trial execution path.
+
+        Args:
+            base_settings: Base configuration settings.
+            best_trial: Trial with the best objective value.
+            retrain_context: Run context for the best-retrain run (may be null).
+
+        Returns:
+            Tuple of the resolved trial settings and the training result.
+        """
+        if not retrain_context.is_active():
+            settings = self._trial_executor.apply_hyperparameters(
+                base_settings, best_trial.hyperparameters
+            )
+            result = self._trial_executor.execute_trial(
+                best_trial, base_settings, best_trial.hyperparameters
+            )
+            return settings, result
+
+        if self._experiment_tracker is None:
+            raise WorkflowError(
+                "Best retrain run is active but no experiment tracker is configured",
+                {"stage": "best_retrain_execution"},
+            )
+
+        settings, result = self._trial_executor.execute_best_retrain(
+            base_settings,
+            best_trial.hyperparameters,
+            run_context=retrain_context,
+            tracker=self._experiment_tracker.execution_tracker(),
+            tracking_uri=retrain_context.tracking_uri,
+            hooks=self._hooks,
+        )
+        log_trial_hyperparameters(best_trial.hyperparameters, best_trial, retrain_context)
+        log_trial_outcome(best_trial, retrain_context)
+        return settings, result
 
     def _execute_without_tracking(
         self,
@@ -659,7 +651,7 @@ class OptimizationOrchestrator:
         for trial_number in range(study.target_trials):
             trial = self._create_trial(study, trial_number)
             study, trial, _trial_settings, _training_result = self._run_trial_iteration(
-                study, trial, base_settings, trial_context=None, enable_checkpointing=False
+                study, trial, base_settings, trial_context=None
             )
 
         # Retrain with best parameters

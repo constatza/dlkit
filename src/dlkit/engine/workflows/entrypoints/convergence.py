@@ -73,7 +73,7 @@ def converge(
     Args:
         settings: Validated convergence job configuration.
         overrides: Optional convergence-specific runtime overrides.
-        hooks: Optional lifecycle hooks (currently unused; reserved for future use).
+        hooks: Optional lifecycle hooks fired around each nested run.
 
     Returns:
         ConvergenceResult with one ConvergencePoint per evaluated size, n_star,
@@ -112,7 +112,7 @@ def converge(
 
         build_factory = BuildFactory()
         executor = VanillaExecutor()
-        multi_run = MultiRunOrchestrator(build_factory, executor, tracker)
+        multi_run = MultiRunOrchestrator(build_factory, executor, tracker, hooks=hooks)
         orchestrator = ConvergenceOrchestrator(multi_run)
 
         return context.run_with_path_context(lambda: orchestrator.execute(convergence_settings))

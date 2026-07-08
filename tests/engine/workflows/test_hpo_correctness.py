@@ -27,8 +27,6 @@ from dlkit.engine.workflows.optimization.services import (
 )
 from dlkit.engine.workflows.optimization.value_objects import (
     IExperimentTracker,
-    IStudyRunContext,
-    ITrialRunContext,
     OptimizationDirection,
     Study,
     Trial,
@@ -88,6 +86,7 @@ class _RecordingTrialExecutor(_StubTrialExecutor):
         super().__init__(training_result)
         self._exception = exception
         self.execute_calls: list[dict[str, Any]] = []
+        self.execute_best_retrain_calls: list[dict[str, Any]] = []
         self.apply_calls: list[dict[str, Any]] = []
 
     def execute_trial(
@@ -108,6 +107,29 @@ class _RecordingTrialExecutor(_StubTrialExecutor):
         if self._exception is not None:
             raise self._exception
         return self._result
+
+    def execute_best_retrain(
+        self,
+        base_settings: Any,
+        hyperparameters: dict[str, Any],
+        *,
+        run_context: Any,
+        tracker: Any,
+        tracking_uri: str | None,
+        hooks: Any,
+    ) -> tuple[Any, TrainingResult]:
+        """Recording stand-in for TrialExecutor.execute_best_retrain.
+
+        Mirrors the real method's contract (applies hyperparameters, returns
+        ``(trial_settings, result)``) without touching TrackingDecorator, so
+        tests can assert this — not ``execute_trial`` — is the call the
+        best-retrain leg makes.
+        """
+        trial_settings = self.apply_hyperparameters(base_settings, hyperparameters)
+        self.execute_best_retrain_calls.append({"hyperparameters": dict(hyperparameters)})
+        if self._exception is not None:
+            raise self._exception
+        return trial_settings, self._result
 
     def apply_hyperparameters(self, base_settings: Any, hyperparameters: dict) -> Any:
         self.apply_calls.append(dict(hyperparameters))
@@ -138,43 +160,54 @@ class _RecordingBackendSession:
         self.reported_states.append(trial.state)
 
 
-class _RecordingTrialRunContext(ITrialRunContext):
-    def __init__(self) -> None:
-        self.pre_logs: list[dict[str, Any]] = []
-        self.metric_logs: list[dict[str, Any]] = []
-        self.artifact_logs: list[dict[str, Any]] = []
+class _RecordingRunContext:
+    """Plain duck-typed run context recording the generic ``IRunContext``-shaped
+    calls the module-level logging functions in
+    ``optimization.infrastructure.tracking`` (and ``fire_post_training_hooks``)
+    actually make: ``log_params``, ``log_metrics``, ``log_artifact_content``,
+    ``log_artifact``, plus ``is_active``/``tracking_uri`` for the best-retrain
+    dispatch in ``OptimizationOrchestrator._retrain_best_trial``.
 
-    def log_trial_hyperparameters(self, hyperparameters: dict[str, Any]) -> None:
-        self.pre_logs.append({"hyperparameters": dict(hyperparameters)})
+    ``ITrialRunContext``/``IStudyRunContext`` (which this used to subclass) no
+    longer exist — production code now logs against the plain object a tracker
+    yields, so this fake mirrors that plain shape instead.
+    """
 
-    def log_trial_metrics(self, metrics: dict[str, Any]) -> None:
-        self.metric_logs.append(dict(metrics))
+    def __init__(self, *, active: bool = True, tracking_uri: str | None = None) -> None:
+        self.logged_params: dict[str, Any] = {}
+        self.logged_metrics: dict[str, Any] = {}
+        self.artifact_content_calls: list[tuple[Any, str]] = []
+        self.artifact_calls: list[tuple[Any, str]] = []
+        self._active = active
+        self._tracking_uri = tracking_uri
 
-    def log_trial_artifacts(self, artifacts: dict[str, Any]) -> None:
-        self.artifact_logs.append(dict(artifacts))
+    def log_params(self, params: dict[str, Any]) -> None:
+        self.logged_params.update(params)
 
-    def log_trial_settings(self, settings: Any) -> None:
-        self.pre_logs.append({"settings": settings})
+    def log_metrics(self, metrics: dict[str, Any], step: int | None = None) -> None:
+        self.logged_metrics.update(metrics)
 
-    def log_model_hyperparameters(self, settings: Any) -> None:
+    def log_artifact_content(self, content: Any, artifact_file: str) -> None:
+        self.artifact_content_calls.append((content, artifact_file))
+
+    def log_artifact(self, artifact_path: Any, artifact_dir: str = "") -> None:
+        self.artifact_calls.append((artifact_path, artifact_dir))
+
+    def set_tag(self, key: str, value: str) -> None:
         return None
 
+    def is_active(self) -> bool:
+        return self._active
 
-class _StudyRunContext(IStudyRunContext):
-    def log_study_metadata(self, study: Study) -> None:
-        return None
-
-    def log_study_summary(self, result) -> None:
-        return None
-
-    def log_best_trial_settings(self, settings: Any) -> None:
-        return None
+    @property
+    def tracking_uri(self) -> str | None:
+        return self._tracking_uri
 
 
 class _TrackingAdapter(IExperimentTracker):
     def __init__(self) -> None:
-        self.study_context = _StudyRunContext()
-        self.trial_contexts: list[_RecordingTrialRunContext] = []
+        self.study_context = _RecordingRunContext()
+        self.trial_contexts: list[_RecordingRunContext] = []
 
     def __enter__(self) -> _TrackingAdapter:
         return self
@@ -187,17 +220,17 @@ class _TrackingAdapter(IExperimentTracker):
 
         return nullcontext(self.study_context)
 
-    def create_trial_run(self, trial: Trial, parent_context: IStudyRunContext):
+    def create_trial_run(self, trial: Trial, parent_context: Any):
         from contextlib import nullcontext
 
-        context = _RecordingTrialRunContext()
+        context = _RecordingRunContext()
         self.trial_contexts.append(context)
         return nullcontext(context)
 
-    def create_best_retrain_run(self, study: Study, parent_context: IStudyRunContext):
+    def create_best_retrain_run(self, study: Study, parent_context: Any):
         from contextlib import nullcontext
 
-        context = _RecordingTrialRunContext()
+        context = _RecordingRunContext()
         self.trial_contexts.append(context)
         return nullcontext(context)
 
@@ -397,15 +430,20 @@ def test_tracked_execution_samples_and_reports_once(
     assert result.successful_trials == 1
     assert backend_session.suggest_calls == 1
     assert backend_session.report_calls == 1
+    # Ordinary trials and the best-retrain are no longer the same method with an
+    # `enable_checkpointing` flag: ordinary trials always go through the
+    # lightweight `execute_trial` path (checkpoints structurally disabled by
+    # `execute_lightweight`), while the best retrain goes through the separate
+    # `execute_best_retrain` method (full TrackingDecorator parity, checkpoints
+    # included). With n_trials=1 that means exactly one call to each.
+    assert len(trial_executor.execute_calls) == 1
+    assert len(trial_executor.execute_best_retrain_calls) == 1
     assert len(trial_executor.apply_calls) == 2
-    assert len(trial_executor.execute_calls) == 2
-    assert trial_executor.execute_calls[0]["kwargs"]["enable_checkpointing"] is False
-    assert trial_executor.execute_calls[1]["kwargs"]["enable_checkpointing"] is True
 
     trial_context = tracker.trial_contexts[0]
-    assert trial_context.pre_logs[0]["settings"] is not None
-    assert trial_context.pre_logs[1]["hyperparameters"] == {"model.hidden_size": 2}
-    assert trial_context.metric_logs == [{"loss": 0.1}]
+    assert trial_context.artifact_content_calls[0][1] == "trial_config.toml"
+    assert trial_context.logged_params["model.hidden_size"] == 2
+    assert trial_context.logged_metrics["loss"] == 0.1
 
 
 @pytest.mark.parametrize(

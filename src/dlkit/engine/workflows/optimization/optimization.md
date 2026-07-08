@@ -36,10 +36,36 @@ Adapters for external systems:
 - MLflow tracking
 - configuration serialization
 
-`optimize()` accepts the same `dlkit.common.hooks.LifecycleHooks` used by `train()`.
-`MLflowTrackingAdapter` fires `on_run_created(run_id, tracking_uri)` for the study
-run, each trial run, and the best-retrain run, so external callers can link any of
-them to a parent run the same way they already do for training.
+`optimize()` accepts the same `dlkit.common.hooks.LifecycleHooks` used by `train()`,
+and all five hooks fire, not just `on_run_created`. `MLflowTrackingAdapter` fires
+`on_run_created(run_id, tracking_uri)` for the study run, each trial run, and the
+best-retrain run, so external callers can link any of them to a parent run the same
+way they already do for training. `on_training_complete`/`extra_params`/`extra_tags`/
+`extra_artifacts` fire for every trial (via `fire_post_training_hooks`, cheap
+callables only) and for the best retrain (via `TrackingDecorator.execute_within_run`,
+which fires them as part of full parity — see below).
+
+Ordinary trials execute through `dlkit.engine.tracking.lightweight_execution.
+execute_lightweight`: checkpoints disabled, epoch metrics only. This is an
+intentional, named tradeoff for high-volume trial loops (settings/model TOML,
+hyperparameters, and metrics are still logged per trial via module-level functions
+in `infrastructure/tracking.py`) — not a lesser implementation of tracking, just a
+lighter one. The best-retrain leg is different: because it's functionally a `train()`
+call with fixed hyperparameters, `TrialExecutor.execute_best_retrain` reuses
+`TrackingDecorator.execute_within_run` against the already-open retrain run context,
+giving it the exact same plots/checkpoints/model-artifact/dataset-lineage logging a
+plain `train()` call gets. `execute_within_run` never opens its own MLflow run (nested
+run detection in `MLflowResourceManager` is per-tracker-instance, not global) — the
+caller must already hold an open run on the same tracker instance passed to
+`TrackingDecorator`; that's why `IExperimentTracker.execution_tracker()` exists, to
+hand the underlying tracker across this boundary.
+
+There is no bespoke `ITrialRunContext`/`IStudyRunContext` hierarchy — run contexts are
+the same `dlkit.engine.tracking.interfaces.IRunContext` (or `NullRunContext` when
+tracking is disabled) used everywhere else in the tracking stack. Trial/study-specific
+concerns with no generic equivalent (hyperparameter logging, objective/duration,
+sampler/pruner metadata, best-trial TOML summary) are plain functions in
+`infrastructure/tracking.py`, not methods on a wrapper class.
 
 Optimization configuration persistence is opt-in for local files. When an
 active tracker is available, small config artifacts should be logged through the
