@@ -41,7 +41,15 @@ training and optimization flows.
   `MLflowResourceManager` is per-instance, not global.
 - MLflow backend selection uses `TrackingSettings.uri` when provided. Environment variables are not consulted for DLKit URI resolution.
 - `TrackingDecorator` is installed only when `tracking.backend == "mlflow"` is configured.
-- Training logs model artifacts under `model` and checkpoints under `checkpoints`; model registry writes are explicit public API calls, not training side effects.
+- Training logs deployment model artifacts under `model` and Lightning checkpoints
+  under `checkpoints`; `.ckpt` files remain internal training artifacts for
+  resume/debug/best-last history and are not reused to build the MLflow model
+  artifact.
+- PyTorch model artifacts use `TrackingSettings.model_serialization_format`.
+  `"pickle"` preserves legacy MLflow behavior; `"pt2"` opts into MLflow's
+  `torch.export`-backed serialization and requires input-shape metadata so an
+  `input_example` can be built.
+- Model registry writes are explicit public API calls, not training side effects.
 - Runtime artifact publication is driven by typed `ProducedArtifact` payloads and
   a `RuntimeArtifactManifest`, not datamodule monkey-patching.
 - `TrackingDecorator` computes a run-scoped `ArtifactPolicy` once and injects

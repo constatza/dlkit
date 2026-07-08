@@ -232,6 +232,7 @@ class IRunContext(IMetricSink, ABC):
         signature: ModelSignature | None = None,
         # Intentionally opaque foreign backend payload forwarded to MLflow.
         input_example: object | None = None,
+        model_serialization_format: str | None = None,
     ) -> str | None:
         """Log a model artifact to the active run.
 
@@ -241,6 +242,7 @@ class IRunContext(IMetricSink, ABC):
             registered_model_name: Optional registered model target name.
             signature: Optional model signature.
             input_example: Optional model input example.
+            model_serialization_format: Optional backend-specific serialization intent.
 
         Returns:
             Model URI for the logged artifact if available, otherwise None.
@@ -460,6 +462,7 @@ class NullRunContext(IRunContext):
         signature: ModelSignature | None = None,
         # Intentionally opaque foreign backend payload forwarded to MLflow.
         input_example: object | None = None,
+        model_serialization_format: str | None = None,
     ) -> str | None:
         """No-op model logging."""
         return None

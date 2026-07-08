@@ -106,12 +106,14 @@ class _RecordingRunContext(IRunContext):
         registered_model_name: str | None = None,
         signature: Any | None = None,
         input_example: Any | None = None,
+        model_serialization_format: str | None = None,
     ) -> str | None:
         self.logged_model_calls.append(
             {
                 "artifact_path": artifact_path,
                 "registered_model_name": registered_model_name,
                 "input_example": input_example,
+                "model_serialization_format": model_serialization_format,
             }
         )
         return f"runs:/{self._run_id}/{artifact_path}"
@@ -135,6 +137,15 @@ def job_config() -> JobConfig:
     )
 
 
+@pytest.fixture
+def pt2_job_config() -> JobConfig:
+    return JobConfig(
+        run=RunSettings(type="train"),
+        experiment=ExperimentSettings(),
+        tracking=TrackingSettings(backend="mlflow", model_serialization_format="pt2"),
+    )
+
+
 def test_logs_model_artifact_without_registry(job_config: JobConfig) -> None:
     @dataclass(frozen=True, slots=True)
     class FancyNet:
@@ -144,11 +155,14 @@ def test_logs_model_artifact_without_registry(job_config: JobConfig) -> None:
     run_context = _RecordingRunContext()
     components = _build_components(FancyNet())
 
-    artifact_logger._log_model_artifact(run_context=run_context, model=components.model)
+    artifact_logger._log_model_artifact(
+        run_context=run_context, model=components.model, settings=job_config
+    )
 
     assert len(run_context.logged_model_calls) == 1
     assert run_context.logged_model_calls[0]["artifact_path"] == DEFAULT_MODEL_ARTIFACT_PATH
     assert run_context.logged_model_calls[0]["registered_model_name"] is None
+    assert run_context.logged_model_calls[0]["model_serialization_format"] == "pickle"
     assert run_context.tags[TAG_LOGGED_MODEL_URI] == f"runs:/test-run/{DEFAULT_MODEL_ARTIFACT_PATH}"
     assert run_context.tags[TAG_LOGGED_MODEL_ARTIFACT_PATH] == DEFAULT_MODEL_ARTIFACT_PATH
     assert run_context.tags[TAG_MODEL_CLASS] == "FancyNet"
@@ -156,11 +170,14 @@ def test_logs_model_artifact_without_registry(job_config: JobConfig) -> None:
 
 def test_logs_model_uses_inner_class_name_for_wrapper(
     wrapped_model: _ConcreteWrapper,
+    job_config: JobConfig,
 ) -> None:
     artifact_logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
 
-    artifact_logger._log_model_artifact(run_context=run_context, model=wrapped_model)
+    artifact_logger._log_model_artifact(
+        run_context=run_context, model=wrapped_model, settings=job_config
+    )
 
     assert run_context.tags[TAG_MODEL_CLASS] == "_InnerNet"
 
@@ -237,12 +254,17 @@ def test_mlflow_log_model_pt2_does_not_raise(model_with_shapes: nn.Module, tmp_p
         )
 
 
-def test_log_model_artifact_passes_input_example(model_with_shapes: nn.Module) -> None:
+def test_log_model_artifact_passes_input_example(
+    model_with_shapes: nn.Module,
+    job_config: JobConfig,
+) -> None:
     """Reproduction: _log_model_artifact must pass a non-None input_example when shapes exist."""
     artifact_logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
 
-    artifact_logger._log_model_artifact(run_context=run_context, model=model_with_shapes)
+    artifact_logger._log_model_artifact(
+        run_context=run_context, model=model_with_shapes, settings=job_config
+    )
 
     call = run_context.logged_model_calls[0]
     assert call["input_example"] is not None
@@ -252,12 +274,15 @@ def test_log_model_artifact_passes_input_example(model_with_shapes: nn.Module) -
 
 def test_log_model_artifact_multi_input_returns_tuple(
     model_with_multi_shapes: nn.Module,
+    job_config: JobConfig,
 ) -> None:
     """Multi-input models produce a tuple of arrays, one per input shape."""
     artifact_logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
 
-    artifact_logger._log_model_artifact(run_context=run_context, model=model_with_multi_shapes)
+    artifact_logger._log_model_artifact(
+        run_context=run_context, model=model_with_multi_shapes, settings=job_config
+    )
 
     call = run_context.logged_model_calls[0]
     result = call["input_example"]
@@ -269,14 +294,45 @@ def test_log_model_artifact_multi_input_returns_tuple(
 
 def test_log_model_artifact_none_example_when_no_metadata(
     model_without_metadata: nn.Module,
+    job_config: JobConfig,
 ) -> None:
     """Regression: gracefully pass input_example=None when the model has no shape metadata."""
     artifact_logger = ArtifactLogger(tracker=Mock())
     run_context = _RecordingRunContext()
 
-    artifact_logger._log_model_artifact(run_context=run_context, model=model_without_metadata)
+    artifact_logger._log_model_artifact(
+        run_context=run_context, model=model_without_metadata, settings=job_config
+    )
 
     assert run_context.logged_model_calls[0]["input_example"] is None
+
+
+def test_log_model_artifact_pt2_passes_serialization_format(
+    model_with_shapes: nn.Module,
+    pt2_job_config: JobConfig,
+) -> None:
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+
+    artifact_logger._log_model_artifact(
+        run_context=run_context, model=model_with_shapes, settings=pt2_job_config
+    )
+
+    assert run_context.logged_model_calls[0]["model_serialization_format"] == "pt2"
+    assert run_context.logged_model_calls[0]["input_example"] is not None
+
+
+def test_log_model_artifact_pt2_requires_shape_metadata(
+    model_without_metadata: nn.Module,
+    pt2_job_config: JobConfig,
+) -> None:
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+
+    with pytest.raises(ValueError, match="PT2 model serialization requires checkpoint metadata"):
+        artifact_logger._log_model_artifact(
+            run_context=run_context, model=model_without_metadata, settings=pt2_job_config
+        )
 
 
 # ---------------------------------------------------------------------------

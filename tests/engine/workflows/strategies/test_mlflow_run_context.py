@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+import mlflow
+import numpy as np
 import torch
 from sklearn.linear_model import LinearRegression
 
+from dlkit.engine.tracking.artifact_logger import _build_pt2_signature
 from dlkit.engine.tracking.mlflow_run_context import ClientBasedRunContext
 
 
@@ -24,6 +28,22 @@ def test_log_model_uses_pytorch_flavor_for_torch_modules() -> None:
     assert uri == "runs:/run-1/model"
     mocked_log_model.assert_called_once()
     assert mocked_log_model.call_args.kwargs["registered_model_name"] == "Linear"
+    assert "serialization_format" not in mocked_log_model.call_args.kwargs
+
+
+def test_log_model_forwards_pt2_serialization_for_torch_modules() -> None:
+    context = ClientBasedRunContext(client=Mock(), run_id="run-1", tracking_uri="sqlite:///test.db")
+
+    with patch("mlflow.pytorch.log_model") as mocked_log_model:
+        uri = context.log_model(
+            model=torch.nn.Linear(2, 1),
+            artifact_path="model",
+            model_serialization_format="pt2",
+        )
+
+    assert uri == "runs:/run-1/model"
+    mocked_log_model.assert_called_once()
+    assert mocked_log_model.call_args.kwargs["serialization_format"] == "pt2"
 
 
 def test_log_model_uses_sklearn_flavor_for_estimators() -> None:
@@ -39,6 +59,60 @@ def test_log_model_uses_sklearn_flavor_for_estimators() -> None:
     assert uri == "runs:/run-2/model"
     mocked_log_model.assert_called_once()
     assert mocked_log_model.call_args.kwargs["registered_model_name"] == "LinearRegression"
+    assert "serialization_format" not in mocked_log_model.call_args.kwargs
+
+
+def test_log_model_ignores_serialization_format_for_sklearn_estimators() -> None:
+    context = ClientBasedRunContext(client=Mock(), run_id="run-2", tracking_uri="sqlite:///test.db")
+
+    with patch("mlflow.sklearn.log_model") as mocked_log_model:
+        uri = context.log_model(
+            model=LinearRegression(),
+            artifact_path="model",
+            model_serialization_format="pt2",
+        )
+
+    assert uri == "runs:/run-2/model"
+    mocked_log_model.assert_called_once()
+    assert "serialization_format" not in mocked_log_model.call_args.kwargs
+
+
+def test_log_model_pt2_can_be_loaded_for_inference(tmp_path: Path) -> None:
+    tracking_uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+    mlflow.set_tracking_uri(tracking_uri)
+    experiment_id = mlflow.create_experiment(
+        "pt2-load-test",
+        artifact_location=(tmp_path / "artifacts").as_uri(),
+    )
+
+    model = torch.nn.Linear(4, 2)
+    object.__setattr__(
+        model,
+        "_checkpoint_metadata",
+        SimpleNamespace(context=SimpleNamespace(input_shapes={"x": (4,)})),
+    )
+    input_example = np.zeros((1, 4), dtype=np.float32)
+
+    with mlflow.start_run(experiment_id=experiment_id) as run:
+        context = ClientBasedRunContext(
+            client=mlflow.MlflowClient(),
+            run_id=run.info.run_id,
+            tracking_uri=tracking_uri,
+            experiment_id=experiment_id,
+        )
+        model_uri = context.log_model(
+            model=model,
+            artifact_path="model",
+            input_example=input_example,
+            signature=_build_pt2_signature(model),
+            model_serialization_format="pt2",
+        )
+
+    assert model_uri is not None
+    loaded = mlflow.pytorch.load_model(model_uri)
+    result = loaded(torch.zeros(1, 4))
+
+    assert tuple(result.shape) == (1, 2)
 
 
 def test_log_model_prefers_mlflow_returned_model_uri() -> None:

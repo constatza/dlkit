@@ -32,6 +32,19 @@ Precision is documented in [`../precision/precision.md`](../precision/precision.
 - `optimizer_policy.py`: `OptimizerPolicySettings`
 - `optimizer_component.py`: concrete optimizer and scheduler component settings
 
+## Tracking Settings
+
+`tracking.model_serialization_format` controls how PyTorch model artifacts are
+logged to MLflow:
+
+- `"pickle"` is the default compatibility format.
+- `"pt2"` opts into MLflow's `torch.export`-backed PyTorch serialization for
+  deployment-oriented artifacts. PT2 export requires input-shape metadata so the
+  tracking layer can provide an `input_example`.
+
+Lightning `.ckpt` files remain checkpoint artifacts under `checkpoints/`; they
+are separate from the logged deployment model under `model/`.
+
 ## Loading a Config
 
 ```python

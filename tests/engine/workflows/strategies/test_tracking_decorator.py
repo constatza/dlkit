@@ -79,6 +79,7 @@ class MockRunContext(IRunContext):
         registered_model_name: str | None = None,
         signature: Any | None = None,
         input_example: Any | None = None,
+        model_serialization_format: str | None = None,
     ) -> str | None:
         if not hasattr(self, "logged_models"):
             self.logged_models = []

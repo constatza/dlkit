@@ -77,6 +77,7 @@ class _DatasetRunContext(IRunContext):
         registered_model_name: str | None = None,
         signature: Any | None = None,
         input_example: Any | None = None,
+        model_serialization_format: str | None = None,
     ) -> str | None:
         return None
 

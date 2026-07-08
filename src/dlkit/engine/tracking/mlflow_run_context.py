@@ -164,6 +164,7 @@ class ClientBasedRunContext(IRunContext):
         signature: ModelSignature | None = None,
         # Intentionally opaque foreign backend payload forwarded to MLflow.
         input_example: object | None = None,
+        model_serialization_format: str | None = None,
     ) -> str | None:
         """Log model artifact with automatic MLflow flavor dispatch.
 
@@ -183,6 +184,8 @@ class ClientBasedRunContext(IRunContext):
             case "sklearn":
                 logged_model = mlflow.sklearn.log_model(sk_model=model, **kwargs)
             case "pytorch":
+                if model_serialization_format is not None:
+                    kwargs["serialization_format"] = model_serialization_format
                 logged_model = mlflow.pytorch.log_model(pytorch_model=model, **kwargs)
             case _:
                 raise TypeError(

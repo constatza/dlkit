@@ -16,8 +16,10 @@ class TrackingSettings(BasicSettings):
         backend: Tracking backend type.
         uri: Backend connection URI.
         max_retries: Maximum connection retries for transient errors.
+        model_serialization_format: PyTorch model artifact serialization format.
     """
 
     backend: Literal["mlflow", "wandb", "none"] = "none"
     uri: str | None = None
     max_retries: int = 3
+    model_serialization_format: Literal["pickle", "pt2"] = "pickle"

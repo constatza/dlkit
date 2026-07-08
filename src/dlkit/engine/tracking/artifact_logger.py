@@ -204,7 +204,7 @@ class ArtifactLogger:
         """
         self.log_split_artifact(components, run_context)
         self.log_checkpoints(components, run_context)
-        self._log_model_artifact(run_context=run_context, model=components.model)
+        self._log_model_artifact(run_context=run_context, model=components.model, settings=settings)
 
     def log_split_artifact(
         self,
@@ -263,6 +263,7 @@ class ArtifactLogger:
         *,
         run_context: IRunContext,
         model: nn.Module,
+        settings: _WorkflowSettings,
     ) -> None:
         """Log the trained model as an MLflow artifact (no registry registration).
 
@@ -271,12 +272,24 @@ class ArtifactLogger:
         Args:
             run_context: Active run context for logging.
             model: Trained model to log.
+            settings: Workflow settings controlling artifact serialization.
         """
+        input_example = _build_input_example(model)
+        signature = _build_pt2_signature(model)
+        model_serialization_format = settings.tracking.model_serialization_format
+
+        if model_serialization_format == "pt2" and input_example is None:
+            raise ValueError(
+                "PT2 model serialization requires checkpoint metadata with input shapes. "
+                "Use model_serialization_format='pickle' or provide shape metadata."
+            )
+
         model_uri = run_context.log_model(
             model=model,
             artifact_path=DEFAULT_MODEL_ARTIFACT_PATH,
-            input_example=_build_input_example(model),
-            signature=_build_pt2_signature(model),
+            input_example=input_example,
+            signature=signature,
+            model_serialization_format=model_serialization_format,
         )
         if model_uri:
             run_context.set_tag(TAG_MODEL_CLASS, _resolve_model_class_name(model))
