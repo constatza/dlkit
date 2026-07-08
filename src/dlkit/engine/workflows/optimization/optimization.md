@@ -67,6 +67,17 @@ concerns with no generic equivalent (hyperparameter logging, objective/duration,
 sampler/pruner metadata, best-trial TOML summary) are plain functions in
 `infrastructure/tracking.py`, not methods on a wrapper class.
 
+`log_trial_hyperparameters` logs sampled search-space keys to MLflow with only
+their top-level section prefix stripped (`model.num_layers` -> `num_layers`,
+`training.optimizer.lr` -> `optimizer.lr`); the prefix itself only exists to
+route the value to the right `JobConfig` field at patch time and is dropped
+here as UI noise, while the rest of the path is kept so sibling leaves under
+different sections don't collide. `log_trial_settings` tags every trial run
+with `mlflow_model_class` (same tag/convention as the main-run artifact
+logger), since trial runs never go through that artifact-logging path and
+would otherwise be unidentifiable by model class once the run name is
+uninformative.
+
 Optimization configuration persistence is opt-in for local files. When an
 active tracker is available, small config artifacts should be logged through the
 tracking boundary instead of creating implicit durable files on disk.

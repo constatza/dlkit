@@ -16,6 +16,8 @@ import mlflow
 
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.engine.tracking.artifact_logger import TAG_MODEL_CLASS
+from dlkit.engine.tracking.config_accessor import ConfigAccessor
 from dlkit.engine.tracking.interfaces import NullRunContext
 from dlkit.engine.workflows.optimization.value_objects import (
     IExperimentTracker,
@@ -402,7 +404,11 @@ def log_best_trial_settings(settings: Any, run_context: Any) -> None:
 
 
 def log_trial_settings(settings: Any, run_context: Any) -> None:
-    """Log trial settings as TOML artifact.
+    """Log trial settings as TOML artifact and tag the run with the model class.
+
+    Trial runs never go through the main-training artifact-logging path, so
+    without this tag there is no way to tell which model class a trial used
+    once its run name is uninformative.
 
     Args:
         settings: `SearchJobConfig`-derived settings object for this trial.
@@ -420,6 +426,11 @@ def log_trial_settings(settings: Any, run_context: Any) -> None:
         logger.debug("Trial settings logged as TOML artifact")
     except Exception as e:
         logger.warning("Failed to log trial settings: {}", e)
+
+    try:
+        run_context.set_tag(TAG_MODEL_CLASS, ConfigAccessor(settings).get_model_name())
+    except Exception as e:
+        logger.warning("Failed to tag trial model class: {}", e)
 
 
 def log_model_hyperparameters(settings: Any, run_context: Any) -> None:
@@ -459,14 +470,24 @@ def log_trial_hyperparameters(
     IMPORTANT: Only logs static hyperparameters, NOT trial state or other changing values.
     Hyperparameters are values that are set BEFORE training and don't change during execution.
 
+    Keys are logged with their top-level section prefix (``model.``,
+    ``training.``, ...) stripped, since that segment only exists to route the
+    value into the right JobConfig field at patch time and is noise in the
+    MLflow UI. The rest of the path is kept so sibling leaves under different
+    sections don't collide (``training.optimizer.lr`` -> ``optimizer.lr``).
+
     Args:
         hyperparameters: Trial hyperparameters.
         trial: Trial domain model.
         run_context: Active run context to log against.
     """
     try:
+        display_hyperparameters = {
+            key.split(".", 1)[1] if "." in key else key: value
+            for key, value in hyperparameters.items()
+        }
         # Log hyperparameters as MLflow parameters using run context
-        run_context.log_params(hyperparameters)
+        run_context.log_params(display_hyperparameters)
 
         # Log trial identifier (static, doesn't change during trial)
         run_context.log_params(

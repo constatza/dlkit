@@ -442,7 +442,7 @@ def test_tracked_execution_samples_and_reports_once(
 
     trial_context = tracker.trial_contexts[0]
     assert trial_context.artifact_content_calls[0][1] == "trial_config.toml"
-    assert trial_context.logged_params["model.hidden_size"] == 2
+    assert trial_context.logged_params["hidden_size"] == 2
     assert trial_context.logged_metrics["loss"] == 0.1
 
 
