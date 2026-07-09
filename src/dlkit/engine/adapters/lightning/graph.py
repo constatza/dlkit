@@ -158,6 +158,21 @@ class GraphLightningWrapper(CoreLightningWrapper):
     # Step overrides: PyG Data/Batch → model directly
     # =========================================================================
 
+    def _forward_and_target(self, batch: Data | PyGBatch) -> tuple[Tensor, Tensor]:
+        """Decompose a PyG batch, run the model, and extract the aligned target.
+
+        Args:
+            batch: PyG Data or Batch from a PyG DataLoader.
+
+        Returns:
+            Tuple of (predictions, target) tensors, with target dtype aligned
+            to predictions.
+        """
+        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
+        predictions = self.model(x, edge_index, edge_attr)
+        target = self._extract_pyg_target(batch, predictions)
+        return predictions, target
+
     def training_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
         """Training step for PyG Data/Batch.
 
@@ -172,9 +187,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
             ``batch_size=predictions.shape[0]`` passes the total node count so
             Lightning weights epoch-level aggregation by nodes, not graphs.
         """
-        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
-        predictions = self.model(x, edge_index, edge_attr)
-        target = self._extract_pyg_target(batch, predictions)
+        predictions, target = self._forward_and_target(batch)
         loss = self.loss_function(predictions, target)
         self._log_stage_outputs("train", loss, batch_size=predictions.shape[0])
         return {"loss": loss}
@@ -193,9 +206,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
             ``batch_size=predictions.shape[0]`` passes the total node count so
             Lightning weights epoch-level aggregation by nodes, not graphs.
         """
-        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
-        predictions = self.model(x, edge_index, edge_attr)
-        target = self._extract_pyg_target(batch, predictions)
+        predictions, target = self._forward_and_target(batch)
         val_loss = self.loss_function(predictions, target)
         metrics = self.val_metrics(predictions, target)
         self._log_stage_outputs(
@@ -217,9 +228,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
             ``batch_size=predictions.shape[0]`` passes the total node count so
             Lightning weights epoch-level aggregation by nodes, not graphs.
         """
-        x, edge_index, edge_attr = self._decompose_pyg_batch(batch)
-        predictions = self.model(x, edge_index, edge_attr)
-        target = self._extract_pyg_target(batch, predictions)
+        predictions, target = self._forward_and_target(batch)
         test_loss = self.loss_function(predictions, target)
         metrics = self.test_metrics(predictions, target)
         self._log_stage_outputs(

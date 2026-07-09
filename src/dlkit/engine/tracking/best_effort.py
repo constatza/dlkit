@@ -1,0 +1,33 @@
+"""Shared decorator for best-effort tracking operations that must never
+raise into a training/optimization run."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from functools import wraps
+from typing import Any
+
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
+
+def best_effort(action: str) -> Callable[[Callable[..., None]], Callable[..., None]]:
+    """Wrap a tracking function so failures are logged, not raised.
+
+    Args:
+        action: Short present-tense description used in the warning on
+            failure (e.g. "log study metadata").
+    """
+
+    def decorator(func: Callable[..., None]) -> Callable[..., None]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> None:
+            try:
+                func(*args, **kwargs)
+            except Exception as e:
+                logger.warning("Failed to {}: {}", action, e)
+
+        return wrapper
+
+    return decorator

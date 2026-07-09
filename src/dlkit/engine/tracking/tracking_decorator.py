@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from dlkit.common import TrainingResult
 from dlkit.common.hooks import LifecycleHooks
@@ -16,6 +17,7 @@ from dlkit.engine.tracking.artifact_logger import ArtifactLogger
 from dlkit.engine.tracking.config_accessor import ConfigAccessor
 from dlkit.engine.tracking.dataset_logger import DatasetLogger
 from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
+from dlkit.engine.tracking.lightweight_execution import fire_post_training_hooks
 from dlkit.engine.tracking.metric_logger import MetricLogger
 from dlkit.engine.tracking.result_enricher import ResultEnricher
 from dlkit.engine.tracking.settings_logger import SettingsLogger
@@ -118,12 +120,8 @@ class TrackingDecorator(ITrainingExecutor):
         logger.info("Starting training with MLflow tracking")
         with self._tracker:
             # Get tracking URI after __enter__ activates the backend
-            tracking_uri = (
-                self._tracker.get_tracking_uri()
-                if hasattr(self._tracker, "get_tracking_uri")
-                else None
-            )
-            is_local = self._tracker.is_local() if hasattr(self._tracker, "is_local") else False
+            tracking_uri = self._tracker.get_tracking_uri()
+            is_local = self._tracker.is_local()
             tracked_components = self._with_artifact_policy(
                 components,
                 tracking_enabled=True,
@@ -244,16 +242,8 @@ class TrackingDecorator(ITrainingExecutor):
             # Execute core training
             result = self._executor.execute(execution_components, settings)
 
-            # Fire on_training_complete hook
-            if self._hooks and self._hooks.on_training_complete:
-                self._hooks.on_training_complete(result)
-
-            # Log extra params and tags from hooks (post-training, receive result)
-            if self._hooks and self._hooks.extra_params:
-                run_context.log_params(self._hooks.extra_params(result))
-            if self._hooks and self._hooks.extra_tags:
-                for key, value in self._hooks.extra_tags(result).items():
-                    run_context.set_tag(key, value)
+            # Fire on_training_complete/extra_params/extra_tags/extra_artifacts hooks
+            fire_post_training_hooks(self._hooks, run_context, result)
 
             # Log final summary metrics (delegate to MetricLogger)
             self._metric_logger.log_summary_metrics(result, run_context)
@@ -263,11 +253,6 @@ class TrackingDecorator(ITrainingExecutor):
 
             # Log user-defined custom artifacts and params (delegate to ArtifactLogger)
             self._artifact_logger.log_user_artifacts(settings, run_context, result)
-
-            # Log extra artifacts from hooks
-            if self._hooks and self._hooks.extra_artifacts:
-                for path in self._hooks.extra_artifacts(result):
-                    run_context.log_artifact(path)
 
             # Enrich result with tracking metadata (delegate to ResultEnricher)
             enriched_result = self._result_enricher.enrich_result(
@@ -328,7 +313,7 @@ class TrackingDecorator(ITrainingExecutor):
                 "TrackingDecorator.execute_within_run requires a JobConfig, "
                 f"got {type(settings).__name__}"
             )
-        is_local = self._tracker.is_local() if hasattr(self._tracker, "is_local") else False
+        is_local = self._tracker.is_local()
         tracked_components = self._with_artifact_policy(
             components,
             tracking_enabled=True,
@@ -443,39 +428,59 @@ class TrackingDecorator(ITrainingExecutor):
     ) -> None:
         """Inject MLflow callbacks into trainer.
 
-        Injects ``MLflowEpochLogger`` so metrics are logged with epoch numbers
-        as the x-axis during training.
+        Injects the epoch logger, checkpoint dir router, and plot callbacks.
+        Each injection is independently caught so a failure in one doesn't
+        mask whether the others ran, and warnings are attributed to the
+        actual failing injection.
 
         Args:
             components: Build components
             run_context: Run context with client and run_id
             settings: Global settings
         """
+        trainer = getattr(components, "trainer", None)
+        if not trainer:
+            logger.debug("No trainer found in components")
+            return
+        if not hasattr(trainer, "callbacks"):
+            trainer.callbacks = []
+
+        self._inject_epoch_logger(trainer, run_context)
+        self._inject_checkpoint_router(trainer, components)
+        self._inject_plot_callbacks(components, run_context, settings)
+
+    def _inject_epoch_logger(self, trainer: Any, run_context: IRunContext) -> None:
+        """Append an ``MLflowEpochLogger`` to the trainer's callbacks.
+
+        Args:
+            trainer: Lightning trainer with a mutable ``callbacks`` list.
+            run_context: Run context with client and run_id.
+        """
         try:
-            trainer = getattr(components, "trainer", None)
-            if not trainer:
-                logger.debug("No trainer found in components")
-                return
-
-            from dlkit.engine.adapters.lightning.callbacks import (
-                CheckpointDirRouter,
-                MLflowEpochLogger,
-            )
-
-            if not hasattr(trainer, "callbacks"):
-                trainer.callbacks = []
+            from dlkit.engine.adapters.lightning.callbacks import MLflowEpochLogger
 
             trainer.callbacks.append(MLflowEpochLogger(run_context))
             logger.debug("Injected MLflow epoch logger for run '{}'", run_context.run_id)
-            checkpoint_dir = self._resolve_checkpoint_dir(components)
-            if checkpoint_dir is not None:
-                trainer.callbacks.append(CheckpointDirRouter(checkpoint_dir))
-                logger.debug("Injected checkpoint dir router for '{}'", checkpoint_dir)
-
-            self._inject_plot_callbacks(components, run_context, settings)
-
         except Exception as e:
             logger.warning("Failed to inject MLflow epoch logger: {}", e)
+
+    def _inject_checkpoint_router(self, trainer: Any, components: RuntimeComponents) -> None:
+        """Append a ``CheckpointDirRouter`` to the trainer's callbacks, if resolvable.
+
+        Args:
+            trainer: Lightning trainer with a mutable ``callbacks`` list.
+            components: Build components used to resolve the checkpoint dir.
+        """
+        checkpoint_dir = self._resolve_checkpoint_dir(components)
+        if checkpoint_dir is None:
+            return
+        try:
+            from dlkit.engine.adapters.lightning.callbacks import CheckpointDirRouter
+
+            trainer.callbacks.append(CheckpointDirRouter(checkpoint_dir))
+            logger.debug("Injected checkpoint dir router for '{}'", checkpoint_dir)
+        except Exception as e:
+            logger.warning("Failed to inject checkpoint dir router: {}", e)
 
     def _inject_plot_callbacks(
         self,
@@ -501,10 +506,13 @@ class TrackingDecorator(ITrainingExecutor):
         if trainer is None:
             return
 
-        from dlkit.engine.adapters.lightning.plot_callbacks import build_plot_callbacks
+        try:
+            from dlkit.engine.adapters.lightning.plot_callbacks import build_plot_callbacks
 
-        for cb in build_plot_callbacks(run_context, plot_cfg):
-            trainer.callbacks.append(cb)
+            for cb in build_plot_callbacks(run_context, plot_cfg):
+                trainer.callbacks.append(cb)
+        except Exception as e:
+            logger.warning("Failed to inject plot callbacks: {}", e)
 
     def _should_use_nested_runs(self) -> bool:
         """Determine if nested runs should be used based on existing MLflow run context.

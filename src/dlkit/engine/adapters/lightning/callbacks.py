@@ -22,6 +22,7 @@ import numpy as np
 import torch
 from lightning import Callback
 
+from dlkit.common.metric_stages import STAGE_ALIASES
 from dlkit.engine.artifacts import (
     ArtifactCollector,
     FileArtifactPayload,
@@ -35,6 +36,8 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 prediction_logger = logger
+
+_ALL_STAGE_PREFIXES: tuple[str, ...] = ("train", "val", "test")
 
 
 def _call_zero_arg_method(value: object, method_name: str) -> object | None:
@@ -60,9 +63,6 @@ class MLflowEpochLogger(Callback):
     def on_validation_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self._log_metrics(trainer, stage="val")
 
-    def on_test_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        self._log_metrics(trainer, stage="test")
-
     def _log_metrics(self, trainer: Trainer, stage: str) -> None:
         if not self.run_context or getattr(trainer, "sanity_checking", False):
             return
@@ -85,46 +85,26 @@ class MLflowEpochLogger(Callback):
             logger.warning("Failed to log metrics with epoch logger: {}", exc)
 
     def _collect_stage_metrics(self, metrics: Mapping[str, object], stage: str) -> dict[str, float]:
-        stage_aliases = {
-            "train": ("train", "training"),
-            "val": ("val", "valid", "validation"),
-            "test": ("test", "testing"),
-        }
-        prefixes = stage_aliases.get(stage, (stage,))
+        prefixes = STAGE_ALIASES.get(stage, (stage,))
+        other_prefixes = tuple(p for p in _ALL_STAGE_PREFIXES if p != stage)
         collected: dict[str, float] = {}
 
         for key, raw_value in metrics.items():
             normalized_key = key.lower()
             if normalized_key == "lr" and stage != "train":
                 continue
-
-            if self._matches_stage_prefix(key, prefixes):
-                metric_key = key
-            else:
-                if normalized_key.startswith("train") and stage != "train":
-                    continue
-                if normalized_key.startswith("val") and stage != "val":
-                    continue
-                if normalized_key.startswith("test") and stage != "test":
-                    continue
-                metric_key = self._format_metric_key(stage, key)
+            if not self._matches_stage_prefix(key, prefixes) and any(
+                normalized_key.startswith(other) for other in other_prefixes
+            ):
+                continue
 
             numeric = self._to_numeric(raw_value)
             if numeric is None:
                 logger.debug("Skipping non-numeric metric: {}", key)
                 continue
-            collected[metric_key] = numeric
+            collected[key] = numeric
 
         return collected
-
-    @staticmethod
-    def _format_metric_key(stage: str, key: str) -> str:
-        if stage.lower() != "test":
-            return key
-        suffix = " test"
-        if key.lower().endswith(suffix):
-            return key
-        return f"{key}{suffix}"
 
     @staticmethod
     def _matches_stage_prefix(metric_key: str, prefixes: tuple[str, ...]) -> bool:

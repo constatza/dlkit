@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -40,6 +42,7 @@ def mock_components() -> RuntimeComponents:
 
     mock_model = Mock()
     mock_model.lr = 0.001
+    mock_model.temporarily_use_controller = MagicMock()
 
     mock_datamodule = Mock()
 
@@ -308,6 +311,10 @@ class TestVanillaExecutorLRTuning:
             def lr(self, value: float) -> None:
                 pass
 
+            @contextmanager
+            def temporarily_use_controller(self, controller: Any) -> Iterator[None]:
+                yield
+
         noop_model = _NoOpLRModel()
 
         with patch.object(executor, "_find_lr_with_projected_policy", return_value=0.05):
@@ -333,13 +340,9 @@ class TestVanillaExecutorLRTuning:
         from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
         executor = VanillaExecutor()
-        original_controller = MagicMock()
-        original_controller.requires_manual_optimization = True
 
         model = MagicMock()
         model.model = nn.Linear(2, 2)
-        model._optimization_controller = original_controller
-        model.automatic_optimization = False
 
         tuning_plan = SupportedLRTuningPlan(
             projected_policy=OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=1e-3)),
@@ -366,8 +369,7 @@ class TestVanillaExecutorLRTuning:
                     )
 
         assert result == 0.01
-        assert model._optimization_controller is original_controller
-        assert model.automatic_optimization is False
+        model.temporarily_use_controller.assert_called_once_with(fake_tuning_controller)
 
     def test_find_lr_restores_controller_after_failure(
         self,
@@ -382,11 +384,8 @@ class TestVanillaExecutorLRTuning:
         from dlkit.infrastructure.config.trainer_settings import TrainerSettings
 
         executor = VanillaExecutor()
-        original_controller = MagicMock()
         model = MagicMock()
         model.model = nn.Linear(2, 2)
-        model._optimization_controller = original_controller
-        model.automatic_optimization = True
 
         tuning_plan = SupportedLRTuningPlan(
             projected_policy=OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=1e-3)),
@@ -411,5 +410,4 @@ class TestVanillaExecutorLRTuning:
                             settings_with_lr_tuner.training.lr_tuner,
                         )
 
-        assert model._optimization_controller is original_controller
-        assert model.automatic_optimization is True
+        model.temporarily_use_controller.assert_called_once_with(fake_tuning_controller)

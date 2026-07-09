@@ -1,7 +1,7 @@
 """Extracted concerns for the ProcessingLightningWrapper architecture.
 
 This package separates cross-cutting concerns from the base wrapper:
-- IStepLogger, LightningStepLogger, NullStepLogger: Metric logging
+- LightningStepLogger: Metric logging
 - ICheckpointSerializer, DLKitCheckpointSerializer: Checkpoint persistence
 - ILearningRateManager, ConfigLearningRateManager: Learning rate management
 """
@@ -15,9 +15,7 @@ from dlkit.engine.adapters.lightning.concerns.lr_manager import (
     ILearningRateManager,
 )
 from dlkit.engine.adapters.lightning.concerns.step_logger import (
-    IStepLogger,
     LightningStepLogger,
-    NullStepLogger,
 )
 
 __all__ = [
@@ -25,7 +23,5 @@ __all__ = [
     "DLKitCheckpointSerializer",
     "ICheckpointSerializer",
     "ILearningRateManager",
-    "IStepLogger",
     "LightningStepLogger",
-    "NullStepLogger",
 ]

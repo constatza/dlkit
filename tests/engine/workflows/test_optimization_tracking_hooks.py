@@ -56,6 +56,9 @@ class _FakeTracker:
     def get_tracking_uri(self) -> str:
         return self._tracking_uri
 
+    def is_local(self) -> bool:
+        return False
+
     @contextmanager
     def create_run(self, **_kwargs: object) -> Iterator[_FakeRunContext]:
         yield _FakeRunContext(run_id=next(self._run_ids))

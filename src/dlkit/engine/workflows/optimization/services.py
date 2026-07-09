@@ -432,13 +432,45 @@ class OptimizationOrchestrator:
                 {"stage": "optimization_orchestration", "study_name": study_name},
             ) from e
 
+    def _report_and_record(self, study: Study, trial: Trial) -> Study:
+        """Report trial result to the backend and append it to the study.
+
+        Args:
+            study: Current study state.
+            trial: Trial whose outcome has just been determined.
+
+        Returns:
+            Study with the trial appended.
+        """
+        self._optimization_backend_session.report_trial_result(study, trial)
+        return study.add_trial(trial)
+
+    def _log_successful_trial(
+        self,
+        trial_context: Any | None,
+        trial: Trial,
+        training_result: TrainingResult,
+    ) -> None:
+        """Fire post-success tracking calls (metrics/artifacts/outcome/hooks); no-op if untracked.
+
+        Args:
+            trial_context: Optional tracking context for metric logging (None if untracked).
+            trial: Trial that completed successfully.
+            training_result: Result produced by the successful trial.
+        """
+        if trial_context is None:
+            return
+        log_trial_metrics(training_result.metrics or {}, trial_context)
+        log_trial_artifacts(training_result.artifacts or {}, trial_context)
+        log_trial_outcome(trial, trial_context)
+        fire_post_training_hooks(self._hooks, trial_context, training_result)
+
     def _run_trial_iteration(
         self,
         study: Study,
         trial: Trial,
         base_settings: SearchJobConfig,
         trial_context: Any | None,
-        pre_sampled_hyperparameters: dict[str, Any] | None = None,
     ) -> tuple[Study, Trial, SearchJobConfig, TrainingResult | None]:
         """Execute one trial iteration through the shared tracked/untracked path.
 
@@ -451,19 +483,13 @@ class OptimizationOrchestrator:
             trial: Trial to execute
             base_settings: Base configuration settings
             trial_context: Optional tracking context for metric logging (None if untracked)
-            pre_sampled_hyperparameters: Optional hyperparameters sampled by the caller
-                for log-before-training workflows.
 
         Returns:
             Updated study and trial, plus resolved trial settings and the training
             result when the trial completed successfully.
         """
-        hyperparameters = (
-            pre_sampled_hyperparameters
-            if pre_sampled_hyperparameters is not None
-            else self._optimization_backend_session.suggest_hyperparameters(
-                study, trial, base_settings
-            )
+        hyperparameters = self._optimization_backend_session.suggest_hyperparameters(
+            study, trial, base_settings
         )
         trial_settings = self._trial_executor.apply_hyperparameters(base_settings, hyperparameters)
 
@@ -485,14 +511,8 @@ class OptimizationOrchestrator:
                 objective_value=objective_value,
                 training_result=training_result,
             )
-            self._optimization_backend_session.report_trial_result(study, trial)
-            study = study.add_trial(trial)
-
-            if trial_context is not None:
-                log_trial_metrics(training_result.metrics or {}, trial_context)
-                log_trial_artifacts(training_result.artifacts or {}, trial_context)
-                log_trial_outcome(trial, trial_context)
-                fire_post_training_hooks(self._hooks, trial_context, training_result)
+            study = self._report_and_record(study, trial)
+            self._log_successful_trial(trial_context, trial, training_result)
 
             return study, trial, trial_settings, training_result
 
@@ -502,8 +522,7 @@ class OptimizationOrchestrator:
                 hyperparameters=hyperparameters,
                 pruned_at_step=e.pruned_at_step,
             )
-            self._optimization_backend_session.report_trial_result(study, trial)
-            study = study.add_trial(trial)
+            study = self._report_and_record(study, trial)
             return study, trial, trial_settings, None
 
         except TrialFailedException:
@@ -511,8 +530,7 @@ class OptimizationOrchestrator:
                 trial,
                 hyperparameters=hyperparameters,
             )
-            self._optimization_backend_session.report_trial_result(study, trial)
-            study = study.add_trial(trial)
+            study = self._report_and_record(study, trial)
             return study, trial, trial_settings, None
 
     def _execute_with_tracking(
@@ -543,15 +561,8 @@ class OptimizationOrchestrator:
                 with self._experiment_tracker.create_trial_run(
                     trial, study_context
                 ) as trial_context:
-                    hyperparameters = self._optimization_backend_session.suggest_hyperparameters(
-                        study, trial, base_settings
-                    )
                     study, trial, _trial_settings, _training_result = self._run_trial_iteration(
-                        study,
-                        trial,
-                        base_settings,
-                        trial_context,
-                        pre_sampled_hyperparameters=hyperparameters,
+                        study, trial, base_settings, trial_context
                     )
 
             # Retrain with best parameters

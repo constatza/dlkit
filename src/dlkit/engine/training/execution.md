@@ -141,7 +141,9 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 - Restores trainer callbacks if Lightning's LR finder aborts before training starts
 - Transform fitting happens once, in the build phase (`IBuildStrategy.build()` calls `engine.training.transform_fitting.fit_transforms_if_needed`), before any `Trainer`/`Tuner` object exists — `LRTuner.tune()` no longer fits transforms itself. This replaced an earlier callback-based design (`TransformFittingCallback.on_fit_start`) that broke under LR tuning specifically because Lightning's `Tuner.lr_find()` strips `trainer.callbacks` down to its own internal callback before running the scan loop
 - Executes `trainer.fit()` as core training step
-- Post-training `predict()` and `test()` are best-effort (silent failure)
+- Post-training `predict()` and `test()` are best-effort: a missing dataloader
+  (`MisconfigurationException`) logs at debug, any other failure logs at warning —
+  neither crashes the workflow
 - Metrics collected from multiple trainer sources (callback_metrics, progress_bar_metrics, logged_metrics)
 - Checkpoint artifacts extracted from `ModelCheckpoint` callbacks
 - Fallback checkpoint discovery via filesystem globbing if callback paths not set
@@ -322,7 +324,8 @@ except WorkflowError as e:
 ```
 
 **Fail-Safe Design**:
-- Post-training steps (`predict()`, `test()`) fail silently - don't crash workflow
+- Post-training steps (`predict()`, `test()`) never crash the workflow - a missing
+  dataloader logs at debug, any other failure logs at warning
 - Metric collection robust to missing or malformed values
 - Checkpoint collection has multiple fallback strategies
 

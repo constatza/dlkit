@@ -6,7 +6,8 @@ is a pure Lightning coordinator.
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
@@ -355,12 +356,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         self._step_logger = LightningStepLogger(self)
 
         # Apply precision to model immediately after creation
-        from dlkit.infrastructure.precision.service import get_precision_service
-
-        precision_service = get_precision_service()
-        precision_strategy = precision_service.resolve_precision()
-        dtype = precision_strategy.to_torch_dtype()
-        self.model = self.model.to(dtype=dtype)
+        self._apply_precision()
 
     # =========================================================================
     # Lightning Hooks
@@ -369,6 +365,10 @@ class CoreLightningWrapper(LightningModule, ABC):
     def configure_model(self) -> None:
         """Reapply precision after Lightning setup/checkpoint restore."""
         super().configure_model()
+        self._apply_precision()
+
+    def _apply_precision(self) -> None:
+        """Resolve the configured precision strategy and cast the model to it."""
         from dlkit.infrastructure.precision.service import get_precision_service
 
         precision_service = get_precision_service()
@@ -389,8 +389,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         super().on_save_checkpoint(checkpoint)
         self._checkpoint_serializer.serialize(checkpoint, self.__class__.__name__)
         # Save optimization state
-        if hasattr(self, "_optimization_controller"):
-            checkpoint["optimization_state"] = self._optimization_controller.state_dict()
+        checkpoint["optimization_state"] = self._optimization_controller.state_dict()
 
     def on_load_checkpoint(self, checkpoint: dict[str, Any]) -> None:
         """Restore checkpoint metadata and optimization state.
@@ -404,7 +403,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         super().on_load_checkpoint(checkpoint)
         self._checkpoint_serializer.deserialize(checkpoint)
         # Load optimization state
-        if "optimization_state" in checkpoint and hasattr(self, "_optimization_controller"):
+        if "optimization_state" in checkpoint:
             self._optimization_controller.load_state_dict(checkpoint["optimization_state"])
 
     # =========================================================================
@@ -433,13 +432,9 @@ class CoreLightningWrapper(LightningModule, ABC):
         Returns:
             Current learning rate or None if unavailable.
         """
-        if hasattr(self, "_optimization_controller"):
-            try:
-                rates = self._optimization_controller.current_learning_rates()
-                if rates:
-                    return next(iter(rates.values()))
-            except Exception:
-                pass
+        rates = self._optimization_controller.current_learning_rates()
+        if rates:
+            return next(iter(rates.values()))
         return None
 
     @lr.setter
@@ -449,8 +444,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         Args:
             value: New learning rate value.
         """
-        if hasattr(self, "_optimization_controller"):
-            self._optimization_controller.update_learning_rate(value)
+        self._optimization_controller.update_learning_rate(value)
 
     @property
     def learning_rate(self) -> float | None:
@@ -495,6 +489,27 @@ class CoreLightningWrapper(LightningModule, ABC):
             Lightning-compatible optimizer/scheduler configuration.
         """
         return self._optimization_controller.configure_optimizers()
+
+    @contextmanager
+    def temporarily_use_controller(self, controller: IOptimizationController) -> Iterator[None]:
+        """Temporarily swap in `controller`, restoring the original controller and
+        `automatic_optimization` on exit — even on error.
+
+        Args:
+            controller: Optimization controller to use for the duration of the context.
+
+        Yields:
+            None.
+        """
+        original_controller = self._optimization_controller
+        original_automatic_optimization = self.automatic_optimization
+        self._optimization_controller = controller
+        self.automatic_optimization = not controller.requires_manual_optimization
+        try:
+            yield
+        finally:
+            self._optimization_controller = original_controller
+            self.automatic_optimization = original_automatic_optimization
 
     # =========================================================================
     # Logging Helper (delegated to concern)
@@ -680,6 +695,22 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
             self._step_logger.log_stage_outputs("train", loss, batch_size=batch_size)
             return {"loss": loss}
 
+    def _eval_step(self, batch: Any, batch_idx: int, stage: str) -> dict[str, Any]:
+        """Shared validation/test step: delegates to _run_step, updates metrics, logs output.
+
+        Args:
+            batch: TensorDict batch from dataset.
+            batch_idx: Index of the batch.
+            stage: Stage identifier ('val' or 'test').
+
+        Returns:
+            Dictionary containing the stage loss under the ``f"{stage}_loss"`` key.
+        """
+        loss, batch_size, enriched = self._run_step(batch, batch_idx, stage)
+        self._metrics_updater.update(enriched["predictions"], enriched, stage=stage)
+        self._step_logger.log_stage_outputs(stage, loss, batch_size=batch_size)
+        return {f"{stage}_loss": loss}
+
     def validation_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Validation step: delegates to _run_step, updates metrics, logs output.
 
@@ -690,10 +721,7 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         Returns:
             Dictionary containing validation loss.
         """
-        loss, batch_size, enriched = self._run_step(batch, batch_idx, "val")
-        self._metrics_updater.update(enriched["predictions"], enriched, stage="val")
-        self._step_logger.log_stage_outputs("val", loss, batch_size=batch_size)
-        return {"val_loss": loss}
+        return self._eval_step(batch, batch_idx, "val")
 
     def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Test step: delegates to _run_step, updates metrics, logs output.
@@ -705,10 +733,7 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         Returns:
             Dictionary containing test loss.
         """
-        loss, batch_size, enriched = self._run_step(batch, batch_idx, "test")
-        self._metrics_updater.update(enriched["predictions"], enriched, stage="test")
-        self._step_logger.log_stage_outputs("test", loss, batch_size=batch_size)
-        return {"test_loss": loss}
+        return self._eval_step(batch, batch_idx, "test")
 
     def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
         """Prediction step returning a TensorDict with predictions, targets and latents.
@@ -745,16 +770,21 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         """
         return [batch["targets"] for batch in predict_outputs]
 
+    def _on_eval_epoch_end(self, stage: str) -> None:
+        """Compute and log epoch-level validation/test metrics, then reset.
+
+        Args:
+            stage: Stage identifier ('val' or 'test').
+        """
+        metrics = self._metrics_updater.compute(stage)
+        if metrics:
+            self._step_logger.log_stage_outputs(f"{stage}_epoch", None, metrics)
+        self._metrics_updater.reset(stage)
+
     def on_validation_epoch_end(self) -> None:
         """Compute and log epoch-level validation metrics, then reset."""
-        metrics = self._metrics_updater.compute("val")
-        if metrics:
-            self._step_logger.log_stage_outputs("val_epoch", None, metrics)
-        self._metrics_updater.reset("val")
+        self._on_eval_epoch_end("val")
 
     def on_test_epoch_end(self) -> None:
         """Compute and log epoch-level test metrics, then reset."""
-        metrics = self._metrics_updater.compute("test")
-        if metrics:
-            self._step_logger.log_stage_outputs("test_epoch", None, metrics)
-        self._metrics_updater.reset("test")
+        self._on_eval_epoch_end("test")

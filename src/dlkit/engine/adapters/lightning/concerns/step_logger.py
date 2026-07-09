@@ -1,12 +1,11 @@
 """Step logging concern for ProcessingLightningWrapper.
 
 Encapsulates metric logging to Lightning with proper trainer availability checks.
-Uses Null Object pattern to avoid try/except blocks.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 
 from torch import Tensor
 
@@ -34,45 +33,7 @@ def _format_metric_name(stage: str, name: str) -> str:
         if name_lower.startswith(alias):
             return name
 
-    if stage_lower == "test":
-        if name_lower.endswith(" test"):
-            return name
-        return f"{name} test"
-
     return f"{stage_lower}_{name}"
-
-
-@runtime_checkable
-class IStepLogger(Protocol):
-    """Protocol for step logging during training/validation/test.
-
-    Implementations may log to Lightning, to disk, or do nothing at all.
-    """
-
-    def log_stage_outputs(
-        self,
-        stage: str,
-        loss: Tensor | None,
-        metrics: dict[str, Any] | None = None,
-        batch_size: int | None = None,
-    ) -> None:
-        """Log loss and/or metrics for a stage.
-
-        Args:
-            stage: Stage identifier ('train', 'val', 'test', 'val_epoch', 'test_epoch').
-            loss: Scalar loss tensor (optional).
-            metrics: Additional metrics dict (optional).
-            batch_size: Batch size for correct epoch-level weighted averaging by Lightning.
-        """
-        ...
-
-    def log_lr(self, lr: float) -> None:
-        """Log current learning rate.
-
-        Args:
-            lr: Learning rate value.
-        """
-        ...
 
 
 class LightningStepLogger:
@@ -163,26 +124,3 @@ class LightningStepLogger:
             lr: Learning rate value.
         """
         self._log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
-
-
-class NullStepLogger:
-    """No-op logger used when no trainer is attached (Null Object pattern).
-
-    Used by GraphLightningWrapper and in unit tests where no trainer is available.
-    """
-
-    def log_stage_outputs(
-        self,
-        _stage: str,
-        _loss: Tensor | None,
-        _metrics: dict[str, Any] | None = None,
-        _batch_size: int | None = None,
-    ) -> None:
-        """No-op implementation."""
-
-    def log_lr(self, _lr: float) -> None:
-        """No-op implementation.
-
-        Args:
-            lr: Learning rate value (ignored).
-        """

@@ -17,8 +17,10 @@ import mlflow
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.tracking.artifact_logger import TAG_MODEL_CLASS
+from dlkit.engine.tracking.best_effort import best_effort
 from dlkit.engine.tracking.config_accessor import ConfigAccessor
 from dlkit.engine.tracking.interfaces import NullRunContext
+from dlkit.engine.tracking.metric_logger import split_stage_filtered_metrics
 from dlkit.engine.workflows.optimization.value_objects import (
     IExperimentTracker,
     OptimizationResult,
@@ -305,6 +307,7 @@ class NullTrackingAdapter(IExperimentTracker):
         yield NullRunContext()
 
 
+@best_effort("log study metadata")
 def log_study_metadata(study: Study, run_context: Any) -> None:
     """Log study-level metadata.
 
@@ -312,42 +315,38 @@ def log_study_metadata(study: Study, run_context: Any) -> None:
         study: Study domain model.
         run_context: Active run context to log against.
     """
-    try:
-        # Log study parameters using the run context
-        run_context.log_params(
-            {
-                "study_name": study.study_name,
-                "optimization_direction": study.direction.value,
-                "target_trials": study.target_trials,
-                "study_id": study.study_id,
-            }
-        )
+    # Log study parameters using the run context
+    run_context.log_params(
+        {
+            "study_name": study.study_name,
+            "optimization_direction": study.direction.value,
+            "target_trials": study.target_trials,
+            "study_id": study.study_id,
+        }
+    )
 
-        # Log sampler configuration
-        if study.sampler_config:
-            for key, value in study.sampler_config.items():
-                run_context.log_params({f"sampler_{key}": value})
+    # Log sampler configuration
+    if study.sampler_config:
+        for key, value in study.sampler_config.items():
+            run_context.log_params({f"sampler_{key}": value})
 
-        # Log pruner configuration
-        if study.pruner_config:
-            for key, value in study.pruner_config.items():
-                run_context.log_params({f"pruner_{key}": value})
+    # Log pruner configuration
+    if study.pruner_config:
+        for key, value in study.pruner_config.items():
+            run_context.log_params({f"pruner_{key}": value})
 
-        # Set study tags using direct MLflow access
-        mlflow.set_tags(
-            {
-                "optimization_framework": "optuna",
-                "optimization_type": "hyperparameter_optimization",
-                "study_id": study.study_id,
-            }
-        )
+    # Set study tags using the run context
+    for key, value in {
+        "optimization_framework": "optuna",
+        "optimization_type": "hyperparameter_optimization",
+        "study_id": study.study_id,
+    }.items():
+        run_context.set_tag(key, value)
 
-        logger.debug("Study metadata logged to MLflow")
-
-    except Exception as e:
-        logger.warning("Failed to log study metadata: {}", e)
+    logger.debug("Study metadata logged to MLflow")
 
 
+@best_effort("log study summary")
 def log_study_summary(result: OptimizationResult, run_context: Any) -> None:
     """Log final study summary.
 
@@ -355,33 +354,30 @@ def log_study_summary(result: OptimizationResult, run_context: Any) -> None:
         result: Optimization result.
         run_context: Active run context to log against.
     """
-    try:
-        # Log study-level metrics using run context
-        run_context.log_metrics(
-            {
-                "total_trials": float(result.total_trials),
-                "successful_trials": float(result.successful_trials),
-                "optimization_duration_seconds": result.total_duration_seconds,
-            }
-        )
+    # Log study-level metrics using run context
+    run_context.log_metrics(
+        {
+            "total_trials": float(result.total_trials),
+            "successful_trials": float(result.successful_trials),
+            "optimization_duration_seconds": result.total_duration_seconds,
+        }
+    )
 
-        # Log best results if available
-        if result.best_objective_value is not None:
-            run_context.log_metrics({"best_objective_value": result.best_objective_value})
+    # Log best results if available
+    if result.best_objective_value is not None:
+        run_context.log_metrics({"best_objective_value": result.best_objective_value})
 
-        if result.best_trial:
-            run_context.log_metrics({"best_trial_number": float(result.best_trial.trial_number)})
+    if result.best_trial:
+        run_context.log_metrics({"best_trial_number": float(result.best_trial.trial_number)})
 
-            # Log best hyperparameters as parameters
-            for key, value in result.best_hyperparameters.items():
-                run_context.log_params({f"best_{key}": value})
+        # Log best hyperparameters as parameters
+        for key, value in result.best_hyperparameters.items():
+            run_context.log_params({f"best_{key}": value})
 
-        logger.debug("Study summary logged to MLflow")
-
-    except Exception as e:
-        logger.warning("Failed to log study summary: {}", e)
+    logger.debug("Study summary logged to MLflow")
 
 
+@best_effort("log best trial settings")
 def log_best_trial_settings(settings: Any, run_context: Any) -> None:
     """Log best trial settings as TOML artifact with special naming.
 
@@ -389,18 +385,45 @@ def log_best_trial_settings(settings: Any, run_context: Any) -> None:
         settings: `SearchJobConfig`-derived settings object for the best trial.
         run_context: Active run context to log against.
     """
-    try:
-        from dlkit.infrastructure.io import serialize_config_to_string
+    from dlkit.infrastructure.io import serialize_config_to_string
 
-        toml_content = serialize_config_to_string(
-            settings,
-            exclude_unset=True,
-            exclude_value_entries=True,
-        )
-        run_context.log_artifact_content(toml_content, "best_trial_config.toml")
-        logger.debug("Best trial settings logged as TOML artifact")
-    except Exception as e:
-        logger.warning("Failed to log best trial settings: {}", e)
+    toml_content = serialize_config_to_string(
+        settings,
+        exclude_unset=True,
+        exclude_value_entries=True,
+    )
+    run_context.log_artifact_content(toml_content, "best_trial_config.toml")
+    logger.debug("Best trial settings logged as TOML artifact")
+
+
+@best_effort("log trial settings artifact")
+def _log_trial_settings_artifact(settings: Any, run_context: Any) -> None:
+    """Log trial settings as a TOML artifact.
+
+    Args:
+        settings: `SearchJobConfig`-derived settings object for this trial.
+        run_context: Active run context to log against.
+    """
+    from dlkit.infrastructure.io import serialize_config_to_string
+
+    toml_content = serialize_config_to_string(
+        settings,
+        exclude_unset=True,
+        exclude_value_entries=True,
+    )
+    run_context.log_artifact_content(toml_content, "trial_config.toml")
+    logger.debug("Trial settings logged as TOML artifact")
+
+
+@best_effort("tag trial model class")
+def _log_trial_model_tag(settings: Any, run_context: Any) -> None:
+    """Tag the run with the model class used for this trial.
+
+    Args:
+        settings: `SearchJobConfig`-derived settings object for this trial.
+        run_context: Active run context to log against.
+    """
+    run_context.set_tag(TAG_MODEL_CLASS, ConfigAccessor(settings).get_model_name())
 
 
 def log_trial_settings(settings: Any, run_context: Any) -> None:
@@ -414,25 +437,11 @@ def log_trial_settings(settings: Any, run_context: Any) -> None:
         settings: `SearchJobConfig`-derived settings object for this trial.
         run_context: Active run context to log against.
     """
-    try:
-        from dlkit.infrastructure.io import serialize_config_to_string
-
-        toml_content = serialize_config_to_string(
-            settings,
-            exclude_unset=True,
-            exclude_value_entries=True,
-        )
-        run_context.log_artifact_content(toml_content, "trial_config.toml")
-        logger.debug("Trial settings logged as TOML artifact")
-    except Exception as e:
-        logger.warning("Failed to log trial settings: {}", e)
-
-    try:
-        run_context.set_tag(TAG_MODEL_CLASS, ConfigAccessor(settings).get_model_name())
-    except Exception as e:
-        logger.warning("Failed to tag trial model class: {}", e)
+    _log_trial_settings_artifact(settings, run_context)
+    _log_trial_model_tag(settings, run_context)
 
 
+@best_effort("log model hyperparameters")
 def log_model_hyperparameters(settings: Any, run_context: Any) -> None:
     """Log model hyperparameters from settings.model.
 
@@ -440,28 +449,25 @@ def log_model_hyperparameters(settings: Any, run_context: Any) -> None:
         settings: JobConfig object with model configuration.
         run_context: Active run context to log against.
     """
-    try:
-        model_cfg = getattr(settings, "model", None)
-        if model_cfg is None:
-            return
+    model_cfg = getattr(settings, "model", None)
+    if model_cfg is None:
+        return
 
-        params = model_cfg.model_dump(exclude_none=True)
+    params = model_cfg.model_dump(exclude_none=True)
 
-        # Remove component-specific fields that aren't hyperparameters
-        component_fields = {"name", "module_path", "checkpoint", "shape"}
-        hparams = {k: v for k, v in params.items() if k not in component_fields}
+    # Remove component-specific fields that aren't hyperparameters
+    component_fields = {"name", "module_path", "checkpoint", "shape"}
+    hparams = {k: v for k, v in params.items() if k not in component_fields}
 
-        # Prefix with "model_" to distinguish from trial hyperparameters
-        prefixed_hparams = {f"model_{k}": v for k, v in hparams.items()}
+    # Prefix with "model_" to distinguish from trial hyperparameters
+    prefixed_hparams = {f"model_{k}": v for k, v in hparams.items()}
 
-        if prefixed_hparams:
-            run_context.log_params(prefixed_hparams)
-            logger.debug("Model hyperparameters logged to MLflow")
-
-    except Exception as e:
-        logger.warning("Failed to log model hyperparameters: {}", e)
+    if prefixed_hparams:
+        run_context.log_params(prefixed_hparams)
+        logger.debug("Model hyperparameters logged to MLflow")
 
 
+@best_effort("log trial hyperparameters")
 def log_trial_hyperparameters(
     hyperparameters: dict[str, Any], trial: Trial, run_context: Any
 ) -> None:
@@ -481,56 +487,49 @@ def log_trial_hyperparameters(
         trial: Trial domain model.
         run_context: Active run context to log against.
     """
-    try:
-        display_hyperparameters = {
-            key.split(".", 1)[1] if "." in key else key: value
-            for key, value in hyperparameters.items()
+    display_hyperparameters = {
+        key.split(".", 1)[1] if "." in key else key: value for key, value in hyperparameters.items()
+    }
+    # Log hyperparameters as MLflow parameters using run context
+    run_context.log_params(display_hyperparameters)
+
+    # Log trial identifier (static, doesn't change during trial)
+    run_context.log_params(
+        {
+            "trial_id": trial.trial_id,
+            "trial_number": trial.trial_number,
         }
-        # Log hyperparameters as MLflow parameters using run context
-        run_context.log_params(display_hyperparameters)
+    )
+    # NOTE: trial_state is NOT logged as a parameter because it changes during execution
+    # State information should be logged as tags or tracked separately
 
-        # Log trial identifier (static, doesn't change during trial)
-        run_context.log_params(
-            {
-                "trial_id": trial.trial_id,
-                "trial_number": trial.trial_number,
-            }
-        )
-        # NOTE: trial_state is NOT logged as a parameter because it changes during execution
-        # State information should be logged as tags or tracked separately
-
-        logger.debug("Trial {} hyperparameters logged to MLflow", trial.trial_number)
-
-    except Exception as e:
-        logger.warning("Failed to log trial hyperparameters: {}", e)
+    logger.debug("Trial {} hyperparameters logged to MLflow", trial.trial_number)
 
 
+@best_effort("log trial metrics")
 def log_trial_metrics(metrics: dict[str, Any], run_context: Any) -> None:
-    """Log trial metrics.
+    """Log trial metrics, excluding train/val metrics already logged per-epoch.
+
+    ``MLflowEpochLogger`` (injected into the trial's trainer) already logs
+    train/val metrics with epoch steps. Test metrics are a single scalar over
+    the whole test set, so they are logged here, once, with no step.
 
     Args:
         metrics: Trial metrics.
         run_context: Active run context to log against.
     """
-    try:
-        # Filter numeric metrics for MLflow
-        numeric_metrics = {}
-        for key, value in metrics.items():
-            try:
-                numeric_metrics[key] = float(value)
-            except ValueError, TypeError:
-                # Log non-numeric as parameters
-                run_context.log_params({f"metric_{key}": str(value)})
+    numeric_metrics, fallback_metrics = split_stage_filtered_metrics(metrics)
 
-        if numeric_metrics:
-            run_context.log_metrics(numeric_metrics)
+    if fallback_metrics:
+        run_context.log_params(fallback_metrics)
 
-        logger.debug("Trial metrics logged to MLflow")
+    if numeric_metrics:
+        run_context.log_metrics(numeric_metrics)
 
-    except Exception as e:
-        logger.warning("Failed to log trial metrics: {}", e)
+    logger.debug("Trial metrics logged to MLflow")
 
 
+@best_effort("log trial outcome")
 def log_trial_outcome(trial: Trial, run_context: Any) -> None:
     """Log trial-specific outcome metrics (objective value and duration).
 
@@ -538,19 +537,16 @@ def log_trial_outcome(trial: Trial, run_context: Any) -> None:
         trial: Trial domain model with final state.
         run_context: Active run context to log against.
     """
-    try:
-        if trial.objective_value is not None:
-            run_context.log_metrics({"objective_value": trial.objective_value})
+    if trial.objective_value is not None:
+        run_context.log_metrics({"objective_value": trial.objective_value})
 
-        if trial.duration_seconds > 0:
-            run_context.log_metrics({"trial_duration_seconds": trial.duration_seconds})
+    if trial.duration_seconds > 0:
+        run_context.log_metrics({"trial_duration_seconds": trial.duration_seconds})
 
-        logger.debug("Trial {} outcome logged to MLflow", trial.trial_number)
-
-    except Exception as e:
-        logger.warning("Failed to log trial outcome: {}", e)
+    logger.debug("Trial {} outcome logged to MLflow", trial.trial_number)
 
 
+@best_effort("log trial artifacts")
 def log_trial_artifacts(artifacts: dict[str, Any], run_context: Any) -> None:
     """Log trial artifacts.
 
@@ -558,15 +554,11 @@ def log_trial_artifacts(artifacts: dict[str, Any], run_context: Any) -> None:
         artifacts: Trial artifacts.
         run_context: Active run context to log against.
     """
-    try:
-        for key, artifact_path in artifacts.items():
-            if hasattr(artifact_path, "exists") and artifact_path.exists():
-                # Log file artifacts using run context
-                run_context.log_artifact(artifact_path, artifact_dir=key)
-            else:
-                run_context.log_artifact_content(str(artifact_path), f"{key}.txt")
+    for key, artifact_path in artifacts.items():
+        if hasattr(artifact_path, "exists") and artifact_path.exists():
+            # Log file artifacts using run context
+            run_context.log_artifact(artifact_path, artifact_dir=key)
+        else:
+            run_context.log_artifact_content(str(artifact_path), f"{key}.txt")
 
-        logger.debug("Trial artifacts logged to MLflow")
-
-    except Exception as e:
-        logger.warning("Failed to log trial artifacts: {}", e)
+    logger.debug("Trial artifacts logged to MLflow")

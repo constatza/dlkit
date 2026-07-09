@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
+from lightning.fabric.utilities.exceptions import MisconfigurationException
 from lightning.pytorch import LightningDataModule, LightningModule, Trainer
 
 from dlkit.common import ModelState, TrainingResult
@@ -13,6 +15,7 @@ from dlkit.common.protocols import IDataModule, ITrainableModule
 from dlkit.domain.metrics.collect import collect_metrics
 from dlkit.engine.training._checkpoint_helpers import _resolve_checkpoint_path
 from dlkit.engine.training._executor_helpers import (
+    _checkpoint_artifacts_from_callback,
     _get_lr_tuner,
     _get_optimizer,
     _get_seed,
@@ -209,16 +212,10 @@ class VanillaExecutor(ITrainingExecutor):
         tuning_controller = build_optimization_controller(
             cast(Any, model).model, tuning_plan.projected_policy
         )
-        original_controller = cast(Any, model)._optimization_controller
-        original_auto_opt = model.automatic_optimization
 
-        try:
-            cast(Any, model)._optimization_controller = tuning_controller
-            model.automatic_optimization = not tuning_controller.requires_manual_optimization
+        tunable = cast(ILRTunable, model)
+        with tunable.temporarily_use_controller(tuning_controller):
             return LRTuner().tune(tuning_trainer, model, lr_tuner_settings, datamodule)
-        finally:
-            cast(Any, model)._optimization_controller = original_controller
-            model.automatic_optimization = original_auto_opt
 
     def _run_optional_steps(
         self,
@@ -236,20 +233,37 @@ class VanillaExecutor(ITrainingExecutor):
         Returns:
             Prediction batches from trainer.predict(), or None if predict failed.
         """
-        predictions = None
-        try:
-            with _suppress_training_runtime_warnings():
-                predictions = trainer.predict(model, datamodule=datamodule)
-        except Exception as e:
-            logger.debug("Post-training predict step failed (non-fatal): %s", e)
 
-        try:
+        def _predict() -> Any:
             with _suppress_training_runtime_warnings():
-                trainer.test(model, datamodule=datamodule)
-        except Exception as e:
-            logger.debug("Post-training test step failed (non-fatal): %s", e)
+                return trainer.predict(model, datamodule=datamodule)
+
+        def _test() -> Any:
+            with _suppress_training_runtime_warnings():
+                return trainer.test(model, datamodule=datamodule)
+
+        predictions = self._try_optional_step("predict", _predict)
+        self._try_optional_step("test", _test)
 
         return predictions
+
+    def _try_optional_step(self, name: str, step: Callable[[], Any]) -> Any | None:
+        """Run an optional post-training step, tolerating non-configuration.
+
+        Args:
+            name: Human-readable step name used in log messages.
+            step: Zero-argument callable performing the optional step.
+
+        Returns:
+            The step's return value, or None if it failed.
+        """
+        try:
+            return step()
+        except MisconfigurationException as e:
+            logger.debug("Post-training {} step not configured, skipping: {}", name, e)
+        except Exception as e:
+            logger.warning("Post-training {} step failed (non-fatal): {}", name, e)
+        return None
 
     def _collect_metrics(self, trainer: Trainer) -> dict[str, Any]:
         """Collect metrics from trainer after training.
@@ -280,28 +294,12 @@ class VanillaExecutor(ITrainingExecutor):
         Returns:
             Dictionary mapping artifact names to paths.
         """
-        artifacts: dict[str, Path] = {}
         from lightning.pytorch.callbacks import ModelCheckpoint
 
+        artifacts: dict[str, Path] = {}
         callbacks = getattr(trainer, "callbacks", None) or []
         for callback in callbacks:
             if isinstance(callback, ModelCheckpoint):
-                if hasattr(callback, "best_model_path") and callback.best_model_path:
-                    artifacts["best_checkpoint"] = Path(callback.best_model_path)
-                if hasattr(callback, "last_model_path") and callback.last_model_path:
-                    artifacts["last_checkpoint"] = Path(callback.last_model_path)
-
-                if callback.dirpath and not artifacts.get("last_checkpoint"):
-                    dirpath = Path(callback.dirpath)
-                    if dirpath.exists():
-                        last_checkpoints = list(dirpath.glob("last.ckpt")) + list(
-                            dirpath.glob("*-last.ckpt")
-                        )
-                        if last_checkpoints:
-                            artifacts["last_checkpoint"] = last_checkpoints[0]
-                        elif not artifacts.get("best_checkpoint"):
-                            ckpt_files = [f for f in dirpath.glob("*.ckpt") if "last" not in f.name]
-                            if ckpt_files:
-                                artifacts["best_checkpoint"] = ckpt_files[0]
+                artifacts.update(_checkpoint_artifacts_from_callback(callback))
 
         return artifacts

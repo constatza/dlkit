@@ -8,6 +8,7 @@ from typing import cast
 from unittest.mock import Mock
 
 import pytest
+from lightning import Callback
 from lightning.pytorch import LightningModule
 
 from dlkit.common.hooks import ParamValue
@@ -93,32 +94,15 @@ def test_validation_metrics_logged_per_epoch(run_context: RecordingRunContext) -
     assert trainer.callback_metrics["val/loss"].moved_to_cpu is True
 
 
-def test_test_metrics_logged_once(run_context: RecordingRunContext) -> None:
-    logger = MLflowEpochLogger(run_context)
-    pl_module = cast("LightningModule", Mock(spec=LightningModule))
+def test_epoch_logger_has_no_test_hook() -> None:
+    """Test metrics are not epoch-indexed; MLflowEpochLogger must not log them.
 
-    trainer = _build_trainer(
-        epoch=5,
-        metrics={
-            "test/loss": FakeTensor(0.25),
-            "test_accuracy": FakeTensor(0.88),
-            "Accuracy": FakeTensor(0.79),
-            "val/loss": FakeTensor(0.5),
-        },
+    See MetricLogger.log_summary_metrics for the single, step-less test-metric
+    logging path.
+    """
+    assert not hasattr(MLflowEpochLogger, "on_test_end") or (
+        MLflowEpochLogger.on_test_end is Callback.on_test_end
     )
-
-    logger.on_test_end(trainer, pl_module=pl_module)
-
-    assert len(run_context.logged) == 1
-    metrics, step = run_context.logged[0]
-    assert step == 5
-    assert metrics == {
-        "test/loss": pytest.approx(0.25),
-        "test_accuracy": pytest.approx(0.88),
-        "Accuracy test": pytest.approx(0.79),
-    }
-    assert trainer.callback_metrics["test/loss"].detached is True
-    assert trainer.callback_metrics["test/loss"].moved_to_cpu is True
 
 
 def test_sanity_checking_skips_logging(run_context: RecordingRunContext) -> None:

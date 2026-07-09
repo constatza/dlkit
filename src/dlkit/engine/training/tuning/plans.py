@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from dlkit.infrastructure.config.optimizer_component import (
     ConcurrentOptimizerSettings,
@@ -11,6 +12,9 @@ from dlkit.infrastructure.config.optimizer_component import (
     optimizer_requires_closure,
 )
 from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+
+if TYPE_CHECKING:
+    from dlkit.engine.training.optimization.controllers import IOptimizationController
 
 
 @runtime_checkable
@@ -22,6 +26,14 @@ class ILRTunable(Protocol):
 
     @lr.setter
     def lr(self, value: float) -> None: ...
+
+    def temporarily_use_controller(
+        self, controller: IOptimizationController
+    ) -> AbstractContextManager[None]:
+        """Temporarily swap in `controller`, restoring the original controller/
+        automatic_optimization on exit — even on error.
+        """
+        ...
 
 
 @dataclass(frozen=True, slots=True)
