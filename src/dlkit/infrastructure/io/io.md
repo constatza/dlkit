@@ -29,8 +29,15 @@ DLKit no longer uses a global project root setting.
 
 ### Internal Locations
 - `locations.output(...)` resolves under `DLKIT_INTERNAL_DIR` (default
-  `.dlkit/`) for DLKit-owned internal files such as local MLflow/Optuna
-  databases.
+  `.dlkit/`) for DLKit-owned internal files. Currently only the local MLflow
+  SQLite tracking DB (`.dlkit/mlflow/mlflow.db`) uses it, and only when MLflow
+  tracking is explicitly enabled (`--mlflow` / `tracking.backend = "mlflow"`)
+  with no server or explicit URI reachable — `.dlkit/` is never created on a
+  plain `dlkit train` run.
+- File logging is opt-in and lives under the same directory
+  (`.dlkit/logs/dlkit_<timestamp>.log`) via `--log-file` or `DLKIT_LOG_FILE`;
+  see `dlkit.infrastructure.utils.utils.md`. Without either, no log file or
+  directory is created — only stderr is used.
 - `locations.py` should be treated as DLKit-internal infrastructure only, not
   as the owner of user-facing predictions/checkpoints/splits directories.
 - Generated index splits do not create local files by default.

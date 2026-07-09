@@ -87,6 +87,18 @@ def test_configure_logging_cli_level_overrides_env_for_file_sink(
     assert "info should not be written" not in contents
 
 
+def test_configure_logging_without_log_file_creates_no_directory(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.delenv("DLKIT_LOG_FILE", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    configure_logging(level="INFO", debug_enabled=False, format_type="simple")
+
+    assert not (tmp_path / ".dlkit").exists()
+
+
 def test_suppress_third_party_loggers_restores_original_levels() -> None:
     logger_a = logging.getLogger("alembic.runtime.migration")
     logger_b = logging.getLogger("mlflow.store.db.utils")

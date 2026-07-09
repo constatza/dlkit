@@ -17,6 +17,7 @@ Key architectural decisions:
 - Cross-platform compatibility (Path-based, OS-aware logic)
 - Test environment detection for debug logging auto-enable
 - Loguru `backtrace` and `diagnose` are **opt-in via env vars** (`DLKIT_LOG_BACKTRACE`, `DLKIT_LOG_DIAGNOSE`), not tied to debug mode
+- File logging is **opt-in** (`log_file` param, `--log-file` CLI flag, or `DLKIT_LOG_FILE` env var) — without one, `configure_logging()` only adds a stderr sink and never creates `.dlkit/`
 
 ## Module Structure
 
@@ -42,7 +43,6 @@ Key architectural decisions:
 | `_diagnose_enabled()` | Function | Read `DLKIT_LOG_DIAGNOSE` env var | `bool` |
 | `_debug_filter()` | Function | Filter debug messages by module origin | `bool` |
 | `_suppress_third_party_logging()` | Function | Suppress noisy third-party logs | `None` |
-| `_get_default_log_file_path()` | Function | Get default log file path | `Path` |
 
 ### Protocols/Interfaces
 None - pure utility functions
@@ -66,7 +66,7 @@ None - pure utility functions
 ## Dependencies
 
 ### Internal Dependencies
-- none required for logging defaults; log level and log file resolution come from `DLKIT_*` environment variables
+- none required for logging defaults; log level comes from `DLKIT_*` environment variables. File logging is opt-in and, when enabled without an explicit path, resolves its default location via `EnvironmentSettings.get_internal_dir_path()` (`dlkit.infrastructure.config.environment`)
 
 ### External Dependencies
 - `loguru`: Structured logging (`logger`)
@@ -178,12 +178,13 @@ logger.debug("Epoch completed", epoch=10, loss=0.5)
 
 ### Component 4: `configure_logging()`
 
-**Purpose**: Configure loguru logger with appropriate levels, formatting, and third-party log suppression.
+**Purpose**: Configure loguru logger with appropriate levels, formatting, and third-party log suppression. Always adds a stderr sink; adds a file sink only when file logging is explicitly requested.
 
 **Parameters**:
 - `level: str | None = None` - Log level override (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - `debug_enabled: bool | None = None` - Whether to enable debug logging
 - `format_type: str = "structured"` - Format type ('structured' or 'simple')
+- `log_file: str | Path | None = None` - Path to write logs to. Falls back to `DLKIT_LOG_FILE` env var. If neither is set, no file sink is added and no directory is created.
 
 **Returns**: `None` (configures global logger)
 
@@ -191,9 +192,10 @@ logger.debug("Epoch completed", epoch=10, loss=0.5)
 ```python
 from dlkit.infrastructure.utils.logging_config import configure_logging
 
-configure_logging()
+configure_logging()  # stderr only, no files
 configure_logging(level="DEBUG")
 configure_logging(format_type="simple")
+configure_logging(log_file="run.log")  # opt into file logging
 ```
 
 ---

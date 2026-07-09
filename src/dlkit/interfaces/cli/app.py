@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from datetime import datetime
+from pathlib import Path
 
 import typer
 from loguru import logger as loguru_logger
@@ -10,6 +13,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
+from dlkit.infrastructure.config.environment import EnvironmentSettings
 from dlkit.infrastructure.utils.logging_config import (
     configure_logging,
     get_effective_log_level,
@@ -22,6 +26,19 @@ from .commands import predict as predict
 from .commands import train as train
 
 logger = get_logger(__name__)
+
+
+def _resolve_log_file_path() -> Path:
+    """Resolve where `--log-file` should write to.
+
+    Respects `DLKIT_LOG_FILE` if set; otherwise generates a fresh,
+    timestamped path under `.dlkit/logs/`.
+    """
+    if env_override := os.getenv("DLKIT_LOG_FILE"):
+        return Path(env_override)
+    internal_dir = EnvironmentSettings().get_internal_dir_path()
+    return internal_dir / "logs" / f"dlkit_{datetime.now():%Y%m%d_%H%M%S}.log"
+
 
 # Create main Typer application
 app = typer.Typer(
@@ -59,6 +76,12 @@ def main(
     log_level: str | None = typer.Option(
         None, "--log-level", help="Set logging level (DEBUG, INFO, WARNING, ERROR)"
     ),
+    log_file: bool = typer.Option(
+        False,
+        "--log-file",
+        help="Also write logs to a timestamped file under .dlkit/logs/ "
+        "(or the path in DLKIT_LOG_FILE)",
+    ),
 ) -> None:
     """DLKit - Deep Learning Toolkit with modern architecture.
 
@@ -68,12 +91,14 @@ def main(
     # Configure logging first, before other logic
     debug_enabled = debug or verbose
     log_level_final = get_effective_log_level(level=log_level, debug_enabled=debug_enabled)
+    log_file_path = _resolve_log_file_path() if log_file else None
 
     try:
         configure_logging(
             level=log_level,
             debug_enabled=debug_enabled,
             format_type="simple" if not debug_enabled else "structured",
+            log_file=log_file_path,
         )
         logger.debug(
             "DLKit CLI initialized with level '{}' (debug_enabled={})",

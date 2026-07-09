@@ -62,21 +62,7 @@ class EnvironmentSettings(BaseSettings):
     # DLKit internal artifacts only (not user dataflow)
     internal_dir: str = Field(
         default=".dlkit",
-        description="Directory for DLKit internal artifacts (logs)",
-    )
-
-    log_filename: str = Field(
-        default="dlkit.log", description="Default log file name within internal directory"
-    )
-
-    log_level: str = Field(
-        default="INFO",
-        description="Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL). Set via DLKIT_LOG_LEVEL env var.",
-    )
-
-    log_file: str | None = Field(
-        default=None,
-        description="Custom log file path (overrides default). Set via DLKIT_LOG_FILE env var.",
+        description="Directory for DLKit internal artifacts (logs, local MLflow tracking DB)",
     )
 
     def get_root_path(self) -> Path:
@@ -96,14 +82,6 @@ class EnvironmentSettings(BaseSettings):
         internal_path = self.get_root_path() / self.internal_dir
         internal_path.mkdir(parents=True, exist_ok=True)
         return internal_path
-
-    def get_log_file_path(self) -> Path:
-        """Get path to default log file.
-
-        Returns:
-            Path: Path to log file in internal directory
-        """
-        return self.get_internal_dir_path() / self.log_filename
 
 
 # Global instance for easy access throughout the system

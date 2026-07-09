@@ -15,11 +15,6 @@ from loguru import logger
 _VALID_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 _ENV_ENABLED = "1"
 _ENV_DISABLED = "0"
-_LOG_ROTATION_SIZE = "10 MB"
-_LOG_RETENTION_PERIOD = "7 days"
-_LOG_COMPRESSION_FORMAT = "gz"
-_DEFAULT_INTERNAL_DIR = ".dlkit"
-_DEFAULT_LOG_FILENAME = "dlkit.log"
 
 
 def _backtrace_enabled() -> bool:
@@ -61,13 +56,20 @@ def configure_logging(
     level: str | None = None,
     debug_enabled: bool | None = None,
     format_type: str = "structured",
+    log_file: str | Path | None = None,
 ) -> None:
     """Configure loguru logger with appropriate levels and formatting.
+
+    File logging is opt-in: a file sink is only added when a path is given,
+    either via `log_file` or the `DLKIT_LOG_FILE` env var. Without one, only
+    the stderr sink is configured — no directory or file is created.
 
     Args:
         level: Log level override (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         debug_enabled: Whether to enable debug logging (overrides env vars)
         format_type: Format type ('structured' for JSON-like, 'simple' for human-readable)
+        log_file: Path to write logs to. Falls back to `DLKIT_LOG_FILE` env var.
+            If neither is set, no file sink is added.
     """
     global _CURRENT_LOG_LEVEL
 
@@ -102,21 +104,19 @@ def configure_logging(
         filter=_debug_filter,
     )
 
-    default_log_file = _get_default_log_file_path()
-    log_file = os.getenv("DLKIT_LOG_FILE") or str(default_log_file)
-    logger.add(
-        log_file,
-        format=(
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} | {message}"
-        ),
-        level=resolved_level,
-        rotation=_LOG_ROTATION_SIZE,
-        retention=_LOG_RETENTION_PERIOD,
-        compression=_LOG_COMPRESSION_FORMAT,
-        colorize=False,
-        backtrace=_backtrace_enabled(),
-        diagnose=_diagnose_enabled(),
-    )
+    resolved_log_file = log_file if log_file is not None else os.getenv("DLKIT_LOG_FILE")
+    if resolved_log_file:
+        logger.add(
+            str(resolved_log_file),
+            format=(
+                "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+                "{name}:{function}:{line} | {message}"
+            ),
+            level=resolved_level,
+            colorize=False,
+            backtrace=_backtrace_enabled(),
+            diagnose=_diagnose_enabled(),
+        )
 
     logger.configure(extra={})
 
@@ -145,19 +145,6 @@ def get_effective_log_level(
     resolved_level = normalize_log_level(level)
     debug_mode = debug_enabled if debug_enabled is not None else _is_debug_enabled(resolved_level)
     return "DEBUG" if debug_mode else resolved_level
-
-
-def _get_default_log_file_path() -> Path:
-    """Get default log file path using environment variables only.
-
-    Returns:
-        Path to default log file in DLKit internal directory
-    """
-    internal_dir = os.getenv("DLKIT_INTERNAL_DIR", _DEFAULT_INTERNAL_DIR)
-    log_filename = os.getenv("DLKIT_LOG_FILENAME", _DEFAULT_LOG_FILENAME)
-    internal_path = Path.cwd().resolve() / internal_dir
-    internal_path.mkdir(parents=True, exist_ok=True)
-    return internal_path / log_filename
 
 
 def _is_debug_enabled(resolved_level: str | None = None) -> bool:

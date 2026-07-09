@@ -20,6 +20,32 @@ def test_cli_help_flag(cli_runner: CliRunner) -> None:
     assert result.exit_code == 0
 
 
+def test_cli_no_log_file_flag_creates_no_dlkit_dir(
+    cli_runner: CliRunner, tmp_path, monkeypatch
+) -> None:
+    """Without --log-file, no .dlkit/ directory should be created."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DLKIT_LOG_FILE", raising=False)
+
+    cli_runner.invoke(cli_app, ["info"])
+
+    assert not (tmp_path / ".dlkit").exists()
+
+
+def test_cli_log_file_flag_creates_timestamped_file(
+    cli_runner: CliRunner, tmp_path, monkeypatch
+) -> None:
+    """--log-file should create a timestamped log file under .dlkit/logs/."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("DLKIT_LOG_FILE", raising=False)
+
+    cli_runner.invoke(cli_app, ["--log-file", "info"])
+
+    logs_dir = tmp_path / ".dlkit" / "logs"
+    assert logs_dir.exists()
+    assert list(logs_dir.glob("dlkit_*.log"))
+
+
 def test_cli_info_command(cli_runner: CliRunner) -> None:
     """Test info command returns success."""
     result = cli_runner.invoke(cli_app, ["info"])
