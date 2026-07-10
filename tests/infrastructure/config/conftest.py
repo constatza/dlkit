@@ -61,6 +61,33 @@ def sample_build_context() -> Any:
 
 
 @pytest.fixture
+def train_val_test_dataloaders() -> Any:
+    """Distinct single-sample-batch train/val/test loaders with identifiable x values.
+
+    Each split draws from its own seeded slice of a distinct value range, so a
+    recorded x value unambiguously identifies which split and which sample it
+    came from.
+
+    Returns:
+        tuple[DataLoader, DataLoader, DataLoader]: (train, val, test) loaders
+        of sizes 20, 5, 5.
+    """
+    import torch
+    from torch.utils.data import DataLoader, TensorDataset
+
+    def _loader(offset: float, n: int) -> Any:
+        generator = torch.Generator().manual_seed(0)
+        x = offset + torch.randn(n, 1, generator=generator)
+        y = torch.randn(n, 1, generator=generator)
+        return DataLoader(TensorDataset(x, y), batch_size=1)
+
+    train_loader = _loader(offset=0.0, n=20)
+    val_loader = _loader(offset=100.0, n=5)
+    test_loader = _loader(offset=200.0, n=5)
+    return train_loader, val_loader, test_loader
+
+
+@pytest.fixture
 def sample_general_settings_data() -> dict[str, Any]:
     """Sample data for TrainingJobConfig testing.
 

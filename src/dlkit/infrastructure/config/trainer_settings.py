@@ -47,6 +47,7 @@ class TrainerSettings(ComponentSettings):
         max_epochs (int): Maximum number of epochs to train for. Defaults to 100.
         gradient_clip_val (float | None): Value for gradient clipping, if any. Defaults to None.
         fast_dev_run (bool | int): Flag for fast development run or number of batches to run in fast dev mode. Defaults to False.
+        overfit_batches (int | float): Overfit on this many/fraction of training batches, for capacity sanity checks. Defaults to 0.
         default_root_dir (DirectoryPath | None): Default root directory for the model. Defaults to None.
         enable_checkpointing (bool): Whether to enable checkpointing. Defaults to False.
         callbacks (tuple[CallbackSettings, ...]): List of callbacks. Defaults to an empty tuple.
@@ -73,6 +74,16 @@ class TrainerSettings(ComponentSettings):
     fast_dev_run: bool | int = Field(
         default=False,
         description="Flag for fast development run or number of batches to run in fast dev mode.",
+    )
+    overfit_batches: int | float = Field(
+        default=0,
+        description=(
+            "Overfit on this many (int) or this fraction (float) of batches. "
+            "Applies the same count to train and val, each on its own data "
+            "(not shared between them), repeating those same batch(es) every "
+            "epoch with shuffling disabled; does not affect the test split. "
+            "Sanity check for model capacity."
+        ),
     )
     default_root_dir: DirectoryPath | None = Field(
         default=None, description="Default root directory for the model."
