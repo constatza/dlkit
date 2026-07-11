@@ -8,6 +8,8 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
+
 from .core.base_settings import BasicSettings, ComponentSettings
 from .optimization_selector import ParameterSelectorSettings
 
@@ -337,7 +339,7 @@ class SchedulerComponentSettings(ComponentSettings):
     Attributes:
         name: Scheduler name, callable, or dict spec. Defaults to None (no scheduler).
         module_path: Import path for the scheduler. Defaults to "torch.optim.lr_scheduler".
-        monitor: Metric to monitor for plateau-based scheduling. Defaults to "val_loss".
+        monitor: Metric to monitor for plateau-based scheduling. Defaults to "val/loss".
         frequency: Update frequency (epoch or step). Defaults to 1.
     """
 
@@ -350,7 +352,8 @@ class SchedulerComponentSettings(ComponentSettings):
         default="torch.optim.lr_scheduler", description="Module path to the scheduler"
     )
     monitor: str = Field(
-        default="val_loss", description="Metric to monitor for learning rate adjustment"
+        default=DEFAULT_VAL_LOSS_METRIC,
+        description="Metric to monitor for learning rate adjustment",
     )
     frequency: int = Field(default=1, description="Update frequency (epochs or steps)")
 

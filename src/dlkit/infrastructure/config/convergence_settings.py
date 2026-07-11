@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import Field, PositiveInt, model_validator
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
+
 from .core.base_settings import BasicSettings
 
 
@@ -37,7 +39,9 @@ class ConvergenceSettings(BasicSettings):
     steps: PositiveInt = Field(default=8, description="Number of log-space steps")
     repeats: PositiveInt = Field(default=1, description="Independent runs per size")
     target: float | None = Field(default=None, description="Convergence threshold E_target")
-    target_metric: str = Field(default="val/loss", description="Metric key for convergence check")
+    target_metric: str = Field(
+        default=DEFAULT_VAL_LOSS_METRIC, description="Metric key for convergence check"
+    )
     c: float = Field(default=2.0, description="Multiplier: threshold = mu + c * sigma")
 
     @model_validator(mode="after")

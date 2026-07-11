@@ -20,7 +20,7 @@ class ITransitionTrigger(ABC):
 
         Args:
             epoch: The current training epoch number (0-indexed).
-            metrics: Dict of current metric values (e.g., {"val_loss": 0.42}).
+            metrics: Dict of current metric values (e.g., {"val/loss": 0.42}).
 
         Returns:
             True if the transition should fire now; False otherwise.
@@ -139,7 +139,7 @@ class PlateauTransitionTrigger(ITransitionTrigger):
         """Initialize the plateau trigger.
 
         Args:
-            monitor: Name of the metric to monitor (e.g., "val_loss").
+            monitor: Name of the metric to monitor (e.g., "val/loss").
             patience: Number of epochs without improvement before firing.
             min_delta: Minimum absolute change to count as improvement.
             mode: "min" if lower metric is better, "max" if higher is better.

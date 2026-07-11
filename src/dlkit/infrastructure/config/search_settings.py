@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 from pydantic.types import PositiveInt
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 
 
@@ -144,7 +145,7 @@ class SearchSettings(BasicSettings):
 
     n_trials: PositiveInt = 10
     direction: Literal["minimize", "maximize"] = "minimize"
-    objective: str = "val/loss"
+    objective: str = DEFAULT_VAL_LOSS_METRIC
     study_name: str | None = None
     storage: str | None = None
     sampler: SamplerSettings = Field(default_factory=SamplerSettings)

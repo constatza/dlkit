@@ -95,7 +95,7 @@ class IRunContext(IMetricSink, ABC):
             run_context.log_metrics({"accuracy": 0.95})
 
             # Log multiple metrics with step
-            run_context.log_metrics({"loss": 0.3, "val_loss": 0.35, "lr": 0.001}, step=42)
+            run_context.log_metrics({"loss": 0.3, "val/loss": 0.35, "lr": 0.001}, step=42)
             ```
         """
         raise NotImplementedError

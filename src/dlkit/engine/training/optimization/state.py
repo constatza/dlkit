@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import torch
 import torch.optim
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
+
 from .triggers import ITransitionTrigger
 
 
@@ -25,7 +27,7 @@ class ActiveStage:
         trigger: Transition trigger that signals advancing to the next stage.
         stage_index: Zero-indexed position in the overall program.
         name: Optional label for logging and debugging.
-        scheduler_monitor: Lightning metric name to route to scheduler.step() (e.g. "val_loss").
+        scheduler_monitor: Lightning metric name to route to scheduler.step() (e.g. "val/loss").
             Only meaningful when scheduler is not None.
         scheduler_frequency: Lightning step frequency for the scheduler. Defaults to 1.
     """
@@ -35,7 +37,7 @@ class ActiveStage:
     trigger: ITransitionTrigger
     stage_index: int
     name: str = ""
-    scheduler_monitor: str = "val_loss"
+    scheduler_monitor: str = DEFAULT_VAL_LOSS_METRIC
     scheduler_frequency: int = 1
 
 

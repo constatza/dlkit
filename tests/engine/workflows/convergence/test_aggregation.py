@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from dlkit.common.metric_stages import MetricStage, metric_key
 from dlkit.common.results import ConvergencePoint, TrainingResult
 from dlkit.engine.workflows.convergence.aggregation import (
     aggregate_results,
@@ -292,6 +293,34 @@ def test_aggregate_with_target_second_converged(
         two_point_with_target_mixed: Mixed fixture, second point low-loss.
     """
     assert two_point_with_target_mixed[1].converged is True
+
+
+def test_aggregate_reads_real_default_target_metric() -> None:
+    """aggregate_results() honours ConvergenceSettings' real default target_metric.
+
+    Regression test: previously the train-metric counterpart was derived via
+    ``cfg.target_metric.replace("val/", "train/")``, an inline literal that
+    assumed a "/" separator never actually guaranteed anywhere. Metric keys
+    here are built with the shared `metric_key()` helper (the same convention
+    runtime logging uses via `_format_metric_name`), not the local
+    VAL_METRIC/TRAIN_METRIC constants, so this test fails loudly if the
+    lookup and the `target_metric` default ever drift apart -- instead of
+    aggregate_results() silently falling back to a 0.0 mean for every value.
+    """
+    val_key = metric_key(MetricStage.VAL, "loss")
+    train_key = metric_key(MetricStage.TRAIN, "loss")
+    result = TrainingResult(
+        model_state=None,
+        metrics={val_key: VAL_LOSS_LOW, train_key: TRAIN_LOSS_LOW},
+        artifacts={},
+        duration_seconds=DURATION,
+    )
+    cfg = ConvergenceSettings(sizes=(SIZE_SMALL,), repeats=1)
+
+    points = aggregate_results(results=(result,), sizes=(SIZE_SMALL,), cfg=cfg)
+
+    assert points[0].val_mean == pytest.approx(VAL_LOSS_LOW)
+    assert points[0].train_mean == pytest.approx(TRAIN_LOSS_LOW)
 
 
 # ---------------------------------------------------------------------------

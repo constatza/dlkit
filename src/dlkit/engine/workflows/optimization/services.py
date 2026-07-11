@@ -14,6 +14,7 @@ from typing import Any, cast
 from dlkit.common import TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
 from dlkit.engine.tracking.lightweight_execution import (
     execute_lightweight,
     fire_post_training_hooks,
@@ -321,8 +322,10 @@ class TrialExecutor:
         if not training_result.metrics:
             return 0.0
 
-        # Try common objective metric names
-        for key in ["val_loss", "valid_loss", "loss", "train_loss"]:
+        # DEFAULT_VAL_LOSS_METRIC is the current convention; "val_loss" is kept
+        # only for backward compatibility with results logged before metric
+        # keys were centralized to use "/" as the stage separator.
+        for key in [DEFAULT_VAL_LOSS_METRIC, "val_loss"]:
             if key in training_result.metrics:
                 try:
                     return float(training_result.metrics[key])

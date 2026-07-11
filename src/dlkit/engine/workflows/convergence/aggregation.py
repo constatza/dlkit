@@ -5,6 +5,7 @@ from __future__ import annotations
 import statistics
 from collections import defaultdict
 
+from dlkit.common.metric_stages import MetricStage, swap_stage
 from dlkit.common.results import ConvergencePoint, TrainingResult
 from dlkit.infrastructure.config.convergence_settings import ConvergenceSettings
 
@@ -34,7 +35,7 @@ def aggregate_results(
 
     points: list[ConvergencePoint] = []
     prev_val_mean: float | None = None
-    train_metric = cfg.target_metric.replace("val/", "train/")
+    train_metric = swap_stage(cfg.target_metric, MetricStage.VAL, MetricStage.TRAIN)
 
     for i, n in enumerate(sizes):
         group = grouped[i]

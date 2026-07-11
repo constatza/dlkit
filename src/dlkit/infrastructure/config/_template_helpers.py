@@ -8,6 +8,8 @@ from tomlkit import aot, comment, document, dumps, table
 from tomlkit.items import AoT, Table
 from tomlkit.toml_document import TOMLDocument
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
+
 TemplateKind = Literal["training", "inference", "mlflow", "optuna"]
 
 
@@ -40,7 +42,11 @@ def build_training_template_dict() -> dict[str, Any]:
         },
         "training": {
             "loss": "mse",
-            "stopping": {"monitor": "val/loss", "patience": 10, "direction": "min"},
+            "stopping": {
+                "monitor": DEFAULT_VAL_LOSS_METRIC,
+                "patience": 10,
+                "direction": "min",
+            },
             "trainer": {
                 "max_epochs": 100,
                 "accelerator": "auto",
@@ -85,7 +91,7 @@ def build_search_template_dict() -> dict[str, Any]:
     base["search"] = {
         "n_trials": 20,
         "direction": "minimize",
-        "objective": "val/loss",
+        "objective": DEFAULT_VAL_LOSS_METRIC,
         "space": {
             "training.optimizer.lr": {"type": "log_float", "low": 1e-5, "high": 1e-1},
             "model.hidden_size": {"type": "categorical", "choices": [64, 128, 256]},

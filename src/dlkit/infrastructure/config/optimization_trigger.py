@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
+
 from .core.base_settings import BasicSettings
 
 
@@ -17,7 +19,7 @@ class TriggerSettings(BasicSettings):
     Attributes:
         at_epoch: 0-indexed epoch at which to trigger transition. Use for epoch-based triggers.
         patience: Epochs without improvement before transition. Use for plateau-based triggers.
-        monitor: Metric to monitor (plateau only). Defaults to ``"val_loss"``.
+        monitor: Metric to monitor (plateau only). Defaults to ``"val/loss"``.
         min_delta: Minimum change to qualify as improvement (plateau only). Defaults to 1e-4.
         mode: Optimization direction (plateau only). Defaults to ``"min"``.
     """
@@ -29,7 +31,9 @@ class TriggerSettings(BasicSettings):
         default=None,
         description="Epochs without improvement before transitioning (plateau trigger)",
     )
-    monitor: str = Field(default="val_loss", description="Metric to monitor (plateau only)")
+    monitor: str = Field(
+        default=DEFAULT_VAL_LOSS_METRIC, description="Metric to monitor (plateau only)"
+    )
     min_delta: float = Field(
         default=1e-4, description="Minimum change to qualify as improvement (plateau only)"
     )

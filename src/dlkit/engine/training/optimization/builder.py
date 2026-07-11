@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.optim
 
 from dlkit.common.errors import ParameterPartitionError
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
 from dlkit.domain.nn.parameter_roles import ParameterRole
 from dlkit.infrastructure.config.optimization_selector import (
     ParameterSelectorSettings,
@@ -281,7 +282,9 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             An ActiveStage instance.
         """
         trigger = _build_trigger(config.trigger)
-        monitor = config.scheduler.monitor if config.scheduler is not None else "val_loss"
+        monitor = (
+            config.scheduler.monitor if config.scheduler is not None else DEFAULT_VAL_LOSS_METRIC
+        )
         frequency = config.scheduler.frequency if config.scheduler is not None else 1
 
         if isinstance(config.optimizer, ConcurrentOptimizerSettings):
