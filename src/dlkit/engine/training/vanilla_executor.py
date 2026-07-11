@@ -20,8 +20,10 @@ from dlkit.engine.training._executor_helpers import (
     _get_optimizer,
     _get_seed,
     _get_trainer_settings,
+    _reload_best_checkpoint_weights,
     _suppress_training_runtime_warnings,
 )
+from dlkit.engine.training.checkpoint_utils import find_checkpoint_callback
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.tuning import ILRTunable, SupportedLRTuningPlan
 from dlkit.infrastructure.config.job_config import JobConfig
@@ -63,7 +65,7 @@ class VanillaExecutor(ITrainingExecutor):
             )
         try:
             # Set reproducible seed from settings
-            from pytorch_lightning import seed_everything
+            from lightning.pytorch import seed_everything
 
             seed_everything(_get_seed(settings), workers=True)
 
@@ -92,6 +94,9 @@ class VanillaExecutor(ITrainingExecutor):
             # Core training execution
             with _suppress_training_runtime_warnings():
                 trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
+
+            # Reload best-checkpoint weights (no-op if no ModelCheckpoint configured)
+            _reload_best_checkpoint_weights(model, trainer, datamodule)
 
             # Optional post-training steps (best effort)
             predictions = self._run_optional_steps(trainer, model, datamodule)
@@ -294,12 +299,7 @@ class VanillaExecutor(ITrainingExecutor):
         Returns:
             Dictionary mapping artifact names to paths.
         """
-        from lightning.pytorch.callbacks import ModelCheckpoint
-
-        artifacts: dict[str, Path] = {}
-        callbacks = getattr(trainer, "callbacks", None) or []
-        for callback in callbacks:
-            if isinstance(callback, ModelCheckpoint):
-                artifacts.update(_checkpoint_artifacts_from_callback(callback))
-
-        return artifacts
+        checkpoint_callback = find_checkpoint_callback(trainer)
+        if checkpoint_callback is None:
+            return {}
+        return _checkpoint_artifacts_from_callback(checkpoint_callback)

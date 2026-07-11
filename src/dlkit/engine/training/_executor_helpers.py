@@ -7,10 +7,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from dlkit.engine.training.checkpoint_utils import find_checkpoint_callback
 from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
+    from lightning.pytorch import LightningDataModule, LightningModule, Trainer
     from lightning.pytorch.callbacks import ModelCheckpoint
+
+logger = get_logger(__name__)
 
 
 def _get_seed(settings: JobConfig) -> int:
@@ -78,6 +83,38 @@ def _checkpoint_artifacts_from_callback(callback: ModelCheckpoint) -> dict[str, 
         artifacts["best_checkpoint"] = ckpt_files[0]
 
     return artifacts
+
+
+def _reload_best_checkpoint_weights(
+    model: LightningModule, trainer: Trainer, datamodule: LightningDataModule | None
+) -> None:
+    """Reload best-checkpoint weights into `model` in place after `trainer.fit()`.
+
+    Uses Lightning's own `ckpt_path="best"` restore path (via `trainer.validate`)
+    rather than a manual `torch.load`/`load_state_dict`, so device placement,
+    dtype, strict-loading, and any custom `on_load_checkpoint` hooks are handled
+    exactly as Lightning handles them everywhere else. `best_model_path` is only
+    ever non-empty once a monitored validation metric has been produced, so a val
+    dataloader is guaranteed to exist whenever there is something to reload.
+
+    Args:
+        model: Lightning module to reload weights into, in place.
+        trainer: PyTorch Lightning trainer that just completed `fit()`.
+        datamodule: Optional datamodule providing the validation dataloader.
+    """
+    checkpoint_callback = find_checkpoint_callback(trainer)
+    if checkpoint_callback is None:
+        logger.debug("No ModelCheckpoint callback found; using in-memory weights.")
+        return
+
+    best_model_path = getattr(checkpoint_callback, "best_model_path", None)
+    if not best_model_path:
+        logger.debug("No best checkpoint recorded; using in-memory weights.")
+        return
+
+    with _suppress_training_runtime_warnings():
+        trainer.validate(model, datamodule=datamodule, ckpt_path="best", verbose=False)
+    logger.info("Reloaded best checkpoint weights from {}", best_model_path)
 
 
 @contextmanager

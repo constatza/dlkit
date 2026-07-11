@@ -69,7 +69,7 @@ class BuildFactory:
         Returns:
             Constructed RuntimeComponents with context applied.
         """
-        from pytorch_lightning import seed_everything
+        from lightning.pytorch import seed_everything
 
         seed_everything(_get_seed(settings), workers=True)
         precision_strategy = _get_precision_strategy(settings)

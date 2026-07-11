@@ -5,15 +5,13 @@ Single Responsibility: Log checkpoints, models, and user-defined artifacts to ML
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mlflow.models import ModelSignature
 
 import numpy as np
-from lightning.pytorch import Trainer
 from torch import nn
 
 from dlkit.common import TrainingResult
@@ -25,6 +23,7 @@ from dlkit.engine.artifacts import (
     FileArtifactPayload,
     ProducedArtifact,
 )
+from dlkit.engine.training.checkpoint_utils import find_checkpoint_callback
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -43,11 +42,6 @@ CHECKPOINT_ARTIFACT_DIR = "checkpoints"
 TAG_LOGGED_MODEL_URI = "mlflow_logged_model_uri"
 TAG_LOGGED_MODEL_ARTIFACT_PATH = "mlflow_logged_model_artifact_path"
 TAG_MODEL_CLASS = "mlflow_model_class"
-
-
-class CheckpointCallbackLike(Protocol):
-    best_model_path: str | Path | None
-    last_model_path: str | Path | None
 
 
 def _build_input_example(model: nn.Module) -> _InputExample | None:
@@ -239,7 +233,7 @@ class ArtifactLogger:
             logger.debug("No trainer found in components")
             return
 
-        ckpt_cb = self._find_checkpoint_callback(trainer)
+        ckpt_cb = find_checkpoint_callback(trainer)
         if not ckpt_cb:
             logger.debug("No ModelCheckpoint callback found")
             return
@@ -321,34 +315,6 @@ class ArtifactLogger:
             self._log_user_toml_artifacts(accessor, run_context)
         except Exception as e:
             logger.warning("Failed to log user-defined artifacts or params: {}", e)
-
-    def _find_checkpoint_callback(self, trainer: Trainer) -> CheckpointCallbackLike | None:
-        """Find ModelCheckpoint callback in trainer.
-
-        Args:
-            trainer: PyTorch Lightning trainer
-
-        Returns:
-            ModelCheckpoint callback or None
-        """
-        ckpt_cb = getattr(trainer, "checkpoint_callback", None)
-        if ckpt_cb:
-            return ckpt_cb
-
-        callbacks = getattr(trainer, "callbacks", None)
-        if not isinstance(callbacks, Sequence):
-            return None
-
-        try:
-            from pytorch_lightning.callbacks import ModelCheckpoint
-        except ImportError as e:
-            logger.warning("Failed to import ModelCheckpoint: {}", e)
-            return None
-
-        candidates: list[CheckpointCallbackLike] = [
-            c for c in callbacks if isinstance(c, ModelCheckpoint)
-        ]
-        return candidates[0] if candidates else None
 
     def _log_user_params(
         self,

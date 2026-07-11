@@ -93,13 +93,30 @@ class TestVanillaExecutorLRTuning:
         """Training proceeds normally without LR tuner; lr is not changed."""
         executor = VanillaExecutor()
 
-        with patch("pytorch_lightning.seed_everything"):
+        with patch("lightning.pytorch.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 executor.execute(mock_components, settings_without_lr_tuner)
 
         trainer = cast("Any", mock_components.trainer)
         trainer.fit.assert_called_once()
         assert mock_components.model.lr == 0.001
+
+    def test_execute_does_not_reload_checkpoint_for_unconfigured_mock_trainer(
+        self,
+        mock_components: RuntimeComponents,
+        settings_without_lr_tuner: TrainingJobConfig,
+    ) -> None:
+        """A bare Mock() trainer auto-vivifies `.checkpoint_callback` as a truthy
+        non-ModelCheckpoint object. The reload step must not mistake that Mock
+        for a real checkpoint and must never call trainer.validate(...)."""
+        executor = VanillaExecutor()
+
+        with patch("lightning.pytorch.seed_everything"):
+            with patch("dlkit.infrastructure.precision.service.get_precision_service"):
+                executor.execute(mock_components, settings_without_lr_tuner)
+
+        trainer = cast("Any", mock_components.trainer)
+        trainer.validate.assert_not_called()
 
     def test_execute_with_lr_tuner_enabled(
         self,
@@ -109,7 +126,7 @@ class TestVanillaExecutorLRTuning:
         """LR tuner is called and model.lr is updated to the suggested value."""
         executor = VanillaExecutor()
 
-        with patch("pytorch_lightning.seed_everything"):
+        with patch("lightning.pytorch.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch.object(
                     executor, "_find_lr_with_projected_policy", return_value=0.005
@@ -134,7 +151,7 @@ class TestVanillaExecutorLRTuning:
 
         executor = VanillaExecutor()
 
-        with patch("pytorch_lightning.seed_everything"):
+        with patch("lightning.pytorch.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch.object(executor, "_find_lr_with_projected_policy", return_value=0.003):
                     executor.execute(mock_components, settings_with_empty_lr_tuner)
@@ -149,7 +166,7 @@ class TestVanillaExecutorLRTuning:
         """Training continues if LR tuner raises; original lr is preserved."""
         executor = VanillaExecutor()
 
-        with patch("pytorch_lightning.seed_everything"):
+        with patch("lightning.pytorch.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch.object(
                     executor,
@@ -237,7 +254,7 @@ class TestVanillaExecutorLRTuning:
         executor = VanillaExecutor()
         mock_lr_tuner = Mock()
 
-        with patch("pytorch_lightning.seed_everything"):
+        with patch("lightning.pytorch.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch(
                     "dlkit.engine.training.tuning.LRTuner",
@@ -277,7 +294,7 @@ class TestVanillaExecutorLRTuning:
 
         executor = VanillaExecutor()
 
-        with patch("pytorch_lightning.seed_everything"):
+        with patch("lightning.pytorch.seed_everything"):
             with patch("dlkit.infrastructure.precision.service.get_precision_service"):
                 with patch.object(
                     executor, "_find_lr_with_projected_policy", return_value=0.02

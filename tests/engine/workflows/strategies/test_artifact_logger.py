@@ -12,11 +12,13 @@ import numpy as np
 import pytest
 import torch
 import torch.nn as nn
+from lightning.pytorch.callbacks import ModelCheckpoint
 from torch import Tensor
 
 from dlkit.common.hooks import ParamValue
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
 from dlkit.engine.tracking.artifact_logger import (
+    CHECKPOINT_ARTIFACT_DIR,
     DEFAULT_MODEL_ARTIFACT_PATH,
     TAG_LOGGED_MODEL_ARTIFACT_PATH,
     TAG_LOGGED_MODEL_URI,
@@ -61,6 +63,7 @@ class _RecordingRunContext(IRunContext):
     def __init__(self):
         self._run_id = "test-run"
         self.logged_model_calls: list[dict[str, Any]] = []
+        self.logged_artifact_calls: list[tuple[Path, str]] = []
         self.tags: dict[str, str] = {}
 
     @property
@@ -85,7 +88,7 @@ class _RecordingRunContext(IRunContext):
         pass
 
     def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
-        pass
+        self.logged_artifact_calls.append((artifact_path, artifact_dir))
 
     def set_tag(self, key: str, value: str) -> None:
         self.tags[key] = value
@@ -119,11 +122,11 @@ class _RecordingRunContext(IRunContext):
         return f"runs:/{self._run_id}/{artifact_path}"
 
 
-def _build_components(model: Any) -> RuntimeComponents:
+def _build_components(model: Any, trainer: Any = None) -> RuntimeComponents:
     return RuntimeComponents(
         model=model,
         datamodule=Mock(),
-        trainer=None,
+        trainer=trainer,
         meta={},
     )
 
@@ -351,3 +354,86 @@ def test_resolve_model_class_name_unwraps_processing_lightning_wrapper(
     wrapped_model: _ConcreteWrapper,
 ) -> None:
     assert _resolve_model_class_name(wrapped_model) == "_InnerNet"
+
+
+# ---------------------------------------------------------------------------
+# log_checkpoints
+# ---------------------------------------------------------------------------
+
+
+def _mock_trainer(callbacks: list[object], checkpoint_callback: object | None = None) -> Mock:
+    trainer = Mock()
+    trainer.callbacks = callbacks
+    trainer.checkpoint_callback = checkpoint_callback
+    return trainer
+
+
+def test_log_checkpoints_uploads_best_and_last(tmp_path: Path, job_config: JobConfig) -> None:
+    best_path = tmp_path / "best.ckpt"
+    last_path = tmp_path / "last.ckpt"
+    best_path.write_bytes(b"best")
+    last_path.write_bytes(b"last")
+
+    checkpoint_cb = ModelCheckpoint()
+    checkpoint_cb.best_model_path = str(best_path)
+    checkpoint_cb.last_model_path = str(last_path)
+    trainer = _mock_trainer(callbacks=[checkpoint_cb], checkpoint_callback=checkpoint_cb)
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(model=object(), trainer=trainer)
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    uploaded = {path.name: artifact_dir for path, artifact_dir in run_context.logged_artifact_calls}
+    assert uploaded == {
+        "best.ckpt": CHECKPOINT_ARTIFACT_DIR,
+        "last.ckpt": CHECKPOINT_ARTIFACT_DIR,
+    }
+    # Uploaded local copies are removed after upload.
+    assert not best_path.exists()
+    assert not last_path.exists()
+
+
+def test_log_checkpoints_finds_callback_via_callbacks_fallback(
+    tmp_path: Path, job_config: JobConfig
+) -> None:
+    """Pins the fix for the previously-broken fallback: trainer.checkpoint_callback
+    unset -> must still find a real ModelCheckpoint via trainer.callbacks."""
+    best_path = tmp_path / "best.ckpt"
+    best_path.write_bytes(b"best")
+
+    checkpoint_cb = ModelCheckpoint()
+    checkpoint_cb.best_model_path = str(best_path)
+    trainer = _mock_trainer(callbacks=[checkpoint_cb], checkpoint_callback=None)
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(model=object(), trainer=trainer)
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    assert len(run_context.logged_artifact_calls) == 1
+    assert run_context.logged_artifact_calls[0][0].name == "best.ckpt"
+
+
+def test_log_checkpoints_is_noop_with_no_trainer(job_config: JobConfig) -> None:
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(model=object(), trainer=None)
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    assert run_context.logged_artifact_calls == []
+
+
+def test_log_checkpoints_is_noop_with_no_checkpoint_callback(job_config: JobConfig) -> None:
+    trainer = _mock_trainer(callbacks=[], checkpoint_callback=None)
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(model=object(), trainer=trainer)
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    assert run_context.logged_artifact_calls == []
