@@ -89,15 +89,17 @@ class MLflowEpochLogger(Callback):
         # `MetricStage` is a `StrEnum`, so a plain lowercase string key looks
         # up correctly at runtime; the cast only satisfies the type checker.
         prefixes = STAGE_ALIASES.get(cast(MetricStage, stage), (stage,))
-        other_prefixes = tuple(p for p in _ALL_STAGE_PREFIXES if p != stage)
+        other_prefixes = tuple(
+            alias
+            for other_stage in _ALL_STAGE_PREFIXES
+            if other_stage != stage
+            for alias in STAGE_ALIASES.get(other_stage, (other_stage,))
+        )
         collected: dict[str, float] = {}
 
         for key, raw_value in metrics.items():
-            normalized_key = key.lower()
-            if normalized_key == "lr" and stage != "train":
-                continue
-            if not self._matches_stage_prefix(key, prefixes) and any(
-                normalized_key.startswith(other) for other in other_prefixes
+            if not self._matches_stage_prefix(key, prefixes) and self._matches_stage_prefix(
+                key, other_prefixes
             ):
                 continue
 
@@ -121,6 +123,10 @@ class MLflowEpochLogger(Callback):
             if normalized.startswith(f"{prefix_lower}_"):
                 return True
             if normalized.startswith(f"{prefix_lower}."):
+                return True
+            # Group-first keys like "walltime/train" carry the stage as the
+            # last path segment rather than as a prefix.
+            if normalized.endswith(f"/{prefix_lower}"):
                 return True
         return False
 

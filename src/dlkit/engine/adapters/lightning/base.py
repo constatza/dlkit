@@ -5,6 +5,7 @@ All computation is delegated to injected SOLID protocol objects; the wrapper
 is a pure Lightning coordinator.
 """
 
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -354,6 +355,7 @@ class CoreLightningWrapper(LightningModule, ABC):
 
         # Initialize logging concern
         self._step_logger = LightningStepLogger(self)
+        self._epoch_start_time: float | None = None
 
         # Apply precision to model immediately after creation
         self._apply_precision()
@@ -410,11 +412,17 @@ class CoreLightningWrapper(LightningModule, ABC):
     # Epoch End Hooks
     # =========================================================================
 
+    def on_train_epoch_start(self) -> None:
+        """Record epoch start time for epoch-duration logging."""
+        self._epoch_start_time = time.perf_counter()
+
     def on_train_epoch_end(self) -> None:
-        """Log current learning rate at epoch end and update optimization program."""
+        """Log current learning rate and epoch duration; update optimization program."""
         current_lr = self.lr
         if current_lr is not None:
             self._step_logger.log_lr(current_lr)
+        if self._epoch_start_time is not None:
+            self._step_logger.log_walltime("train", time.perf_counter() - self._epoch_start_time)
         metrics = {
             k: v.item() if hasattr(v, "item") else float(v)
             for k, v in self.trainer.callback_metrics.items()
@@ -527,7 +535,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         Delegates to _step_logger for the actual logging.
 
         Args:
-            stage: Stage identifier ('train', 'val', 'test', 'val_epoch', 'test_epoch').
+            stage: Stage identifier ('train', 'val', 'test').
             loss: Scalar loss tensor (optional).
             metrics: Additional metrics dict (optional).
             batch_size: Batch size for correct epoch-level weighted averaging by Lightning.
@@ -778,7 +786,7 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         """
         metrics = self._metrics_updater.compute(stage)
         if metrics:
-            self._step_logger.log_stage_outputs(f"{stage}_epoch", None, metrics)
+            self._step_logger.log_stage_outputs(stage, None, metrics)
         self._metrics_updater.reset(stage)
 
     def on_validation_epoch_end(self) -> None:

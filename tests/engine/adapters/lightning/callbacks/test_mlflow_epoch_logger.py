@@ -105,6 +105,75 @@ def test_epoch_logger_has_no_test_hook() -> None:
     )
 
 
+def test_train_only_metrics_collected_on_train_excluded_on_val(
+    run_context: RecordingRunContext,
+) -> None:
+    """train/lr is train-scoped; excluded from val's push.
+
+    Regression test for removing the hardcoded ``normalized_key == "lr"``
+    special case in ``_collect_stage_metrics``: since the metric now carries
+    a real "train/" prefix, plain prefix matching handles it with no
+    special-casing needed.
+    """
+    logger = MLflowEpochLogger(run_context)
+    pl_module = cast("LightningModule", Mock(spec=LightningModule))
+
+    trainer = _build_trainer(
+        epoch=1,
+        metrics={
+            "train/loss": FakeTensor(0.5),
+            "train/lr": FakeTensor(0.001),
+            "val/loss": FakeTensor(0.4),
+        },
+    )
+
+    logger.on_train_epoch_end(trainer, pl_module=pl_module)
+    train_metrics, _ = run_context.logged[-1]
+    assert train_metrics == {
+        "train/loss": pytest.approx(0.5),
+        "train/lr": pytest.approx(0.001),
+    }
+
+    run_context.logged.clear()
+    logger.on_validation_epoch_end(trainer, pl_module=pl_module)
+    val_metrics, _ = run_context.logged[-1]
+    assert val_metrics == {"val/loss": pytest.approx(0.4)}
+
+
+def test_walltime_key_attributed_only_to_its_own_stage(
+    run_context: RecordingRunContext,
+) -> None:
+    """Group-first keys like "walltime/train" are matched by trailing stage segment.
+
+    "walltime/train" doesn't start with "train", so the plain-prefix check
+    alone wouldn't attribute it to the train push or exclude it from val's —
+    covers the ``endswith(f"/{prefix}")`` branch added to `_matches_stage_prefix`.
+    """
+    logger = MLflowEpochLogger(run_context)
+    pl_module = cast("LightningModule", Mock(spec=LightningModule))
+
+    trainer = _build_trainer(
+        epoch=1,
+        metrics={
+            "train/loss": FakeTensor(0.5),
+            "walltime/train": FakeTensor(12.3),
+            "val/loss": FakeTensor(0.4),
+        },
+    )
+
+    logger.on_train_epoch_end(trainer, pl_module=pl_module)
+    train_metrics, _ = run_context.logged[-1]
+    assert train_metrics == {
+        "train/loss": pytest.approx(0.5),
+        "walltime/train": pytest.approx(12.3),
+    }
+
+    run_context.logged.clear()
+    logger.on_validation_epoch_end(trainer, pl_module=pl_module)
+    val_metrics, _ = run_context.logged[-1]
+    assert val_metrics == {"val/loss": pytest.approx(0.4)}
+
+
 def test_sanity_checking_skips_logging(run_context: RecordingRunContext) -> None:
     logger = MLflowEpochLogger(run_context)
     pl_module = cast("LightningModule", Mock(spec=LightningModule))

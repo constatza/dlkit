@@ -123,4 +123,25 @@ class LightningStepLogger:
         Args:
             lr: Learning rate value.
         """
-        self._log("lr", lr, on_step=False, on_epoch=True, prog_bar=True)
+        self._log(
+            metric_key(MetricStage.TRAIN, "lr"), lr, on_step=False, on_epoch=True, prog_bar=True
+        )
+
+    def log_walltime(self, stage: str, seconds: float) -> None:
+        """Log epoch wall-clock duration for a stage, kept out of the stage's own group.
+
+        Uses ``walltime/<stage>`` (group first) rather than ``<stage>/walltime``,
+        so timing never mixes into the same MLflow UI group as model
+        performance metrics like ``train/loss``.
+
+        Args:
+            stage: Stage identifier (e.g. "train").
+            seconds: Epoch duration in seconds.
+        """
+        self._log(
+            metric_key("walltime", stage),
+            seconds,
+            on_step=False,
+            on_epoch=True,
+            prog_bar=False,
+        )
