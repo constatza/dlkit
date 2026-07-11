@@ -5,9 +5,11 @@ Encapsulates metric logging to Lightning with proper trainer availability checks
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from torch import Tensor
+
+from dlkit.common.metric_stages import STAGE_ALIASES, MetricStage, metric_key
 
 
 def _format_metric_name(stage: str, name: str) -> str:
@@ -23,17 +25,15 @@ def _format_metric_name(stage: str, name: str) -> str:
     stage_lower = stage.lower()
     name_lower = name.lower()
 
-    aliases = {
-        "train": ("train", "training"),
-        "val": ("val", "valid", "validation"),
-        "test": ("test", "testing"),
-    }
-
-    for alias in aliases.get(stage_lower, (stage_lower,)):
+    # `MetricStage` is a `StrEnum`, so a plain lowercase string key (e.g.
+    # "val") looks up correctly at runtime even for stages not in the enum
+    # (falling back to the default); the cast only tells the type checker
+    # this is a valid dict key, it has no runtime effect.
+    for alias in STAGE_ALIASES.get(cast(MetricStage, stage_lower), (stage_lower,)):
         if name_lower.startswith(alias):
             return name
 
-    return f"{stage_lower}_{name}"
+    return metric_key(stage_lower, name)
 
 
 class LightningStepLogger:
