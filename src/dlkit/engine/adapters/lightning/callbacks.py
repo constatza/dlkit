@@ -16,19 +16,20 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import torch
 from lightning import Callback
 
-from dlkit.common.metric_stages import STAGE_ALIASES
+from dlkit.common.metric_stages import STAGE_ALIASES, MetricStage
 from dlkit.engine.artifacts import (
     ArtifactCollector,
     FileArtifactPayload,
     IMetricSink,
     ProducedArtifact,
 )
+from dlkit.engine.training.checkpoint_utils import find_checkpoint_callbacks
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 prediction_logger = logger
 
-_ALL_STAGE_PREFIXES: tuple[str, ...] = ("train", "val", "test")
+_ALL_STAGE_PREFIXES: tuple[MetricStage, ...] = tuple(MetricStage)
 
 
 def _call_zero_arg_method(value: object, method_name: str) -> object | None:
@@ -85,7 +86,9 @@ class MLflowEpochLogger(Callback):
             logger.warning("Failed to log metrics with epoch logger: {}", exc)
 
     def _collect_stage_metrics(self, metrics: Mapping[str, object], stage: str) -> dict[str, float]:
-        prefixes = STAGE_ALIASES.get(stage, (stage,))
+        # `MetricStage` is a `StrEnum`, so a plain lowercase string key looks
+        # up correctly at runtime; the cast only satisfies the type checker.
+        prefixes = STAGE_ALIASES.get(cast(MetricStage, stage), (stage,))
         other_prefixes = tuple(p for p in _ALL_STAGE_PREFIXES if p != stage)
         collected: dict[str, float] = {}
 
@@ -148,18 +151,9 @@ class MLflowEpochLogger(Callback):
 
 def _redirect_checkpoint_callbacks(trainer: Trainer, checkpoint_dir: Path) -> bool:
     """Set ``dirpath`` on unset ModelCheckpoint callbacks."""
-    try:
-        from lightning.pytorch.callbacks import ModelCheckpoint
-    except ImportError:
-        try:
-            from pytorch_lightning.callbacks import ModelCheckpoint
-        except ImportError:
-            logger.debug("CheckpointDirRouter: ModelCheckpoint not available")
-            return False
-
     redirected = False
-    for cb in getattr(trainer, "callbacks", []):
-        if isinstance(cb, ModelCheckpoint) and cb.dirpath is None:
+    for cb in find_checkpoint_callbacks(trainer):
+        if cb.dirpath is None:
             cb.dirpath = str(checkpoint_dir)
             redirected = True
             logger.debug("CheckpointDirRouter: redirected ModelCheckpoint -> {}", checkpoint_dir)

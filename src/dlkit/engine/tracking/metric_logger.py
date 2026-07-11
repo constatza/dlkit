@@ -9,7 +9,7 @@ import math
 from typing import Any
 
 from dlkit.common import TrainingResult
-from dlkit.common.metric_stages import STAGE_ALIASES
+from dlkit.common.metric_stages import STAGE_ALIASES, MetricStage
 from dlkit.engine.artifacts import IMetricSink
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -21,12 +21,12 @@ logger = get_logger(__name__)
 # logged exactly once here as a final, step-less value.
 EPOCH_LOGGED_PREFIXES: tuple[str, ...] = tuple(
     f"{alias}{sep}"
-    for stage in ("train", "val")
+    for stage in (MetricStage.TRAIN, MetricStage.VAL)
     for alias in STAGE_ALIASES[stage]
     for sep in ("_", "/")
 )
 EPOCH_LOGGED_SUFFIXES: tuple[str, ...] = tuple(
-    f" {alias}" for stage in ("train", "val") for alias in STAGE_ALIASES[stage]
+    f" {alias}" for stage in (MetricStage.TRAIN, MetricStage.VAL) for alias in STAGE_ALIASES[stage]
 )
 
 
