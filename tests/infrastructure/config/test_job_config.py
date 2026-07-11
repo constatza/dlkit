@@ -86,9 +86,15 @@ def test_data_settings_alias() -> None:
 
 def test_stopping_settings_defaults() -> None:
     s = StoppingSettings.model_validate({})
+    assert s.enabled is False
     assert s.monitor == "val/loss"
     assert s.patience == 10
     assert s.direction == "min"
+
+
+def test_stopping_settings_enabled_opt_in() -> None:
+    s = StoppingSettings.model_validate({"enabled": True})
+    assert s.enabled is True
 
 
 def test_training_settings_has_stopping() -> None:

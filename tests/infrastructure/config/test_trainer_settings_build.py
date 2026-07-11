@@ -22,10 +22,12 @@ resolved independently against its own dataloader with shuffling disabled
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import torch
-from lightning.pytorch import LightningModule
+from lightning.pytorch import LightningModule, Trainer
+from lightning.pytorch.callbacks import ModelCheckpoint
 from torch import nn
 
 from dlkit.infrastructure.config.core.context import BuildContext
@@ -175,6 +177,67 @@ def test_overfit_batches_does_not_alias_val_to_the_train_sample(train_val_test_d
     # Lightning restricts train and val to 1 batch *each*, independently -
     # it does not swap in the train batch for validation.
     assert model.seen_train_x[0] != model.seen_val_x[0]
+
+
+class _LossLoggingProbe(LightningModule):
+    """Minimal model that logs a real val_loss, for ModelCheckpoint(monitor=...)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.linear = nn.Linear(1, 1)
+
+    def training_step(
+        self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int
+    ) -> torch.Tensor:
+        x, y = batch
+        return nn.functional.mse_loss(self.linear(x), y)
+
+    def validation_step(self, batch: tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
+        x, y = batch
+        self.log("val_loss", nn.functional.mse_loss(self.linear(x), y))
+
+    def configure_optimizers(self) -> torch.optim.Optimizer:
+        return torch.optim.Adam(self.parameters(), lr=0.1)
+
+
+def test_default_style_checkpoint_bounds_files_to_two(tmp_path, train_val_test_dataloaders):
+    """The smart-default ModelCheckpoint shape (save_top_k=1, save_last=True,
+    step/epoch-free filename) must produce at most 2 checkpoint files - not one
+    per epoch - regardless of how many epochs run.
+
+    Uses overfit_batches=1 + a tiny dataset to keep this cheap.
+    """
+    train_loader, val_loader, _test_loader = train_val_test_dataloaders
+    checkpoint_cb = ModelCheckpoint(
+        dirpath=tmp_path,
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1,
+        save_last=True,
+        filename="best",
+    )
+    # Construct the real Trainer directly (not via TrainerSettings.build()) so
+    # the checkpoint_cb passed in callbacks= is the only ModelCheckpoint Lightning
+    # sees - build() would otherwise leave enable_checkpointing=True with an
+    # empty explicit callback list, causing Lightning to auto-inject its own
+    # second, unconfined default ModelCheckpoint (dirpath=None -> CWD).
+    trainer = Trainer(
+        overfit_batches=1,
+        max_epochs=5,
+        accelerator="cpu",
+        enable_checkpointing=True,
+        callbacks=[checkpoint_cb],
+        default_root_dir=tmp_path,
+        logger=False,
+        enable_progress_bar=False,
+        num_sanity_val_steps=0,
+    )
+    model = _LossLoggingProbe()
+
+    trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
+
+    ckpt_files = list(Path(tmp_path).glob("*.ckpt"))
+    assert len(ckpt_files) <= 2
 
 
 def test_overfit_batches_leaves_the_test_split_unrestricted(train_val_test_dataloaders):

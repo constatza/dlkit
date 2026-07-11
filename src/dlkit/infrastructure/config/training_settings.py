@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import Field, field_validator
 
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
+
 from .core.base_settings import BasicSettings
 from .lr_tuner_settings import LRTunerSettings
 from .model_components import LossComponentSettings, MetricComponentSettings
@@ -18,12 +20,16 @@ class StoppingSettings(BasicSettings):
     """Early stopping configuration.
 
     Args:
+        enabled: Whether to construct a real `lightning.pytorch.callbacks.EarlyStopping`
+            callback from monitor/patience/direction. Defaults to False - no
+            EarlyStopping runs unless explicitly opted in.
         monitor: Metric name to monitor for early stopping.
         patience: Number of epochs with no improvement before stopping.
         direction: Whether lower ("min") or higher ("max") metric values are better.
     """
 
-    monitor: str = "val/loss"
+    enabled: bool = False
+    monitor: str = DEFAULT_VAL_LOSS_METRIC
     patience: int = 10
     direction: Literal["min", "max"] = "min"
 

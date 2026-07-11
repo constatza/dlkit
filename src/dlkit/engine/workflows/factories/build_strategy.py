@@ -17,8 +17,8 @@ from dlkit.infrastructure.config.data_entries import DataEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.config.model_components import WrapperComponentSettings
-from dlkit.infrastructure.config.trainer_settings import TrainerSettings
-from dlkit.infrastructure.config.training_settings import TrainingSettings
+from dlkit.infrastructure.config.trainer_settings import CallbackSettings, TrainerSettings
+from dlkit.infrastructure.config.training_settings import StoppingSettings, TrainingSettings
 
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
@@ -78,6 +78,9 @@ def build_trainer(settings: JobConfig) -> Trainer | None:
     if trainer_settings is None:
         return None
 
+    trainer_settings = _inject_default_checkpoint_callback(trainer_settings, training.stopping)
+    trainer_settings = _inject_early_stopping_callback(trainer_settings, training.stopping)
+
     if _requires_explicit_local_root(trainer_settings):
         if getattr(trainer_settings, "default_root_dir", None) is None:
             raise WorkflowError(
@@ -88,6 +91,84 @@ def build_trainer(settings: JobConfig) -> Trainer | None:
             )
         trainer_settings = _pin_lightning_local_outputs(trainer_settings)
     return trainer_settings.build(session=None)
+
+
+def _has_callback_named(trainer_settings: TrainerSettings, name: str) -> bool:
+    """Return whether trainer_settings.callbacks already includes a callback with this name."""
+    return any(getattr(cb, "name", None) == name for cb in trainer_settings.callbacks)
+
+
+def _default_checkpoint_callback_settings(stopping: StoppingSettings) -> CallbackSettings:
+    """Build CallbackSettings for a bounded-file-count default ModelCheckpoint.
+
+    Reuses `stopping.monitor`/`stopping.direction` rather than inventing new
+    config. `save_top_k=1` + `save_last=True` with a step/epoch-free filename
+    bounds checkpoint files to at most 2: the current best and the last.
+    """
+    # CallbackSettings (ComponentSettings) uses extra="allow": these kwargs are
+    # accepted at runtime and forwarded to ModelCheckpoint's constructor, but
+    # aren't declared fields, so ty can't verify them statically.
+    return CallbackSettings(
+        name="ModelCheckpoint",
+        module_path="lightning.pytorch.callbacks",
+        monitor=stopping.monitor,  # ty: ignore[unknown-argument]
+        mode=stopping.direction,  # ty: ignore[unknown-argument]
+        save_top_k=1,  # ty: ignore[unknown-argument]
+        save_last=True,  # ty: ignore[unknown-argument]
+        filename="best",  # ty: ignore[unknown-argument]
+    )
+
+
+def _inject_default_checkpoint_callback(
+    trainer_settings: TrainerSettings, stopping: StoppingSettings
+) -> TrainerSettings:
+    """Auto-inject a monitored ModelCheckpoint when enabled and unconfigured.
+
+    No-op unless `enable_checkpointing` is True and the user hasn't already
+    supplied their own `ModelCheckpoint` callback.
+    """
+    if not trainer_settings.enable_checkpointing:
+        return trainer_settings
+    if _has_callback_named(trainer_settings, "ModelCheckpoint"):
+        return trainer_settings
+
+    default_callback = _default_checkpoint_callback_settings(stopping)
+    return trainer_settings.model_copy(
+        update={"callbacks": (*trainer_settings.callbacks, default_callback)}
+    )
+
+
+def _default_early_stopping_callback_settings(stopping: StoppingSettings) -> CallbackSettings:
+    """Build CallbackSettings for EarlyStopping from StoppingSettings fields."""
+    return CallbackSettings(
+        name="EarlyStopping",
+        module_path="lightning.pytorch.callbacks",
+        monitor=stopping.monitor,  # ty: ignore[unknown-argument]
+        patience=stopping.patience,  # ty: ignore[unknown-argument]
+        mode=stopping.direction,  # ty: ignore[unknown-argument]
+    )
+
+
+def _inject_early_stopping_callback(
+    trainer_settings: TrainerSettings, stopping: StoppingSettings
+) -> TrainerSettings:
+    """Auto-inject EarlyStopping when the user has opted in via `stopping.enabled`.
+
+    No-op unless `stopping.enabled` is True and the user hasn't already
+    supplied their own `EarlyStopping` callback. Never default-on: dlkit ran
+    with no EarlyStopping at all until this field existed, and stopping
+    training early is a training-semantics change (unlike checkpointing,
+    which is purely additive).
+    """
+    if not stopping.enabled:
+        return trainer_settings
+    if _has_callback_named(trainer_settings, "EarlyStopping"):
+        return trainer_settings
+
+    default_callback = _default_early_stopping_callback_settings(stopping)
+    return trainer_settings.model_copy(
+        update={"callbacks": (*trainer_settings.callbacks, default_callback)}
+    )
 
 
 def _requires_explicit_local_root(trainer_settings: TrainerSettings) -> bool:

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import pytest
+from lightning.pytorch import Trainer
 
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.workflows.factories.build_strategy import build_trainer
@@ -17,6 +18,7 @@ def _make_trainer_job(
     logger_name: str | None = "CSVLogger",
     callbacks: list[dict[str, Any]] | None = None,
     enable_checkpointing: bool | None = None,
+    stopping: dict[str, Any] | None = None,
 ) -> TrainingJobConfig:
     """Build a minimal TrainingJobConfig focused on trainer configuration.
 
@@ -26,6 +28,7 @@ def _make_trainer_job(
         logger_name: Logger name to configure, or None for no logger.
         callbacks: Callback dicts to include, or None for none.
         enable_checkpointing: Whether Lightning built-in checkpointing is enabled.
+        stopping: Optional TRAINING.stopping overrides (monitor/direction/enabled/patience).
 
     Returns:
         TrainingJobConfig ready for ``build_trainer``.
@@ -43,14 +46,23 @@ def _make_trainer_job(
     if enable_checkpointing is not None:
         trainer_cfg["enable_checkpointing"] = enable_checkpointing
 
+    training_cfg: dict[str, Any] = {"trainer": trainer_cfg}
+    if stopping is not None:
+        training_cfg["stopping"] = stopping
+
     return TrainingJobConfig.model_validate(
         {
             "run": {"type": "train"},
             "model": {"class": "Dummy"},
             "data": {"batch_size": 8, "num_workers": 0},
-            "training": {"trainer": trainer_cfg},
+            "training": training_cfg,
         }
     )
+
+
+def _callbacks_named(trainer: Trainer | None, name: str) -> list[Any]:
+    callbacks = cast("list[object]", cast("Any", trainer).callbacks)
+    return [cb for cb in callbacks if type(cb).__name__ == name]
 
 
 def test_build_trainer_pins_local_lightning_outputs_without_mlflow(tmp_path: Path) -> None:
@@ -125,3 +137,154 @@ def test_build_trainer_allows_noop_mode_without_default_root(
     checkpoint_callbacks = [cb for cb in callbacks if type(cb).__name__ == "ModelCheckpoint"]
     assert not checkpoint_callbacks
     assert not (tmp_path / "checkpoints").exists()
+
+
+# ---------------------------------------------------------------------------
+# Item 2: smart ModelCheckpoint defaults
+# ---------------------------------------------------------------------------
+
+
+def test_build_trainer_auto_injects_default_checkpoint_when_enabled_and_unconfigured(
+    tmp_path: Path,
+) -> None:
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[],
+        enable_checkpointing=True,
+    )
+
+    trainer = build_trainer(settings)
+
+    checkpoint_callbacks = _callbacks_named(trainer, "ModelCheckpoint")
+    assert len(checkpoint_callbacks) == 1
+    cb = checkpoint_callbacks[0]
+    assert cb.save_top_k == 1
+    assert cb.save_last is True
+    assert cb.monitor == "val/loss"
+    assert cb.mode == "min"
+    assert Path(cb.dirpath).resolve() == (tmp_path / "checkpoints").resolve()
+
+
+def test_build_trainer_respects_user_supplied_checkpoint_callback(tmp_path: Path) -> None:
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[{"name": "ModelCheckpoint", "monitor": "val/acc", "mode": "max"}],
+        enable_checkpointing=True,
+    )
+
+    trainer = build_trainer(settings)
+
+    checkpoint_callbacks = _callbacks_named(trainer, "ModelCheckpoint")
+    assert len(checkpoint_callbacks) == 1
+    cb = checkpoint_callbacks[0]
+    assert cb.monitor == "val/acc"
+    assert cb.mode == "max"
+
+
+def test_build_trainer_auto_injected_checkpoint_reuses_custom_stopping_monitor(
+    tmp_path: Path,
+) -> None:
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[],
+        enable_checkpointing=True,
+        stopping={"monitor": "val/acc", "direction": "max"},
+    )
+
+    trainer = build_trainer(settings)
+
+    cb = _callbacks_named(trainer, "ModelCheckpoint")[0]
+    assert cb.monitor == "val/acc"
+    assert cb.mode == "max"
+
+
+def test_build_trainer_does_not_inject_checkpoint_when_disabled(tmp_path: Path) -> None:
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[],
+        enable_checkpointing=False,
+    )
+
+    trainer = build_trainer(settings)
+
+    assert _callbacks_named(trainer, "ModelCheckpoint") == []
+
+
+# ---------------------------------------------------------------------------
+# Item 3: opt-in EarlyStopping wiring
+# ---------------------------------------------------------------------------
+
+
+def test_build_trainer_injects_early_stopping_when_stopping_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = _make_trainer_job(
+        default_root_dir=None,
+        logger_name=None,
+        callbacks=[],
+        enable_checkpointing=False,
+        stopping={"enabled": True},
+    )
+
+    trainer = build_trainer(settings)
+
+    assert trainer is not None
+    early_stopping_callbacks = _callbacks_named(trainer, "EarlyStopping")
+    assert len(early_stopping_callbacks) == 1
+    cb = early_stopping_callbacks[0]
+    assert cb.monitor == "val/loss"
+    assert cb.patience == 10
+    assert cb.mode == "min"
+
+
+def test_build_trainer_does_not_inject_early_stopping_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = _make_trainer_job(
+        default_root_dir=None,
+        logger_name=None,
+        callbacks=[],
+        enable_checkpointing=False,
+    )
+
+    trainer = build_trainer(settings)
+
+    assert _callbacks_named(trainer, "EarlyStopping") == []
+
+
+def test_build_trainer_respects_user_supplied_early_stopping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    settings = _make_trainer_job(
+        default_root_dir=None,
+        logger_name=None,
+        callbacks=[{"name": "EarlyStopping", "monitor": "val/loss", "patience": 3}],
+        enable_checkpointing=False,
+        stopping={"enabled": True},
+    )
+
+    trainer = build_trainer(settings)
+
+    early_stopping_callbacks = _callbacks_named(trainer, "EarlyStopping")
+    assert len(early_stopping_callbacks) == 1
+    assert early_stopping_callbacks[0].patience == 3
+
+
+def test_build_trainer_injects_both_checkpoint_and_early_stopping(tmp_path: Path) -> None:
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[],
+        enable_checkpointing=True,
+        stopping={"enabled": True},
+    )
+
+    trainer = build_trainer(settings)
+
+    assert len(_callbacks_named(trainer, "ModelCheckpoint")) == 1
+    assert len(_callbacks_named(trainer, "EarlyStopping")) == 1
