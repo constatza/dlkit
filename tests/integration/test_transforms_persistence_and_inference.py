@@ -267,6 +267,63 @@ def test_transforms_persist_and_apply_with_load_from_checkpoint(tmp_path: Path) 
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
 
 
+def test_checkpoint_save_load_preserves_identity_weights(tmp_path: Path) -> None:
+    """General save/load round-trip: weights and custom checkpoint-hook state
+    (optimizer state, dlkit metadata) must survive exactly, not approximately.
+
+    Uses the identity-weight configuration (_configure_identity_ffnn, already
+    applied by _build_wrapper) as a deterministic "trained weights" stand-in —
+    no real training needed, following this file's existing persistence-test
+    convention. This is what would have silently regressed under a manual
+    torch.load()/load_state_dict() reload instead of Lightning's own
+    checkpoint-loading path (see ProcessingLightningWrapper.on_save_checkpoint/
+    on_load_checkpoint, which also persist/restore optimizer state).
+    """
+    fx, fy, X, Y = _make_data(tmp_path)
+    dm = _build_datamodule(fx, fy)
+    entries = _entry_configs(fx, fy)
+    wrapper = _build_wrapper(entries)  # already identity-configured
+    trainer = _basic_trainer()
+
+    # Attach wrapper to a trainer/strategy without changing weights
+    # (limit_train_batches=0 in _basic_trainer runs zero training steps).
+    trainer.fit(wrapper, datamodule=dm)
+    ckpt_path = tmp_path / "identity_model.ckpt"
+    trainer.save_checkpoint(ckpt_path)
+
+    saved = torch.load(ckpt_path, weights_only=False)
+    assert "optimization_state" in saved, (
+        "on_save_checkpoint must persist optimizer state - a manual "
+        "torch.load()/load_state_dict() reload would silently skip this"
+    )
+
+    settings = WrapperComponentSettings()
+    model_settings = ModelComponentSettings.model_validate(
+        {
+            "name": MODEL_NAME,
+            "module_path": MODEL_MODULE_PATH,
+            "in_features": 4,
+            "out_features": 4,
+            "hidden_size": 4,
+            "num_layers": 0,
+        }
+    )
+    loaded = StandardLightningWrapper.load_from_checkpoint(
+        str(ckpt_path),
+        settings=settings,
+        model_settings=model_settings,
+        entry_configs=entries,
+        components=build_wrapper_components(settings, entries),
+        strict=False,
+    )
+
+    assert isinstance(loaded.model, FFNN)
+    assert torch.equal(loaded.model.embedding_layer.weight, torch.eye(4))
+    assert torch.equal(loaded.model.regression_layer.weight, torch.eye(4))
+    assert torch.equal(loaded.model.embedding_layer.bias, torch.zeros(4))
+    assert torch.equal(loaded.model.regression_layer.bias, torch.zeros(4))
+
+
 def test_direct_inference_api_with_real_checkpoint(tmp_path: Path) -> None:
     """Test the high-level dlkit.load_model() API using a real trained checkpoint."""
     import dlkit
