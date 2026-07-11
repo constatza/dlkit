@@ -445,6 +445,47 @@ def test_tracked_execution_samples_and_reports_once(
     assert trial_context.logged_params["hidden_size"] == 2
     assert trial_context.logged_metrics["loss"] == 0.1
 
+    # The outer study run also carries the best trial's training result, so it
+    # looks like a regular training result at a glance, with no need to open
+    # the nested best-retrain run.
+    assert tracker.study_context.logged_metrics["loss"] == 0.1
+
+
+def test_retrain_does_not_double_log_model_hyperparameters(
+    minimal_training_result: TrainingResult,
+) -> None:
+    """The retrain run's model.* hyperparameters aren't re-logged via log_trial_hyperparameters.
+
+    execute_best_retrain's full TrackingDecorator path already logs the
+    model's resolved hparams (SettingsLogger.log_model_parameters) under the
+    same stripped names log_trial_hyperparameters would use for "model."
+    keys — logging them again here would duplicate the same MLflow param.
+    """
+    trial_executor = _RecordingTrialExecutor(minimal_training_result)
+    backend_session = _RecordingBackendSession(sampled={"model.hidden_size": 2})
+    tracker = _TrackingAdapter()
+    orchestrator = OptimizationOrchestrator(
+        study_manager=_make_study_manager(),
+        trial_executor=cast(TrialExecutor, trial_executor),
+        optimization_backend_session=cast(Any, backend_session),
+        experiment_tracker=tracker,
+    )
+
+    result = orchestrator.execute_optimization(
+        study_name="retrain-no-double-log",
+        base_settings=_make_search_job(),
+        n_trials=1,
+        direction=OptimizationDirection.MINIMIZE,
+    )
+
+    assert result.best_trial is not None
+    # trial_contexts[0] is the regular trial run, trial_contexts[1] is the retrain run.
+    retrain_context = tracker.trial_contexts[1]
+    assert "hidden_size" not in retrain_context.logged_params
+    # Trial identifiers (unconditional in log_trial_hyperparameters) still get logged.
+    assert retrain_context.logged_params["trial_id"] == result.best_trial.trial_id
+    assert retrain_context.logged_params["trial_number"] == result.best_trial.trial_number
+
 
 @pytest.mark.parametrize(
     ("exception", "expected_state"),

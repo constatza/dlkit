@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .errors import WorkflowError
 from .result_accessors import NestedKey, TrainingResultAccessor
 
 if TYPE_CHECKING:
@@ -85,9 +86,19 @@ class OptimizationResult:
     """Result of hyperparameter optimization workflow."""
 
     best_trial: TrialRecord | None
-    training_result: TrainingResult
+    training_result: TrainingResult | None
     study_summary: dict[str, Any]
     duration_seconds: float
+
+    def as_training_result(self) -> TrainingResult:
+        """Return the best trial's training result.
+
+        Raises:
+            WorkflowError: If no successful trial produced a training result.
+        """
+        if self.training_result is None:
+            raise WorkflowError("No successful trial produced a training result to retrain")
+        return self.training_result
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

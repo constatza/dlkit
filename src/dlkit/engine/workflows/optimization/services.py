@@ -25,6 +25,7 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._trial_helpers import complete_trial, fail_trial, prune_trial
 from .infrastructure.tracking import (
+    log_best_trial_result,
     log_best_trial_settings,
     log_study_metadata,
     log_study_summary,
@@ -603,6 +604,8 @@ class OptimizationOrchestrator:
             log_study_summary(result, study_context)
             if best_trial and best_settings:
                 log_best_trial_settings(best_settings, study_context)
+            if best_training_result is not None:
+                log_best_trial_result(best_training_result, study_context)
 
             return result
 
@@ -652,7 +655,16 @@ class OptimizationOrchestrator:
             tracking_uri=retrain_context.tracking_uri,
             hooks=self._hooks,
         )
-        log_trial_hyperparameters(best_trial.hyperparameters, best_trial, retrain_context)
+        # execute_best_retrain already logged model hyperparameters via
+        # SettingsLogger.log_model_parameters (full TrackingDecorator path), under
+        # the same stripped names log_trial_hyperparameters would use for "model."
+        # keys — exclude them here to avoid logging the same param twice.
+        non_model_hyperparameters = {
+            key: value
+            for key, value in best_trial.hyperparameters.items()
+            if not key.startswith("model.")
+        }
+        log_trial_hyperparameters(non_model_hyperparameters, best_trial, retrain_context)
         log_trial_outcome(best_trial, retrain_context)
         return settings, result
 

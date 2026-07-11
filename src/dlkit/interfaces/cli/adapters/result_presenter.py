@@ -109,9 +109,9 @@ def present_optimization_result(result: OptimizationResult, console: Console) ->
     if result.study_summary:
         _display_study_summary(result.study_summary, console)
 
-    # Display final training metrics
-    if result.training_result.metrics:
-        _display_metrics_table(result.training_result.metrics, console, "Final Training Metrics")
+    # Present the underlying training result exactly as a plain train() call would
+    if result.training_result is not None:
+        present_training_result(result.as_training_result(), console)
 
 
 def _display_metrics_table(metrics: dict[str, Any], console: Console, title: str) -> None:

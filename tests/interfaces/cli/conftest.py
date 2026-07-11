@@ -421,6 +421,24 @@ def mock_successful_training_result() -> Any:
 
 
 @pytest.fixture
+def mock_successful_optimization_result(mock_successful_training_result: Any) -> Any:
+    """Create mock successful optimization result wrapping a training result.
+
+    Returns:
+        Mock OptimizationResult object for testing.
+    """
+    from dlkit.common import OptimizationResult
+    from dlkit.common.results import TrialRecord
+
+    return OptimizationResult(
+        best_trial=TrialRecord(number=2, value=0.15, params={"hidden_size": 4}, state="COMPLETE"),
+        training_result=mock_successful_training_result,
+        study_summary={"n_trials": 3},
+        duration_seconds=42.0,
+    )
+
+
+@pytest.fixture
 def mock_successful_inference_result() -> Any:
     """Create mock successful inference result.
 

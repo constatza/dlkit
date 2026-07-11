@@ -78,6 +78,45 @@ logger), since trial runs never go through that artifact-logging path and
 would otherwise be unidentifiable by model class once the run name is
 uninformative.
 
+On the best-retrain run only, `SettingsLogger.log_model_parameters` (run
+inside `execute_best_retrain`'s full `TrackingDecorator` path) already logs
+the model's resolved `hparams` under the same stripped names
+`log_trial_hyperparameters` would use for `model.`-prefixed search-space
+keys, so `_retrain_best_trial` filters those out of the hyperparameters dict
+it passes to `log_trial_hyperparameters` — otherwise the same param gets
+logged twice on that one run. Regular trial runs (`execute_lightweight`,
+which skips `SettingsLogger` entirely) are unaffected and keep logging every
+key, including `model.`-prefixed ones.
+
+The outer/study run also carries the best trial's full training result
+(`log_best_trial_result`, called alongside `log_study_summary`/
+`log_best_trial_settings`): metrics via `MetricLogger.log_all_metrics`
+(unfiltered — no `MLflowEpochLogger` runs against the study run, unlike the
+best-retrain's own nested run, so nothing else would log them there) and
+artifacts via `log_trial_artifacts`. So the study run alone looks like a
+regular training result — metrics, artifacts, checkpoint — without needing
+to open the nested best-retrain child run.
+
+The public `dlkit.common.results.OptimizationResult` returned by `optimize()`
+wraps a `TrainingResult` in `.training_result` and duck-types as one via
+`__getattr__` — `.metrics`, `.artifacts`, `.checkpoint_path`, etc. all
+delegate there, so callers that expect a plain training result can use a
+search's result the same way, while `.best_trial`/`.study_summary` (and its
+own `.duration_seconds`, the *total* search duration) stay as first-class
+fields. `.training_result` is `None` when every trial failed or was pruned
+(no retrain ran); accessing a delegated attribute in that case raises
+`AttributeError` rather than silently returning `None`.
+
+## Known Limitations
+
+- Running multiple independent searches (several `SearchJobConfig`s) in one
+  invocation isn't supported yet. `MultiRunOrchestrator`
+  (`engine.workflows.multi_run`) only dispatches plain training jobs through
+  `ITrainingExecutor`; there is no equivalent dispatch path for `optimize()`.
+  A single `optimize()` call itself has no cross-call state issues (fresh
+  registry/tracker/session every invocation) — the gap is purely the
+  missing multi-search orchestration, not a bug in the single-search path.
+
 Optimization configuration persistence is opt-in for local files. When an
 active tracker is available, small config artifacts should be logged through the
 tracking boundary instead of creating implicit durable files on disk.

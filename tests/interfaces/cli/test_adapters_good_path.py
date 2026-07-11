@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from dlkit.common import ConfigurationError, InferenceResult, TrainingResult
+from dlkit.common import ConfigurationError, InferenceResult, OptimizationResult, TrainingResult
 from dlkit.interfaces.cli.adapters.config_adapter import (
     load_config,
     validate_config_path,
@@ -274,6 +274,23 @@ class TestResultPresenter:
         # - 1 for the metrics table
         # - 1 for the artifacts table
         assert len(mock_console.print.call_args_list) == 3
+
+    def test_present_optimization_result_reuses_training_presenter(
+        self,
+        mock_console: Mock,
+        mock_successful_optimization_result: OptimizationResult,
+    ) -> None:
+        """A search's CLI output must show the same panel/metrics/artifacts a
+        plain train() call would, in addition to the HPO-specific sections."""
+        from dlkit.interfaces.cli.adapters.result_presenter import present_optimization_result
+
+        present_optimization_result(mock_successful_optimization_result, mock_console)
+
+        # - 1 optimization summary panel
+        # - 1 best-parameters table
+        # - 1 study-summary table
+        # - 3 from present_training_result (panel + metrics table + artifacts table)
+        assert len(mock_console.print.call_args_list) == 6
 
     def test_present_inference_result_success(
         self,

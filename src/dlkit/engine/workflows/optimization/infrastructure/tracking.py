@@ -20,7 +20,7 @@ from dlkit.engine.tracking.artifact_logger import TAG_MODEL_CLASS
 from dlkit.engine.tracking.best_effort import best_effort
 from dlkit.engine.tracking.config_accessor import ConfigAccessor
 from dlkit.engine.tracking.interfaces import NullRunContext
-from dlkit.engine.tracking.metric_logger import split_stage_filtered_metrics
+from dlkit.engine.tracking.metric_logger import MetricLogger, split_stage_filtered_metrics
 from dlkit.engine.workflows.optimization.value_objects import (
     IExperimentTracker,
     OptimizationResult,
@@ -394,6 +394,28 @@ def log_best_trial_settings(settings: Any, run_context: Any) -> None:
     )
     run_context.log_artifact_content(toml_content, "best_trial_config.toml")
     logger.debug("Best trial settings logged as TOML artifact")
+
+
+@best_effort("log best trial result")
+def log_best_trial_result(training_result: Any, run_context: Any) -> None:
+    """Log the best trial's full training result onto the outer study run.
+
+    Without this, the study (parent) run only ever carries aggregate stats
+    (``log_study_summary``) and the best trial's config
+    (``log_best_trial_settings``) — the actual metrics/artifacts/checkpoint
+    only exist on the best-retrain's own nested child run. This copies them
+    onto the parent too, so the outer run alone looks like a regular
+    training result (unfiltered: no ``MLflowEpochLogger`` runs against the
+    study run, so nothing else would ever log these metrics there).
+
+    Args:
+        training_result: The best trial's ``TrainingResult`` (already
+            produced by the best-retrain leg).
+        run_context: Study (outer/parent) run context to log against.
+    """
+    MetricLogger().log_all_metrics(training_result, run_context)
+    log_trial_artifacts(training_result.artifacts or {}, run_context)
+    logger.debug("Best trial result logged onto the study run")
 
 
 @best_effort("log trial settings artifact")
