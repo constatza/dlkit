@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import mlflow
+import mlflow.tracking.fluent
 from mlflow import MlflowClient
 
 from dlkit.engine.tracking.backend import (
@@ -326,8 +327,9 @@ class MLflowResourceManager:
     def reset_global_state(tracking_uri: str | None = None) -> None:
         """Reset MLflow global state.
 
-        Ends any active runs, clears the run stack, and optionally re-applies
-        an explicit tracking URI to prevent MLflow 3.x from defaulting to a
+        Ends every active run regardless of nesting depth, clears MLflow's
+        internal thread-local run stack, and optionally re-applies an
+        explicit tracking URI to prevent MLflow 3.x from defaulting to a
         CWD-relative ``mlflow.db``.
 
         Args:
@@ -335,13 +337,11 @@ class MLflowResourceManager:
                 Pass ``backend.tracking_uri()`` from the enclosing manager.
         """
         try:
-            try:
+            while mlflow.active_run() is not None:
                 mlflow.end_run()
-            except Exception:
-                pass
-            active_run_stack = getattr(mlflow, "_active_run_stack", None)
-            if active_run_stack is not None:
-                active_run_stack.clear()
+            # Belt-and-suspenders: drop any stack entries mlflow.active_run()
+            # can't see (e.g. left by a thread that already exited).
+            mlflow.tracking.fluent._active_run_stack.set([])
             if tracking_uri:
                 mlflow.set_tracking_uri(tracking_uri)
         except Exception as e:  # pragma: no cover - best-effort safety

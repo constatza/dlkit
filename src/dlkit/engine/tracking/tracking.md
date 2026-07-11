@@ -55,6 +55,12 @@ training and optimization flows.
 - `TrackingDecorator` computes a run-scoped `ArtifactPolicy` once and injects
   only explicit callback/output decisions downstream.
 - Optimization tracker contexts are entered by runtime entrypoints/orchestrators, not by tracker factories.
+- `MLflowResourceManager.reset_global_state()` drains every open MLflow run
+  (`while mlflow.active_run(): mlflow.end_run()`, then a hard clear of
+  `mlflow.tracking.fluent._active_run_stack`) rather than assuming a fixed
+  number of open runs. This runs on every `MLflowResourceManager.__exit__`
+  and is what lets sequential `train()`/`optimize()` calls share a process
+  without a later call inheriting an earlier one's still-active run.
 - Split artifacts are logged after the run exists; generated splits are
   serialized in-memory instead of being cached to local files.
 - Optimization settings/artifact manifests should prefer

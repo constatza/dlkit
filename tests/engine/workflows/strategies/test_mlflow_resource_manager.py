@@ -164,6 +164,54 @@ def test_reset_global_state_without_uri_leaves_mlflow_state_unchanged(tmp_path: 
     assert mlflow.get_tracking_uri() == tracking_uri
 
 
+def test_reset_global_state_clears_dangling_runs_regardless_of_depth(tmp_path: Path) -> None:
+    """reset_global_state must drain every open run, not just one.
+
+    Regression test for the dead ``getattr(mlflow, "_active_run_stack", None)``
+    branch: MLflow relocated that attribute to
+    ``mlflow.tracking.fluent._active_run_stack`` (a ``ThreadLocalVariable``),
+    so the old code never actually cleared the stack and relied on a single
+    ``mlflow.end_run()`` call happening to be enough.
+    """
+    tracking_uri = url_resolver.build_uri(tmp_path / "mlruns" / "dangling.db", scheme="sqlite")
+    mlflow.set_tracking_uri(tracking_uri)
+
+    with mlflow.start_run(run_name="parent", nested=False):
+        with mlflow.start_run(run_name="child", nested=True):
+            assert mlflow.active_run() is not None
+
+            MLflowResourceManager.reset_global_state()
+
+            assert mlflow.active_run() is None
+            assert mlflow.tracking.fluent._active_run_stack.get() == []
+
+
+def test_sequential_managers_do_not_leak_active_run(tmp_path: Path) -> None:
+    """Two MLflowResourceManagers used back to back must not collide.
+
+    Regression test for the report scenario: a second SearchJobConfig's
+    Study run failing with "Run with UUID ... is already active" because
+    the first job's Study+Trial run pair wasn't fully drained on exit.
+    """
+    db_path = tmp_path / "mlruns" / "mlflow.db"
+    backend = LocalSqliteBackend(db_path=db_path)
+    settings = TrackingSettings(backend="mlflow")
+
+    with MLflowResourceManager(settings, backend) as manager:
+        with manager.create_run(experiment_name="exp", run_name="study", nested=False):
+            with manager.create_run(experiment_name="exp", run_name="trial-1", nested=True):
+                pass
+
+    assert mlflow.active_run() is None
+
+    with MLflowResourceManager(settings, backend) as manager:
+        with manager.create_run(experiment_name="exp", run_name="study", nested=False):
+            with manager.create_run(experiment_name="exp", run_name="trial-1", nested=True):
+                pass
+
+    assert mlflow.active_run() is None
+
+
 def test_initialize_resources_suppresses_bootstrap_logs_for_sqlite(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

@@ -109,13 +109,16 @@ fields. `.training_result` is `None` when every trial failed or was pruned
 
 ## Known Limitations
 
-- Running multiple independent searches (several `SearchJobConfig`s) in one
-  invocation isn't supported yet. `MultiRunOrchestrator`
+- There is no built-in batch orchestrator for multiple independent searches
+  (several `SearchJobConfig`s) in one invocation. `MultiRunOrchestrator`
   (`engine.workflows.multi_run`) only dispatches plain training jobs through
   `ITrainingExecutor`; there is no equivalent dispatch path for `optimize()`.
-  A single `optimize()` call itself has no cross-call state issues (fresh
-  registry/tracker/session every invocation) — the gap is purely the
-  missing multi-search orchestration, not a bug in the single-search path.
+  Callers that need to sweep several `SearchJobConfig`s must loop and call
+  `optimize()` themselves. Sequential `optimize()` calls in the same process
+  are safe to do this way: each call's `MLflowResourceManager` fully drains
+  MLflow's active-run state (Study, every Trial, and any Best-retrain run)
+  on exit regardless of nesting depth, so a later call never inherits a
+  leftover active run from an earlier one.
 
 Optimization configuration persistence is opt-in for local files. When an
 active tracker is available, small config artifacts should be logged through the
