@@ -419,6 +419,11 @@ class ReduceLROnPlateauSettings(SchedulerComponentSettings):
         patience: Epochs with no improvement before reduction.
         min_lr: Lower bound on LR.
         threshold: Threshold for measuring improvement.
+        threshold_mode: ``"rel"`` compares against ``best * (1 +/- threshold)``,
+            so once a loss curve settles into a slow-but-genuine decline, a
+            fixed relative bar (e.g. the default 0.01%) is easy to miss every
+            epoch even while loss keeps improving in absolute terms. Use
+            ``"abs"`` to compare against ``best +/- threshold`` instead.
         cooldown: Epochs to wait after LR reduction before resuming normal operation.
         eps: Minimal decay applied to learning rate.
     """
@@ -433,6 +438,9 @@ class ReduceLROnPlateauSettings(SchedulerComponentSettings):
     )
     min_lr: float = Field(default=0.0, ge=0, description="Lower bound on LR")
     threshold: float = Field(default=1e-4, gt=0, description="Threshold for measuring improvement")
+    threshold_mode: Literal["rel", "abs"] = Field(
+        default="rel", description="Whether threshold is relative to best or an absolute delta"
+    )
     cooldown: int = Field(default=0, ge=0, description="Cooldown epochs after LR reduction")
     eps: float = Field(default=1e-8, gt=0, description="Minimal decay applied to lr")
 
