@@ -18,6 +18,8 @@ import torch
 from tensordict import TensorDict
 from torch import Tensor, nn
 
+from dlkit.common.metric_stages import MetricStage
+
 
 @runtime_checkable
 class ILossComputer(Protocol):
@@ -48,32 +50,32 @@ class IMetricsUpdater(Protocol):
     Each metric can have its own target key and extra inputs.
     """
 
-    def update(self, predictions: Tensor, batch: TensorDict, stage: str) -> None:
+    def update(self, predictions: Tensor, batch: TensorDict, stage: MetricStage) -> None:
         """Update metrics for a given stage.
 
         Args:
             predictions: Model output tensor.
             batch: TensorDict containing features and targets.
-            stage: Stage identifier ("val" or "test").
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
         """
         ...
 
-    def compute(self, stage: str) -> dict[str, float | Tensor]:
+    def compute(self, stage: MetricStage) -> dict[str, float | Tensor]:
         """Compute accumulated metric values.
 
         Args:
-            stage: Stage identifier ("val" or "test").
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
 
         Returns:
             Dictionary mapping metric names to computed values (floats or Tensors).
         """
         ...
 
-    def reset(self, stage: str) -> None:
+    def reset(self, stage: MetricStage) -> None:
         """Reset metric state.
 
         Args:
-            stage: Stage identifier ("val" or "test").
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
         """
         ...
 

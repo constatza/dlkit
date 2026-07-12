@@ -20,6 +20,7 @@ import torch.nn as nn
 from tensordict import TensorDict, TensorDictBase
 from torch import Tensor
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.base import (
     _MAX_NORMALIZE_DEPTH,
     _batch_size_of,
@@ -383,7 +384,7 @@ def _make_wrapper(enriched_batch: TensorDict, bs: int) -> Any:
             return torch.zeros(bs, 1)
 
         def _run_step(
-            self, batch: Any, batch_idx: int, stage: str
+            self, batch: Any, batch_idx: int, stage: MetricStage
         ) -> tuple[Tensor, int | None, Any]:
             from dlkit.engine.adapters.lightning.base import _batch_size_of
 

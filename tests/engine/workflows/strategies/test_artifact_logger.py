@@ -16,6 +16,7 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from torch import Tensor
 
 from dlkit.common.hooks import ParamValue
+from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
 from dlkit.engine.tracking.artifact_logger import (
     CHECKPOINT_ARTIFACT_DIR,
@@ -46,7 +47,9 @@ class _ConcreteWrapper(ProcessingLightningWrapper):
     def forward(self, *args: Any, **kwargs: Any) -> Tensor:
         raise NotImplementedError
 
-    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+    def _run_step(
+        self, batch: Any, batch_idx: int, stage: MetricStage
+    ) -> tuple[Tensor, int | None, Any]:
         raise NotImplementedError
 
 

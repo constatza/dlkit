@@ -39,11 +39,14 @@ STAGE_ALIASES: dict[MetricStage, tuple[str, ...]] = {
 METRIC_KEY_SEPARATOR = "/"
 
 
-def metric_key(stage: MetricStage | str, name: str) -> str:
+def metric_key(stage: MetricStage, name: str) -> str:
     """Build a canonical, MLflow-grouping-friendly metric key: '<stage>/<name>'.
 
     Args:
-        stage: Stage identifier (e.g. MetricStage.VAL or "val").
+        stage: Canonical stage identifier (e.g. MetricStage.VAL). Only a
+            `MetricStage` is accepted — a raw string here previously let
+            already-malformed stage identifiers (e.g. "val_epoch") flow
+            straight through into MLflow metric keys undetected.
         name: Raw metric name (e.g. "loss").
 
     Returns:

@@ -24,6 +24,7 @@ from lightning import LightningModule
 from tensordict import TensorDict
 from torch import Tensor, nn
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.domain.nn.contracts import HyperParam
 from dlkit.domain.nn.factory import model_accepts_kwarg
 from dlkit.domain.nn.introspection import effective_hyperparameters
@@ -422,7 +423,9 @@ class CoreLightningWrapper(LightningModule, ABC):
         if current_lr is not None:
             self._step_logger.log_lr(current_lr)
         if self._epoch_start_time is not None:
-            self._step_logger.log_walltime("train", time.perf_counter() - self._epoch_start_time)
+            self._step_logger.log_walltime(
+                MetricStage.TRAIN, time.perf_counter() - self._epoch_start_time
+            )
         metrics = {
             k: v.item() if hasattr(v, "item") else float(v)
             for k, v in self.trainer.callback_metrics.items()
@@ -525,7 +528,7 @@ class CoreLightningWrapper(LightningModule, ABC):
 
     def _log_stage_outputs(
         self,
-        stage: str,
+        stage: MetricStage,
         loss: Tensor | None,
         metrics: dict[str, Any] | None = None,
         batch_size: int | None = None,
@@ -663,7 +666,9 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
     # =========================================================================
 
     @abstractmethod
-    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+    def _run_step(
+        self, batch: Any, batch_idx: int, stage: MetricStage
+    ) -> tuple[Tensor, int | None, Any]:
         """Execute one forward+loss step. Must be implemented by subclasses.
 
         Args:
@@ -690,26 +695,26 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         if not self.automatic_optimization:
 
             def loss_fn() -> Tensor:
-                loss, _, _ = self._run_step(batch, batch_idx, "train")
+                loss, _, _ = self._run_step(batch, batch_idx, MetricStage.TRAIN)
                 return loss
 
             loss = self._optimization_controller.manual_step(
                 loss_fn, cast(IManualOptimizationHost, self)
             )
-            self._step_logger.log_stage_outputs("train", loss, batch_size=None)
+            self._step_logger.log_stage_outputs(MetricStage.TRAIN, loss, batch_size=None)
             return {"loss": loss}
         else:
-            loss, batch_size, _ = self._run_step(batch, batch_idx, "train")
-            self._step_logger.log_stage_outputs("train", loss, batch_size=batch_size)
+            loss, batch_size, _ = self._run_step(batch, batch_idx, MetricStage.TRAIN)
+            self._step_logger.log_stage_outputs(MetricStage.TRAIN, loss, batch_size=batch_size)
             return {"loss": loss}
 
-    def _eval_step(self, batch: Any, batch_idx: int, stage: str) -> dict[str, Any]:
+    def _eval_step(self, batch: Any, batch_idx: int, stage: MetricStage) -> dict[str, Any]:
         """Shared validation/test step: delegates to _run_step, updates metrics, logs output.
 
         Args:
             batch: TensorDict batch from dataset.
             batch_idx: Index of the batch.
-            stage: Stage identifier ('val' or 'test').
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
 
         Returns:
             Dictionary containing the stage loss under the ``f"{stage}_loss"`` key.
@@ -729,7 +734,7 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         Returns:
             Dictionary containing validation loss.
         """
-        return self._eval_step(batch, batch_idx, "val")
+        return self._eval_step(batch, batch_idx, MetricStage.VAL)
 
     def test_step(self, batch: Any, batch_idx: int) -> dict[str, Any]:
         """Test step: delegates to _run_step, updates metrics, logs output.
@@ -741,7 +746,7 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         Returns:
             Dictionary containing test loss.
         """
-        return self._eval_step(batch, batch_idx, "test")
+        return self._eval_step(batch, batch_idx, MetricStage.TEST)
 
     def predict_step(self, batch: Any, batch_idx: int) -> TensorDict:
         """Prediction step returning a TensorDict with predictions, targets and latents.
@@ -778,11 +783,11 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
         """
         return [batch["targets"] for batch in predict_outputs]
 
-    def _on_eval_epoch_end(self, stage: str) -> None:
+    def _on_eval_epoch_end(self, stage: MetricStage) -> None:
         """Compute and log epoch-level validation/test metrics, then reset.
 
         Args:
-            stage: Stage identifier ('val' or 'test').
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
         """
         metrics = self._metrics_updater.compute(stage)
         if metrics:
@@ -791,8 +796,8 @@ class ProcessingLightningWrapper(CoreLightningWrapper, ABC):
 
     def on_validation_epoch_end(self) -> None:
         """Compute and log epoch-level validation metrics, then reset."""
-        self._on_eval_epoch_end("val")
+        self._on_eval_epoch_end(MetricStage.VAL)
 
     def on_test_epoch_end(self) -> None:
         """Compute and log epoch-level test metrics, then reset."""
-        self._on_eval_epoch_end("test")
+        self._on_eval_epoch_end(MetricStage.TEST)

@@ -12,6 +12,7 @@ import torch
 from tensordict import TensorDict
 from torch import nn
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.domain.metrics.torchmetrics_wrappers import RelativeVectorNormError
 from dlkit.engine.adapters.lightning.metrics_routing import MetricRoute, RoutedMetricsUpdater
 
@@ -92,8 +93,8 @@ def test_update_compute_roundtrip(
 ) -> None:
     """update() followed by compute() returns a non-negative scalar."""
     updater = RoutedMetricsUpdater(val_routes=[val_route], test_routes=[])
-    updater.update(two_vector_preds, two_vector_batch, "val")
-    result = updater.compute("val")
+    updater.update(two_vector_preds, two_vector_batch, MetricStage.VAL)
+    result = updater.compute(MetricStage.VAL)
     assert "RelativeVectorNormError" in result
     assert float(result["RelativeVectorNormError"]) >= 0.0
 
@@ -105,15 +106,15 @@ def test_reset_clears_accumulated_state(
 ) -> None:
     """reset() must zero state so the next epoch starts from a clean slate."""
     updater = RoutedMetricsUpdater(val_routes=[val_route], test_routes=[])
-    updater.update(two_vector_preds, two_vector_batch, "val")
-    updater.reset("val")
+    updater.update(two_vector_preds, two_vector_batch, MetricStage.VAL)
+    updater.reset(MetricStage.VAL)
 
     zero_batch = TensorDict(
         {"targets": TensorDict({"y": torch.zeros(2, 4)}, batch_size=[2])},
         batch_size=[2],
     )
-    updater.update(torch.zeros(2, 4), zero_batch, "val")
-    result = updater.compute("val")
+    updater.update(torch.zeros(2, 4), zero_batch, MetricStage.VAL)
+    result = updater.compute(MetricStage.VAL)
     assert float(result["RelativeVectorNormError"]) == pytest.approx(0.0, abs=1e-6)
 
 
@@ -124,14 +125,14 @@ def test_unknown_stage_is_silently_ignored(
 ) -> None:
     """update/compute on an unconfigured stage must return empty without raising."""
     updater = RoutedMetricsUpdater(val_routes=[val_route], test_routes=[])
-    updater.update(two_vector_preds, two_vector_batch, "train")
-    assert updater.compute("train") == {}
+    updater.update(two_vector_preds, two_vector_batch, MetricStage.TRAIN)
+    assert updater.compute(MetricStage.TRAIN) == {}
 
 
 def test_empty_routes_lifecycle() -> None:
     """RoutedMetricsUpdater with no routes must complete full update/compute/reset cycle."""
     updater = RoutedMetricsUpdater(val_routes=[], test_routes=[])
     batch = TensorDict({}, batch_size=[])
-    updater.update(torch.zeros(2, 4), batch, "val")
-    assert updater.compute("val") == {}
-    updater.reset("val")
+    updater.update(torch.zeros(2, 4), batch, MetricStage.VAL)
+    assert updater.compute(MetricStage.VAL) == {}
+    updater.reset(MetricStage.VAL)

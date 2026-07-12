@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch import Tensor
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.loss_routing import (
     RoutedLossComputer,
     build_auto_extra_inputs,
@@ -276,7 +277,9 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
     # Template Method Implementation
     # =========================================================================
 
-    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+    def _run_step(
+        self, batch: Any, batch_idx: int, stage: MetricStage
+    ) -> tuple[Tensor, int | None, Any]:
         """Execute one forward+loss step.
 
         Implements the template method from the base class. Applies batch transforms,
@@ -285,16 +288,18 @@ class StandardLightningWrapper(ProcessingLightningWrapper):
         Args:
             batch: Input batch from dataset.
             batch_idx: Index of the batch.
-            stage: Stage identifier ('train', 'val', 'test').
+            stage: Canonical stage identifier.
 
         Returns:
             Tuple of (loss, batch_size, enriched_batch).
         """
         from dlkit.engine.adapters.lightning.base import _batch_size_of
 
-        gen = (self._train_generator_factory if stage == "train" else self._val_generator_factory)(
-            batch_idx
-        )
+        gen = (
+            self._train_generator_factory
+            if stage == MetricStage.TRAIN
+            else self._val_generator_factory
+        )(batch_idx)
         batch = self._apply_batch_transforms(batch, gen)
         batch = self._batch_transformer.transform(batch)
         batch = self._model_invoker.invoke(self.model, batch)

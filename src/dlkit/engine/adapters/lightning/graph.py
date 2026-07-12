@@ -15,6 +15,7 @@ from torch_geometric.data import Batch as PyGBatch
 from torch_geometric.data import Data
 from torchmetrics import MetricCollection
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.wrapper_types import (
     WrapperCheckpointMetadata,
     WrapperComponents,
@@ -189,7 +190,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
         """
         predictions, target = self._forward_and_target(batch)
         loss = self.loss_function(predictions, target)
-        self._log_stage_outputs("train", loss, batch_size=predictions.shape[0])
+        self._log_stage_outputs(MetricStage.TRAIN, loss, batch_size=predictions.shape[0])
         return {"loss": loss}
 
     def validation_step(self, batch: Data | PyGBatch, batch_idx: int) -> dict[str, Any]:
@@ -210,7 +211,7 @@ class GraphLightningWrapper(CoreLightningWrapper):
         val_loss = self.loss_function(predictions, target)
         metrics = self.val_metrics(predictions, target)
         self._log_stage_outputs(
-            "val", val_loss, metrics if metrics else None, batch_size=predictions.shape[0]
+            MetricStage.VAL, val_loss, metrics if metrics else None, batch_size=predictions.shape[0]
         )
         return {"val_loss": val_loss}
 
@@ -232,7 +233,10 @@ class GraphLightningWrapper(CoreLightningWrapper):
         test_loss = self.loss_function(predictions, target)
         metrics = self.test_metrics(predictions, target)
         self._log_stage_outputs(
-            "test", test_loss, metrics if metrics else None, batch_size=predictions.shape[0]
+            MetricStage.TEST,
+            test_loss,
+            metrics if metrics else None,
+            batch_size=predictions.shape[0],
         )
         return {"test_loss": test_loss}
 

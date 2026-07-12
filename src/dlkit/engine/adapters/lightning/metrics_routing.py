@@ -9,6 +9,7 @@ from tensordict import TensorDict
 from torch import Tensor, nn
 from torchmetrics import Metric
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.infrastructure.config.model_components import MetricInputRef
 
 from .batch_namespace import _parse_key
@@ -59,9 +60,9 @@ class RoutedMetricsUpdater(nn.Module):
             test_routes: Metric routes for test stage.
         """
         super().__init__()
-        self._routes: dict[str, list[MetricRoute]] = {
-            "val": val_routes,
-            "test": test_routes,
+        self._routes: dict[MetricStage, list[MetricRoute]] = {
+            MetricStage.VAL: val_routes,
+            MetricStage.TEST: test_routes,
         }
         self._stage_metrics: nn.ModuleDict = nn.ModuleDict(
             {
@@ -70,7 +71,7 @@ class RoutedMetricsUpdater(nn.Module):
             }
         )
         self._parsed_extra: dict[
-            str, list[tuple[Metric, str, str, list[tuple[str, tuple[str, str]]]]]
+            MetricStage, list[tuple[Metric, str, str, list[tuple[str, tuple[str, str]]]]]
         ] = {
             stage: [
                 (
@@ -84,24 +85,24 @@ class RoutedMetricsUpdater(nn.Module):
             for stage, routes in self._routes.items()
         }
 
-    def update(self, predictions: Tensor, batch: TensorDict, stage: str) -> None:
+    def update(self, predictions: Tensor, batch: TensorDict, stage: MetricStage) -> None:
         """Update metrics for the given stage.
 
         Args:
             predictions: Model output tensor.
             batch: TensorDict containing features and targets.
-            stage: Stage identifier ('val' or 'test').
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
         """
         for metric, target_ns, target_name, extra_routes in self._parsed_extra.get(stage, []):
             target = batch[target_ns, target_name].to(dtype=predictions.dtype)
             extra = {kwarg: batch[route] for kwarg, route in extra_routes}
             cast(Any, metric).update(predictions, target, **extra)
 
-    def compute(self, stage: str) -> dict[str, float | Tensor]:
+    def compute(self, stage: MetricStage) -> dict[str, float | Tensor]:
         """Compute accumulated metric values for the given stage.
 
         Args:
-            stage: Stage identifier ('val' or 'test').
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
 
         Returns:
             Dictionary mapping metric class names to computed values.
@@ -111,11 +112,11 @@ class RoutedMetricsUpdater(nn.Module):
             for route in self._routes.get(stage, [])
         }
 
-    def reset(self, stage: str) -> None:
+    def reset(self, stage: MetricStage) -> None:
         """Reset metric state for the given stage.
 
         Args:
-            stage: Stage identifier ('val' or 'test').
+            stage: Canonical stage identifier (MetricStage.VAL or MetricStage.TEST).
         """
         for route in self._routes.get(stage, []):
             route.metric.reset()

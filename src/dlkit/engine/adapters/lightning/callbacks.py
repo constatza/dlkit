@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -59,12 +59,12 @@ class MLflowEpochLogger(Callback):
         self.run_context = run_context
 
     def on_train_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        self._log_metrics(trainer, stage="train")
+        self._log_metrics(trainer, stage=MetricStage.TRAIN)
 
     def on_validation_epoch_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
-        self._log_metrics(trainer, stage="val")
+        self._log_metrics(trainer, stage=MetricStage.VAL)
 
-    def _log_metrics(self, trainer: Trainer, stage: str) -> None:
+    def _log_metrics(self, trainer: Trainer, stage: MetricStage) -> None:
         if not self.run_context or getattr(trainer, "sanity_checking", False):
             return
 
@@ -85,15 +85,15 @@ class MLflowEpochLogger(Callback):
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Failed to log metrics with epoch logger: {}", exc)
 
-    def _collect_stage_metrics(self, metrics: Mapping[str, object], stage: str) -> dict[str, float]:
-        # `MetricStage` is a `StrEnum`, so a plain lowercase string key looks
-        # up correctly at runtime; the cast only satisfies the type checker.
-        prefixes = STAGE_ALIASES.get(cast(MetricStage, stage), (stage,))
+    def _collect_stage_metrics(
+        self, metrics: Mapping[str, object], stage: MetricStage
+    ) -> dict[str, float]:
+        prefixes = STAGE_ALIASES[stage]
         other_prefixes = tuple(
             alias
             for other_stage in _ALL_STAGE_PREFIXES
             if other_stage != stage
-            for alias in STAGE_ALIASES.get(other_stage, (other_stage,))
+            for alias in STAGE_ALIASES[other_stage]
         )
         collected: dict[str, float] = {}
 

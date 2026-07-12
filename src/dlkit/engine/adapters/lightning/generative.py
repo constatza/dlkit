@@ -16,6 +16,7 @@ from typing import Any, cast
 
 from torch import Tensor
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
 
 
@@ -38,7 +39,9 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
     Trainer exists.
     """
 
-    def _run_step(self, batch: Any, batch_idx: int, stage: str) -> tuple[Tensor, int | None, Any]:
+    def _run_step(
+        self, batch: Any, batch_idx: int, stage: MetricStage
+    ) -> tuple[Tensor, int | None, Any]:
         """Execute one forward+loss step for generative models.
 
         Applies batch transforms (coupled supervision), applies per-slot transforms,
@@ -48,7 +51,7 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
         Args:
             batch: Input batch from dataset.
             batch_idx: Index of the batch.
-            stage: Stage identifier ('train', 'val', 'test').
+            stage: Canonical stage identifier.
 
         Returns:
             Tuple of (loss, batch_size, enriched_batch).
@@ -57,9 +60,11 @@ class GenerativeLightningWrapper(ProcessingLightningWrapper):
 
         from dlkit.engine.adapters.lightning.base import _batch_size_of
 
-        gen = (self._train_generator_factory if stage == "train" else self._val_generator_factory)(
-            batch_idx
-        )
+        gen = (
+            self._train_generator_factory
+            if stage == MetricStage.TRAIN
+            else self._val_generator_factory
+        )(batch_idx)
 
         # Apply coupled supervision transforms (specific to generative models)
         if self._batch_transforms:

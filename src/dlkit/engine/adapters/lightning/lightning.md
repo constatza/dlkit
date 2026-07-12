@@ -442,3 +442,29 @@ all step methods and uses null sentinels (`_NullModelInvoker`, etc.) as base-cla
 placeholders. Graph wrappers still share the same optimization-controller builder
 as standard wrappers, so staged/concurrent optimizer policies resolve manual vs
 automatic optimization through one source of truth.
+
+---
+
+## Metric Stage Identifiers
+
+Every `stage` parameter on this call path — `_run_step`, `_eval_step`,
+`_log_stage_outputs`/`log_stage_outputs`, `log_walltime`, `_on_eval_epoch_end`,
+`MLflowEpochLogger._log_metrics`/`_collect_stage_metrics`, and
+`IMetricsUpdater.update/compute/reset` — is typed as
+`dlkit.common.metric_stages.MetricStage`, never a bare `str`. Metric-key
+construction (`metric_key()`, `_format_metric_name()`, `STAGE_ALIASES` lookups)
+indexes directly into `MetricStage`-keyed mappings with no string fallback.
+
+This closes a bug class where a malformed stage string silently produced a
+bogus metric key: `_on_eval_epoch_end` used to pass `"val_epoch"`/`"test_epoch"`
+as the *stage* itself, which fell through `STAGE_ALIASES.get(stage, (stage,))`
+and got formatted into a literal `"val_epoch/Accuracy"` key that
+`MLflowEpochLogger` then swept into `val`'s epoch-indexed push (it still
+started with `"val"`) — polluting MLflow with a `val_epoch/` group every run.
+Passing anything other than a `MetricStage` member into this path is now a
+type error rather than a silent runtime fallback.
+
+Runs logged before this fix keep their `val_epoch/`/`test_epoch/` metric
+history regardless — MLflow has no API to delete individual metric keys from a
+run. `scripts/purge_legacy_epoch_metric_runs.py` finds (and, with `--delete`,
+removes) runs still carrying those legacy keys.

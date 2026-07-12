@@ -5,35 +5,30 @@ Encapsulates metric logging to Lightning with proper trainer availability checks
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 from torch import Tensor
 
 from dlkit.common.metric_stages import STAGE_ALIASES, MetricStage, metric_key
 
 
-def _format_metric_name(stage: str, name: str) -> str:
+def _format_metric_name(stage: MetricStage, name: str) -> str:
     """Normalize metric names per stage conventions (pure function).
 
     Args:
-        stage: Stage identifier ('train', 'val', 'test', etc.).
+        stage: Canonical stage identifier.
         name: Raw metric name.
 
     Returns:
         Normalized metric name string.
     """
-    stage_lower = stage.lower()
     name_lower = name.lower()
 
-    # `MetricStage` is a `StrEnum`, so a plain lowercase string key (e.g.
-    # "val") looks up correctly at runtime even for stages not in the enum
-    # (falling back to the default); the cast only tells the type checker
-    # this is a valid dict key, it has no runtime effect.
-    for alias in STAGE_ALIASES.get(cast(MetricStage, stage_lower), (stage_lower,)):
+    for alias in STAGE_ALIASES[stage]:
         if name_lower.startswith(alias):
             return name
 
-    return metric_key(stage_lower, name)
+    return metric_key(stage, name)
 
 
 class LightningStepLogger:
@@ -85,7 +80,7 @@ class LightningStepLogger:
 
     def log_stage_outputs(
         self,
-        stage: str,
+        stage: MetricStage,
         loss: Tensor | None,
         metrics: dict[str, Any] | None = None,
         batch_size: int | None = None,
@@ -127,19 +122,21 @@ class LightningStepLogger:
             metric_key(MetricStage.TRAIN, "lr"), lr, on_step=False, on_epoch=True, prog_bar=True
         )
 
-    def log_walltime(self, stage: str, seconds: float) -> None:
+    def log_walltime(self, stage: MetricStage, seconds: float) -> None:
         """Log epoch wall-clock duration for a stage, kept out of the stage's own group.
 
         Uses ``walltime/<stage>`` (group first) rather than ``<stage>/walltime``,
         so timing never mixes into the same MLflow UI group as model
-        performance metrics like ``train/loss``.
+        performance metrics like ``train/loss``. Not built via `metric_key`,
+        since "walltime" here is the group and `stage` is the name — the
+        reverse of what `metric_key` builds.
 
         Args:
-            stage: Stage identifier (e.g. "train").
+            stage: Canonical stage identifier (e.g. MetricStage.TRAIN).
             seconds: Epoch duration in seconds.
         """
         self._log(
-            metric_key("walltime", stage),
+            f"walltime/{stage}",
             seconds,
             on_step=False,
             on_epoch=True,

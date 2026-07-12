@@ -98,8 +98,8 @@ def test_log_walltime_logs_under_walltime_group_not_stage_group(
     "walltime/train" (group first), not "train/walltime" or "train/epoch_time_s"
     — timing must not mix into the same MLflow UI group as train/loss, train/lr.
     """
-    step_logger.log_walltime("train", 1.5)
-    assert recording_module.logged[metric_key("walltime", "train")] == 1.5
+    step_logger.log_walltime(MetricStage.TRAIN, 1.5)
+    assert recording_module.logged[f"walltime/{MetricStage.TRAIN}"] == 1.5
 
 
 def test_log_stage_outputs_epoch_metrics_not_suffixed(
@@ -111,5 +111,5 @@ def test_log_stage_outputs_epoch_metrics_not_suffixed(
     stage, producing keys like "val_epoch/Accuracy" instead of the canonical
     "val/Accuracy" that monitor/objective defaults actually look up.
     """
-    step_logger.log_stage_outputs("val", None, {"Accuracy": 0.9})
+    step_logger.log_stage_outputs(MetricStage.VAL, None, {"Accuracy": 0.9})
     assert recording_module.logged_dicts == {metric_key(MetricStage.VAL, "Accuracy"): 0.9}

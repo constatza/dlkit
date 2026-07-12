@@ -76,3 +76,14 @@ training and optimization flows.
   serialized in-memory instead of being cached to local files.
 - Optimization settings/artifact manifests should prefer
   `log_artifact_content(...)` over temp-file round trips.
+- Metric stage identifiers (`dlkit.common.metric_stages.MetricStage`) flow as
+  the enum end-to-end, from the Lightning wrapper's step logger through
+  `MLflowEpochLogger` and `MetricLogger` — there is no string-typed stage
+  parameter anywhere in this path. This closes off a past bug class where a
+  malformed stage string (e.g. `"val_epoch"`) silently produced a bogus
+  `val_epoch/*` MLflow metric group instead of failing loudly; a caller
+  passing anything other than a `MetricStage` member is now a type error, not
+  a silent runtime fallback. Runs logged before this fix may still show
+  `val_epoch/`/`test_epoch/` groups in the MLflow UI — that's permanent
+  history on those runs, not a live bug; `scripts/purge_legacy_epoch_metric_runs.py`
+  finds (and, with `--delete`, removes) affected runs.
