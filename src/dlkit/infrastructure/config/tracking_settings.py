@@ -21,5 +21,5 @@ class TrackingSettings(BasicSettings):
 
     backend: Literal["mlflow", "wandb", "none"] = "none"
     uri: str | None = None
-    max_retries: int = 3
+    max_retries: int = 5
     model_serialization_format: Literal["pickle", "pt2"] = "pickle"

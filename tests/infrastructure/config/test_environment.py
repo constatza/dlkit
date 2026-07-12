@@ -7,9 +7,9 @@ def test_mlflow_retry_defaults_are_set():
     """Verify that MLflow retry environment variables are configured with sensible defaults."""
     # The environment module should have already been imported and configured these
     # Note: All values must be integers (MLflow requirement)
-    assert os.environ.get("MLFLOW_HTTP_REQUEST_MAX_RETRIES") == "2"
-    assert os.environ.get("MLFLOW_HTTP_REQUEST_TIMEOUT") == "5"
-    assert os.environ.get("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR") == "1"
+    assert os.environ.get("MLFLOW_HTTP_REQUEST_MAX_RETRIES") == "5"
+    assert os.environ.get("MLFLOW_HTTP_REQUEST_TIMEOUT") == "30"
+    assert os.environ.get("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR") == "2"
 
 
 def test_mlflow_retry_defaults_respect_user_overrides(monkeypatch):

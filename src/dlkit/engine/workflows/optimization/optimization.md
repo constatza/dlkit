@@ -120,6 +120,27 @@ fields. `.training_result` is `None` when every trial failed or was pruned
   on exit regardless of nesting depth, so a later call never inherits a
   leftover active run from an earlier one.
 
+- **Concurrency model: trials execute strictly sequentially, in-process.**
+  `OptimizationOrchestrator` drives one plain `for trial_number in
+  range(study.target_trials):` loop via Optuna's `ask()`/`tell()` API — there
+  is no `n_jobs`, no thread pool, no `SearchSettings` concurrency field.
+  "Running multiple searches" today means launching several separate OS
+  processes, each with its own independent `MLflowResourceManager`; that
+  works, but every process's HTTP traffic lands on the same tracking backend,
+  so a shared local `mlflow server` sees load proportional to however many
+  processes are running at once. If that produces transient artifact-upload
+  failures (a burst of 5xx from the local server under load exhausting
+  MLflow's HTTP retry budget), raise `TrackingSettings.max_retries` — it's
+  wired through to `MLFLOW_HTTP_REQUEST_MAX_RETRIES` for the run.
+
+  A future contributor adding real in-process concurrency (a `ThreadPoolExecutor`
+  around the trial loop, using Optuna's thread-safe `ask()`/`tell()`) would need
+  to address two shared-mutable-state blockers first: the global
+  `mlflow.set_tracking_uri()` toggle on every `MLflowResourceManager.create_run()`
+  entry/exit (races across threads sharing one manager), and the unsynchronized
+  `_trial_mapping`/`_reported_trials`/`_active_storages` instance dicts on
+  `OptunaOptimizationBackendSession`.
+
 Optimization configuration persistence is opt-in for local files. When an
 active tracker is available, small config artifacts should be logged through the
 tracking boundary instead of creating implicit durable files on disk.

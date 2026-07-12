@@ -14,6 +14,18 @@ def test_tracking_settings_default_model_serialization_format_is_pickle() -> Non
     assert settings.model_serialization_format == "pickle"
 
 
+def test_tracking_settings_default_max_retries_matches_process_wide_default() -> None:
+    settings = TrackingSettings()
+
+    assert settings.max_retries == 5
+
+
+def test_tracking_settings_accepts_explicit_max_retries() -> None:
+    settings = TrackingSettings(max_retries=10)
+
+    assert settings.max_retries == 10
+
+
 def test_tracking_settings_accepts_pt2_model_serialization_format() -> None:
     settings = TrackingSettings(model_serialization_format="pt2")
 

@@ -116,9 +116,14 @@ class MLflowResourceManager:
         self._is_initialized = False
 
     def _initialize_resources(self) -> None:
-        from dlkit.infrastructure.config.environment import ensure_mlflow_defaults
+        from dlkit.infrastructure.config.environment import (
+            ensure_mlflow_defaults,
+            set_mlflow_max_retries,
+        )
 
         ensure_mlflow_defaults()
+        if self._config is not None:
+            set_mlflow_max_retries(self._config.max_retries)
         _register_sqlite_wal_listener()
 
         tracking_uri = self._backend.tracking_uri()

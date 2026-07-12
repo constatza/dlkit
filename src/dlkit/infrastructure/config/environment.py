@@ -20,27 +20,46 @@ def _setenv_if_missing(key: str, value: int) -> None:
         os.environ[key] = str(value)
 
 
+def set_mlflow_max_retries(max_retries: int) -> None:
+    """Explicitly override MLflow's HTTP retry budget for this process.
+
+    Unlike ``_setenv_if_missing``, this always overwrites the env var. MLflow
+    re-reads it on every HTTP call, so this takes effect immediately for any
+    request made after it runs, regardless of import order.
+
+    Args:
+        max_retries: Maximum number of retries before an MLflow HTTP request
+            gives up (MLflow reads this as a string internally).
+    """
+    os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"] = str(max_retries)
+
+
 _mlflow_defaults_configured = False
 
 
 def ensure_mlflow_defaults() -> None:
-    """Configure MLflow HTTP retry behavior with sensible defaults (lazy, idempotent).
+    """Configure MLflow HTTP retry behavior with sensible defaults (idempotent).
 
-    MLflow defaults to 7 retries with exponential backoff, which can cause long waits
-    when the server is unavailable. We reduce this to 2 retries for faster failure detection.
-    Users can override by setting these environment variables before this is called.
+    MLflow's stock defaults (7 retries, 120s timeout, backoff factor 2) can cause
+    multi-minute hangs when a server is truly unreachable. We tighten them, but not
+    so far that a lightly-loaded local ``mlflow server`` can't absorb a short burst
+    of transient 5xx responses under concurrent load (e.g. several optimization runs
+    hitting the same local server at once) — 2 retries / 5s timeout proved too tight
+    in practice and turned recoverable contention into hard failures. Users can
+    override by setting these environment variables before this is called, or via
+    ``TrackingSettings.max_retries`` (see ``set_mlflow_max_retries``).
 
-    This function is idempotent and safe to call multiple times. It runs lazily on first
-    use rather than at import time to avoid hidden import-time side effects.
+    This function is idempotent and safe to call multiple times. It currently runs
+    at import time (see bottom of this module).
 
     Note: All MLflow HTTP environment variables must be integers (MLflow requirement).
     """
     global _mlflow_defaults_configured
     if _mlflow_defaults_configured:
         return
-    _setenv_if_missing("MLFLOW_HTTP_REQUEST_MAX_RETRIES", 2)
-    _setenv_if_missing("MLFLOW_HTTP_REQUEST_TIMEOUT", 5)
-    _setenv_if_missing("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", 1)
+    _setenv_if_missing("MLFLOW_HTTP_REQUEST_MAX_RETRIES", 5)
+    _setenv_if_missing("MLFLOW_HTTP_REQUEST_TIMEOUT", 30)
+    _setenv_if_missing("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", 2)
     _mlflow_defaults_configured = True
 
 
