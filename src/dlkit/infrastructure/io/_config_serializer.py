@@ -6,6 +6,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import torch
 from pydantic import BaseModel
 from tomlkit import document, dumps, table
@@ -16,10 +17,16 @@ def _to_toml_compatible(value: Any) -> Any:
 
     - Converts Path to str
     - Converts Enum to its value
+    - Converts numpy scalars to native Python values
     - Converts torch.dtype to str
     - Converts Pydantic models and dataclasses to plain dictionaries
     - Uses ``to_dict()`` when available for runtime value objects such as shape specs
     - Recursively processes dicts and sequences
+
+    Raises:
+        TypeError: If a value has no known TOML-compatible conversion. This
+            surfaces as an actionable error instead of a cryptic downstream
+            ``tomlkit.exceptions.ConvertError``.
     """
     if value is None:
         return None
@@ -27,6 +34,8 @@ def _to_toml_compatible(value: Any) -> Any:
         return str(value)
     if isinstance(value, Enum):
         return value.value
+    if isinstance(value, np.generic):
+        return value.item()
     if isinstance(value, BaseModel):
         return _to_toml_compatible(value.model_dump(exclude_none=True))
     if is_dataclass(value) and not isinstance(value, type):
@@ -61,7 +70,7 @@ def _to_toml_compatible(value: Any) -> Any:
         return value
     if hasattr(value, "__module__") and value.__module__.startswith("dlkit."):
         return str(value)
-    return value
+    raise TypeError(f"Cannot serialize {value!r} of type {type(value).__qualname__} to TOML")
 
 
 def _exclude_value_entries(data: dict[str, Any]) -> dict[str, Any]:

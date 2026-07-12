@@ -77,6 +77,17 @@ def test_log_trial_settings_tags_model_class(
     run_context.set_tag.assert_any_call(TAG_MODEL_CLASS, "MyModel")
 
 
+def test_log_trial_settings_logs_config_artifact(
+    settings_with_model: JobConfig, run_context: MagicMock
+) -> None:
+    log_trial_settings(settings_with_model, run_context)
+
+    run_context.log_artifact_content.assert_called_once()
+    content, artifact_file = run_context.log_artifact_content.call_args.args
+    assert artifact_file == "trial_config.toml"
+    assert "[model]" in content
+
+
 @pytest.fixture
 def mixed_stage_trial_metrics() -> dict[str, float]:
     return {

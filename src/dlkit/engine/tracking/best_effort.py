@@ -26,7 +26,7 @@ def best_effort(action: str) -> Callable[[Callable[..., None]], Callable[..., No
             try:
                 func(*args, **kwargs)
             except Exception as e:
-                logger.warning("Failed to {}: {}", action, e)
+                logger.opt(exception=True).warning("Failed to {}: {}", action, e)
 
         return wrapper
 
