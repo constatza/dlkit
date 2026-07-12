@@ -49,6 +49,17 @@ training and optimization flows.
   `"pickle"` preserves legacy MLflow behavior; `"pt2"` opts into MLflow's
   `torch.export`-backed serialization and requires input-shape metadata so an
   `input_example` can be built.
+- `artifact_logger._build_pt2_signature` only names `TensorSpec` inputs when a
+  model has more than one input. MLflow's pytorch flavor pyfunc wrapper only
+  accepts a bare ndarray/DataFrame at predict time; a *named* single-input
+  schema forces MLflow's own schema enforcement to wrap the example in a dict,
+  which the wrapper rejects (`mlflow.pyfunc.load_model(uri).predict(...)`
+  fails, and `log_model` emits "Failed to validate serving input example").
+  Multi-input models still need names to disambiguate shapes, but MLflow's
+  pytorch flavor has no working pyfunc/REST-serving path for multi-tensor
+  inputs regardless of naming — `_log_model_artifact` logs an explicit warning
+  for that case since MLflow itself fails silently (dropped input example
+  under `"pickle"`, missing `python_function` flavor under `"pt2"`).
 - Model registry writes are explicit public API calls, not training side effects.
 - Runtime artifact publication is driven by typed `ProducedArtifact` payloads and
   a `RuntimeArtifactManifest`, not datamodule monkey-patching.

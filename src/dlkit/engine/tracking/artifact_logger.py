@@ -5,6 +5,7 @@ Single Responsibility: Log checkpoints, models, and user-defined artifacts to ML
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,6 +45,22 @@ TAG_LOGGED_MODEL_ARTIFACT_PATH = "mlflow_logged_model_artifact_path"
 TAG_MODEL_CLASS = "mlflow_model_class"
 
 
+def _resolve_input_shapes(model: nn.Module) -> Mapping[str, tuple[int, ...]] | None:
+    """Return checkpoint-declared input shapes, or None when unavailable.
+
+    Args:
+        model: Trained model, possibly carrying ``_checkpoint_metadata``.
+
+    Returns:
+        Mapping of input name to shape, or None when shape info is unavailable.
+    """
+    metadata = getattr(model, "_checkpoint_metadata", None)
+    context = getattr(metadata, "context", None) if metadata is not None else None
+    if context is None or not context.input_shapes:
+        return None
+    return context.input_shapes
+
+
 def _build_input_example(model: nn.Module) -> _InputExample | None:
     """Build zero numpy arrays from checkpoint metadata input shapes.
 
@@ -59,13 +76,12 @@ def _build_input_example(model: nn.Module) -> _InputExample | None:
         Single ndarray ``(1, *shape)`` or tuple thereof, or None when shape info
         is unavailable.
     """
-    metadata = getattr(model, "_checkpoint_metadata", None)
-    context = getattr(metadata, "context", None) if metadata is not None else None
-    if context is None or not context.input_shapes:
+    input_shapes = _resolve_input_shapes(model)
+    if input_shapes is None:
         return None
     param = next(model.parameters(), None)
     np_dtype = np.float32 if param is None else param.detach().cpu().numpy().dtype
-    arrays = [np.zeros((1, *shape), dtype=np_dtype) for shape in context.input_shapes.values()]
+    arrays = [np.zeros((1, *shape), dtype=np_dtype) for shape in input_shapes.values()]
     return arrays[0] if len(arrays) == 1 else tuple(arrays)
 
 
@@ -84,9 +100,8 @@ def _build_pt2_signature(model: nn.Module) -> ModelSignature | None:
     from mlflow.models import ModelSignature
     from mlflow.types.schema import Schema, TensorSpec
 
-    metadata = getattr(model, "_checkpoint_metadata", None)
-    context = getattr(metadata, "context", None) if metadata is not None else None
-    if context is None or not context.input_shapes:
+    input_shapes = _resolve_input_shapes(model)
+    if input_shapes is None:
         return None
     param = next(model.parameters(), None)
     np_dtype = np.dtype("float32") if param is None else param.detach().cpu().numpy().dtype
@@ -94,8 +109,14 @@ def _build_pt2_signature(model: nn.Module) -> ModelSignature | None:
     # when the example is also batch=1 (torch.export specializes the constant).
     inputs = Schema(
         [
-            TensorSpec(type=np_dtype, shape=(1, *shape), name=name)
-            for name, shape in context.input_shapes.items()
+            TensorSpec(
+                type=np_dtype,
+                shape=(1, *shape),
+                # Named schema forces MLflow's pyfunc predict into a dict path
+                # that the pytorch flavor rejects; only disambiguate when >1 input.
+                name=name if len(input_shapes) > 1 else None,
+            )
+            for name, shape in input_shapes.items()
         ]
     )
     return ModelSignature(inputs=inputs)
@@ -271,6 +292,16 @@ class ArtifactLogger:
         input_example = _build_input_example(model)
         signature = _build_pt2_signature(model)
         model_serialization_format = settings.tracking.model_serialization_format
+
+        input_shapes = _resolve_input_shapes(model)
+        if input_shapes is not None and len(input_shapes) > 1:
+            logger.warning(
+                "Model has {} inputs; MLflow's pytorch flavor does not support "
+                "pyfunc/REST serving for multi-input models regardless of "
+                "serialization_format. Load with mlflow.pytorch.load_model(uri), "
+                "not mlflow.pyfunc.load_model(uri).predict().",
+                len(input_shapes),
+            )
 
         if model_serialization_format == "pt2" and input_example is None:
             raise ValueError(

@@ -25,6 +25,7 @@ from dlkit.engine.tracking.artifact_logger import (
     TAG_MODEL_CLASS,
     ArtifactLogger,
     _build_input_example,
+    _build_pt2_signature,
     _resolve_model_class_name,
 )
 from dlkit.engine.tracking.interfaces import IRunContext
@@ -293,6 +294,58 @@ def test_log_model_artifact_multi_input_returns_tuple(
     assert len(result) == 2
     assert result[0].shape == (1, 4)
     assert result[1].shape == (1, 8)
+
+
+def test_build_pt2_signature_omits_name_for_single_input(model_with_shapes: nn.Module) -> None:
+    """Regression: a named single-input TensorSpec breaks MLflow pyfunc predict.
+
+    A named schema forces MLflow's schema enforcement to wrap the ndarray into
+    a dict, which the pytorch flavor's pyfunc wrapper rejects outright.
+    """
+    signature = _build_pt2_signature(model_with_shapes)
+
+    assert signature is not None
+    (spec,) = signature.inputs.inputs
+    assert spec.name is None
+
+
+def test_build_pt2_signature_keeps_names_for_multi_input(
+    model_with_multi_shapes: nn.Module,
+) -> None:
+    """Multi-input models still need named specs to disambiguate inputs."""
+    signature = _build_pt2_signature(model_with_multi_shapes)
+
+    assert signature is not None
+    names = [spec.name for spec in signature.inputs.inputs]
+    assert names == ["x", "y"]
+
+
+def test_log_model_artifact_multi_input_logs_pyfunc_warning(
+    model_with_multi_shapes: nn.Module,
+    job_config: JobConfig,
+) -> None:
+    """Multi-input pyfunc/REST serving is unsupported by MLflow's pytorch flavor.
+
+    MLflow itself fails silently for this case (no warning at all — see
+    `test_mlflow_run_context.py`), so this must be surfaced explicitly instead
+    of leaving it undiagnosable.
+    """
+    from loguru import logger
+
+    messages: list[str] = []
+    sink_id = logger.add(
+        lambda message: messages.append(message.record["message"]), level="WARNING"
+    )
+    try:
+        artifact_logger = ArtifactLogger(tracker=Mock())
+        run_context = _RecordingRunContext()
+        artifact_logger._log_model_artifact(
+            run_context=run_context, model=model_with_multi_shapes, settings=job_config
+        )
+    finally:
+        logger.remove(sink_id)
+
+    assert any("does not support pyfunc/REST serving for multi-input models" in m for m in messages)
 
 
 def test_log_model_artifact_none_example_when_no_metadata(

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import mlflow
 import numpy as np
+import pytest
 import torch
 from sklearn.linear_model import LinearRegression
 
@@ -113,6 +115,101 @@ def test_log_model_pt2_can_be_loaded_for_inference(tmp_path: Path) -> None:
     result = loaded(torch.zeros(1, 4))
 
     assert tuple(result.shape) == (1, 2)
+
+
+def test_log_model_pt2_single_input_pyfunc_predict_does_not_warn_or_fail(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Regression: a named single-input signature broke MLflow pyfunc serving.
+
+    MLflow's pytorch flavor wraps a named-schema example into a dict at
+    predict time and rejects it, which previously showed up as a "Failed to
+    validate serving input example" warning during log_model and a real
+    TypeError from mlflow.pyfunc.load_model(...).predict(...).
+    """
+    tracking_uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+    mlflow.set_tracking_uri(tracking_uri)
+    experiment_id = mlflow.create_experiment(
+        "pt2-pyfunc-test",
+        artifact_location=(tmp_path / "artifacts").as_uri(),
+    )
+
+    model = torch.nn.Linear(4, 2)
+    object.__setattr__(
+        model,
+        "_checkpoint_metadata",
+        SimpleNamespace(context=SimpleNamespace(input_shapes={"x": (4,)})),
+    )
+    input_example = np.zeros((1, 4), dtype=np.float32)
+
+    with (
+        caplog.at_level(logging.WARNING, logger="mlflow.models.model"),
+        mlflow.start_run(experiment_id=experiment_id) as run,
+    ):
+        context = ClientBasedRunContext(
+            client=mlflow.MlflowClient(),
+            run_id=run.info.run_id,
+            tracking_uri=tracking_uri,
+            experiment_id=experiment_id,
+        )
+        model_uri = context.log_model(
+            model=model,
+            artifact_path="model",
+            input_example=input_example,
+            signature=_build_pt2_signature(model),
+            model_serialization_format="pt2",
+        )
+
+    assert "Failed to validate serving input example" not in caplog.text
+    assert model_uri is not None
+    result = mlflow.pyfunc.load_model(model_uri).predict(input_example)
+
+    assert tuple(np.asarray(result).shape) == (1, 2)
+
+
+def test_log_model_multi_input_pyfunc_predict_is_unsupported(tmp_path: Path) -> None:
+    """Documents the known upstream limitation: pyfunc serving cannot handle
+    multi-tensor inputs under the pytorch flavor, regardless of signature naming.
+
+    This is why ArtifactLogger._log_model_artifact logs an explicit warning for
+    multi-input models instead of relying on MLflow's own (silent) failure.
+    """
+    tracking_uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
+    mlflow.set_tracking_uri(tracking_uri)
+    experiment_id = mlflow.create_experiment(
+        "multi-input-pyfunc-test",
+        artifact_location=(tmp_path / "artifacts").as_uri(),
+    )
+
+    model = torch.nn.Linear(4, 2)
+    object.__setattr__(
+        model,
+        "_checkpoint_metadata",
+        SimpleNamespace(context=SimpleNamespace(input_shapes={"x": (4,), "y": (8,)})),
+    )
+    input_example = (
+        np.zeros((1, 4), dtype=np.float32),
+        np.zeros((1, 8), dtype=np.float32),
+    )
+
+    with mlflow.start_run(experiment_id=experiment_id) as run:
+        context = ClientBasedRunContext(
+            client=mlflow.MlflowClient(),
+            run_id=run.info.run_id,
+            tracking_uri=tracking_uri,
+            experiment_id=experiment_id,
+        )
+        model_uri = context.log_model(
+            model=model,
+            artifact_path="model",
+            input_example=input_example,
+            signature=_build_pt2_signature(model),
+            model_serialization_format="pickle",
+        )
+
+    assert model_uri is not None
+    with pytest.raises(Exception, match="Model is missing inputs"):
+        mlflow.pyfunc.load_model(model_uri).predict(input_example)
 
 
 def test_log_model_prefers_mlflow_returned_model_uri() -> None:
