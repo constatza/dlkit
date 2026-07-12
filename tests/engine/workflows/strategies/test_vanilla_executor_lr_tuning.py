@@ -428,3 +428,68 @@ class TestVanillaExecutorLRTuning:
                         )
 
         model.temporarily_use_controller.assert_called_once_with(fake_tuning_controller)
+
+    def test_find_lr_neutralizes_overfit_batches_and_fast_dev_run(
+        self,
+        settings_with_lr_tuner: TrainingJobConfig,
+    ) -> None:
+        """The tuning trainer is built from a copy with overfit_batches/fast_dev_run
+        cleared, even when the real TrainerSettings has them set - both silently
+        degrade or no-op Lightning's LR range test without raising."""
+        import torch.nn as nn
+
+        from dlkit.engine.training.tuning.plans import SupportedLRTuningPlan
+        from dlkit.infrastructure.config.optimizer_component import AdamWSettings
+        from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+        from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+
+        contaminated_settings = settings_with_lr_tuner.model_copy(
+            update={
+                "training": settings_with_lr_tuner.training.model_copy(
+                    update={
+                        "trainer": settings_with_lr_tuner.training.trainer.model_copy(
+                            update={"overfit_batches": 1, "fast_dev_run": True}
+                        )
+                    }
+                )
+            }
+        )
+
+        executor = VanillaExecutor()
+        model = MagicMock()
+        model.model = nn.Linear(2, 2)
+
+        tuning_plan = SupportedLRTuningPlan(
+            projected_policy=OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=1e-3)),
+        )
+        fake_tuning_controller = MagicMock()
+        fake_tuning_controller.requires_manual_optimization = False
+
+        captured_self: list[TrainerSettings] = []
+
+        def _capture_build(self: TrainerSettings, session: object = None) -> MagicMock:
+            captured_self.append(self)
+            return MagicMock()
+
+        with patch(
+            "dlkit.engine.training.optimization.controllers.build_optimization_controller",
+            return_value=fake_tuning_controller,
+        ):
+            with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+                mock_finder = MagicMock()
+                mock_finder.suggestion.return_value = 0.01
+                MockTuner.return_value.lr_find.return_value = mock_finder
+                with patch.object(TrainerSettings, "build", _capture_build):
+                    executor._find_lr_with_projected_policy(
+                        model,
+                        None,
+                        contaminated_settings,
+                        tuning_plan,
+                        contaminated_settings.training.lr_tuner,
+                    )
+
+        assert len(captured_self) == 1
+        assert captured_self[0].overfit_batches == 0
+        assert captured_self[0].fast_dev_run is False
+        assert contaminated_settings.training.trainer.overfit_batches == 1
+        assert contaminated_settings.training.trainer.fast_dev_run is True

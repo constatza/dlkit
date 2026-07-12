@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 
 from dlkit.common.errors import ParameterPartitionError
+from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
 from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
 from dlkit.engine.training.optimization.concurrent_optimizer import ConcurrentOptimizer
 from dlkit.engine.training.optimization.state import ActiveStage
@@ -229,7 +230,7 @@ class TestOptimizerPolicyBuilder:
 
         tiny_model has biases (1-D params) that torch.optim.Muon rejects.
         The builder must apply the same MuonEligibleSelector / NonMuonSelector
-        split it uses in _build_default, producing a ConcurrentOptimizer.
+        split it uses in the default (no-stages) path, producing a ConcurrentOptimizer.
 
         Args:
             tiny_model: Tiny two-layer model fixture.
@@ -370,10 +371,13 @@ class TestOptimizerPolicyBuilder:
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
 
     def test_builder_default_scheduler_exists_at_runtime(self, tiny_model: nn.Sequential) -> None:
-        """Verify default_scheduler creates a live scheduler on the default stage."""
+        """Verify default_scheduler creates a live scheduler on the default stage,
+        and that its configured monitor/frequency propagate onto the stage."""
         settings = OptimizerPolicySettings(
             default_optimizer=AdamWSettings(),
-            default_scheduler=ReduceLROnPlateauSettings(patience=2, factor=0.5),
+            default_scheduler=ReduceLROnPlateauSettings(
+                patience=2, factor=0.5, monitor="train/custom_metric", frequency=3
+            ),
         )
         program = OptimizerPolicyBuilder().build(tiny_model, settings)
 
@@ -381,6 +385,8 @@ class TestOptimizerPolicyBuilder:
         assert isinstance(stage, ActiveStage)
         assert stage.scheduler is not None
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        assert stage.scheduler_monitor == "train/custom_metric"
+        assert stage.scheduler_frequency == 3
 
     def test_builder_all_configured_stage_schedulers_exist_at_runtime(
         self, tiny_model: nn.Sequential
@@ -415,7 +421,9 @@ class TestOptimizerPolicyBuilder:
                     ParameterSelectorSettings(prefix="1"),
                 ),
             ),
-            default_scheduler=StepLRSettings(step_size=5, gamma=0.5),
+            default_scheduler=StepLRSettings(
+                step_size=5, gamma=0.5, monitor="train/concurrent_metric", frequency=2
+            ),
         )
         program = OptimizerPolicyBuilder().build(tiny_model, settings)
 
@@ -423,6 +431,8 @@ class TestOptimizerPolicyBuilder:
         assert isinstance(stage, ActiveStage)
         assert isinstance(stage.optimizer, ConcurrentOptimizer)
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.StepLR)
+        assert stage.scheduler_monitor == "train/concurrent_metric"
+        assert stage.scheduler_frequency == 2
 
     def test_builder_module_path_selector_raises_when_layer_uncovered(
         self, tiny_model: nn.Sequential
@@ -471,7 +481,7 @@ class TestOptimizerPolicyBuilder:
             OptimizerPolicyBuilder().build(tiny_model, settings)
 
     def test_build_default_keeps_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
-        """LBFGS default optimizer should retain configured schedulers."""
+        """LBFGS default optimizer should retain configured schedulers and fallback monitor."""
         settings = OptimizerPolicySettings(
             default_optimizer=LBFGSSettings(),
             default_scheduler=ReduceLROnPlateauSettings(),
@@ -480,9 +490,11 @@ class TestOptimizerPolicyBuilder:
 
         stage = program.stages[0]
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        assert stage.scheduler_monitor == DEFAULT_VAL_LOSS_METRIC
+        assert stage.scheduler_frequency == 1
 
     def test_build_default_keeps_scheduler_for_adamw(self, tiny_model: nn.Sequential) -> None:
-        """AdamW default optimizer: scheduler is attached normally."""
+        """AdamW default optimizer: scheduler is attached normally with fallback monitor."""
         settings = OptimizerPolicySettings(
             default_optimizer=AdamWSettings(),
             default_scheduler=ReduceLROnPlateauSettings(),
@@ -491,6 +503,8 @@ class TestOptimizerPolicyBuilder:
 
         stage = program.stages[0]
         assert isinstance(stage.scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+        assert stage.scheduler_monitor == DEFAULT_VAL_LOSS_METRIC
+        assert stage.scheduler_frequency == 1
 
     def test_build_stage_keeps_scheduler_for_lbfgs(self, tiny_model: nn.Sequential) -> None:
         """LBFGS in an explicit stage should retain configured schedulers."""

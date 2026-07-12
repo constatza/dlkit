@@ -212,7 +212,12 @@ class VanillaExecutor(ITrainingExecutor):
                 "Trainer settings are required for LR tuning", {"stage": "lr_tuning"}
             )
 
-        tuning_trainer = trainer_settings.build(session=None)
+        # overfit_batches/fast_dev_run silently degrade or no-op Lightning's LR range
+        # test without raising (limit_train_batches is never reset by lr_find, and
+        # fast_dev_run is a hard no-op) — neutralize both for this throwaway trainer only.
+        tuning_trainer = trainer_settings.patch(
+            {"overfit_batches": 0, "fast_dev_run": False}
+        ).build(session=None)
 
         tuning_controller = build_optimization_controller(
             cast(Any, model).model, tuning_plan.projected_policy

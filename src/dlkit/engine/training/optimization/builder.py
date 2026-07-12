@@ -224,52 +224,26 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             A RunningOptimizerPolicy with stages initialized.
         """
         if not settings.stages:
-            return self._build_default(model, settings)
-
-        stages: list[ActiveStage] = []
-        for idx, stage_config in enumerate(settings.stages):
-            stages.append(self._build_stage(model, stage_config, idx))
-        return RunningOptimizerPolicy(stages=tuple(stages))
-
-    def _build_default(
-        self, model: nn.Module, settings: OptimizerPolicySettings
-    ) -> RunningOptimizerPolicy:
-        """Build the single-stage default program from default_optimizer/scheduler.
-
-        Args:
-            model: The neural network model.
-            settings: Policy settings (stages must be empty).
-
-        Returns:
-            A RunningOptimizerPolicy with one default stage.
-        """
-        if isinstance(settings.default_optimizer, ConcurrentOptimizerSettings):
-            optimizer: torch.optim.Optimizer = self._build_concurrent_optimizer(
-                model, settings.default_optimizer
+            default_stage_config = OptimizationStageSettings(
+                optimizer=settings.default_optimizer,
+                scheduler=settings.default_scheduler,
             )
-        elif isinstance(settings.default_optimizer, MuonSettings | BatchedMuonSettings):
-            optimizer = self._build_muon_mixed(model, settings.default_optimizer)
-        else:
-            inventory = _make_inventory(model)
-            param_groups = _params_to_group(inventory.list_parameters())
-            optimizer = TorchOptimizerFactory(settings.default_optimizer).create(param_groups)
+            stage = self._build_stage(model, default_stage_config, stage_index=0, name="default")
+            return RunningOptimizerPolicy(stages=(stage,))
 
-        scheduler = _build_scheduler(settings.default_scheduler, optimizer)
-
-        stage = ActiveStage(
-            optimizer=optimizer,
-            scheduler=scheduler,
-            trigger=NoTransitionTrigger(),
-            stage_index=0,
-            name="default",
+        stages = tuple(
+            self._build_stage(model, stage_config, idx)
+            for idx, stage_config in enumerate(settings.stages)
         )
-        return RunningOptimizerPolicy(stages=(stage,))
+        return RunningOptimizerPolicy(stages=stages)
 
     def _build_stage(
         self,
         model: nn.Module,
         config: OptimizationStageSettings,
         stage_index: int,
+        *,
+        name: str = "",
     ) -> ActiveStage:
         """Build a single optimization stage.
 
@@ -277,6 +251,8 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             model: The neural network model.
             config: Stage configuration.
             stage_index: Zero-based stage index.
+            name: Stage label (defaults to "" for explicit multi-stage programs;
+                the no-stages default path passes "default").
 
         Returns:
             An ActiveStage instance.
@@ -313,7 +289,7 @@ class OptimizerPolicyBuilder(IOptimizerPolicyBuilder):
             scheduler=scheduler,
             trigger=trigger,
             stage_index=stage_index,
-            name="",
+            name=name,
             scheduler_monitor=monitor,
             scheduler_frequency=frequency,
         )
