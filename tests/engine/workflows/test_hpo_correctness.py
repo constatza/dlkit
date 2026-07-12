@@ -69,7 +69,12 @@ class _StubTrialExecutor:
     ) -> TrainingResult:
         return self._result
 
-    def extract_objective_value(self, training_result: TrainingResult) -> float:
+    def extract_objective_value(
+        self, training_result: TrainingResult, objective: str = "loss"
+    ) -> float:
+        # Ignores `objective` deliberately: this stand-in isn't wired to the
+        # real val/loss vs train/loss convention, it just returns the fixed
+        # "loss" key the fixtures set up.
         return training_result.metrics.get("loss", 0.0)
 
     def apply_hyperparameters(self, base_settings: Any, hyperparameters: dict) -> Any:

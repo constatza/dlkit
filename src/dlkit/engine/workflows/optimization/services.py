@@ -227,7 +227,9 @@ class TrialExecutor:
             logger.info(
                 "Completed optimization trial {} with objective {}",
                 trial.trial_number,
-                self.extract_objective_value(training_result),
+                self.extract_objective_value(
+                    training_result, objective=trial_settings.search.objective
+                ),
             )
 
             return training_result
@@ -311,29 +313,26 @@ class TrialExecutor:
                 {"stage": "hyperparameter_application"},
             ) from e
 
-    def extract_objective_value(self, training_result: TrainingResult) -> float:
+    def extract_objective_value(
+        self, training_result: TrainingResult, objective: str = DEFAULT_VAL_LOSS_METRIC
+    ) -> float:
         """Extract objective value from training result.
 
         Args:
             training_result: Result from training
+            objective: Metric key to extract (e.g. "val/loss", "train/loss"),
+                normally resolved from ``SearchSettings.objective``.
 
         Returns:
             Objective value for optimization
         """
-        if not training_result.metrics:
+        if objective not in training_result.metrics:
             return 0.0
 
-        # DEFAULT_VAL_LOSS_METRIC is the current convention; "val_loss" is kept
-        # only for backward compatibility with results logged before metric
-        # keys were centralized to use "/" as the stage separator.
-        for key in [DEFAULT_VAL_LOSS_METRIC, "val_loss"]:
-            if key in training_result.metrics:
-                try:
-                    return float(training_result.metrics[key])
-                except ValueError, TypeError:
-                    continue
-
-        return 0.0
+        try:
+            return float(training_result.metrics[objective])
+        except ValueError, TypeError:
+            return 0.0
 
 
 class OptimizationOrchestrator:
@@ -508,7 +507,9 @@ class OptimizationOrchestrator:
                 hyperparameters,
                 trial_context,
             )
-            objective_value = self._trial_executor.extract_objective_value(training_result)
+            objective_value = self._trial_executor.extract_objective_value(
+                training_result, objective=trial_settings.search.objective
+            )
             trial = complete_trial(
                 trial,
                 hyperparameters=hyperparameters,
