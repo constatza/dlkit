@@ -102,6 +102,9 @@ def _make_search_job_config(
             "direction": "minimize",
             "study_name": study_name,
             "storage": storage,
+            # stub_trial_execution (autouse) always returns metrics={"loss": ...},
+            # not the "val/loss" default - point the objective at the stub's key.
+            "objective": "loss",
             "space": {
                 "model.hidden_size": {"type": "categorical", "choices": [2, 4]},
             },

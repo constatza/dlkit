@@ -91,6 +91,10 @@ def real_hpo_config(hpo_dataset: dict[str, Path]) -> SearchJobConfig:
                 "direction": "minimize",
                 "study_name": "real_hpo_test",
                 "storage": None,
+                # No val split is configured (fast_dev_run + a single features/targets
+                # pair), so only test/* metrics are ever logged - point the objective
+                # at one of those instead of the "val/loss" default.
+                "objective": "test/loss",
                 "space": {
                     "model.hidden_size": {"type": "categorical", "choices": [2, 4]},
                 },
