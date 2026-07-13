@@ -6,7 +6,9 @@ import functools
 from collections.abc import Callable
 from typing import Any, TypeVar, cast
 
+import pydantic
 import typer
+from pydantic_core import ErrorDetails
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -22,32 +24,113 @@ from dlkit.common import (
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-_ERROR_SUGGESTIONS: dict[type[DLKitError], list[str]] = {
-    ConfigurationError: [
+
+def _configuration_error_suggestions(error: DLKitError) -> list[str]:
+    """Build suggestions for configuration errors.
+
+    Args:
+        error: Configuration error instance.
+
+    Returns:
+        List of suggestion strings.
+    """
+    suggestions = [
         "Check your configuration file syntax and formatting",
         "Validate configuration: dlkit config validate <config_file>",
         "Create a template: dlkit config create --output config.toml",
-    ],
-    StrategyError: [
+    ]
+    if config_path := error.context.get("config_path"):
+        suggestions.append(f"Verify file exists: {config_path}")
+    return suggestions
+
+
+def _strategy_error_suggestions(error: DLKitError) -> list[str]:
+    """Build suggestions for strategy errors.
+
+    Args:
+        error: Strategy error instance.
+
+    Returns:
+        List of suggestion strings.
+    """
+    suggestions = [
         "Verify the strategy name is correct (training, mlflow, optuna, inference)",
         "Check that required plugins are enabled in configuration",
         "Validate strategy compatibility: dlkit config validate <config> --strategy <strategy>",
-    ],
-    PluginError: [
+    ]
+    if "available_modes" in error.context:
+        modes = ", ".join(error.context["available_modes"])
+        suggestions.append(f"Available strategies: {modes}")
+    return suggestions
+
+
+def _plugin_error_suggestions(error: DLKitError) -> list[str]:
+    """Build suggestions for plugin errors, naming the offending plugin.
+
+    Args:
+        error: Plugin error instance.
+
+    Returns:
+        List of suggestion strings with the plugin name substituted in.
+    """
+    plugin_name = error.context.get("plugin", "unknown")
+    defaults = [
         "Enable the required plugin in configuration",
         "Check plugin configuration parameters",
         "Verify plugin dependencies are installed",
-    ],
-    ModelStateError: [
+    ]
+    return [
+        suggestion.replace("the required plugin", plugin_name).replace("plugin", plugin_name)
+        if "plugin" in suggestion
+        else suggestion
+        for suggestion in defaults
+    ]
+
+
+def _model_state_error_suggestions(error: DLKitError) -> list[str]:
+    """Build suggestions for model state errors.
+
+    Args:
+        error: Model state error instance.
+
+    Returns:
+        List of suggestion strings.
+    """
+    return [
         "Check model configuration and parameters",
         "Verify dataflow module configuration",
         "Ensure trainer settings are compatible",
-    ],
-    WorkflowError: [
+    ]
+
+
+def _workflow_error_suggestions(error: DLKitError) -> list[str]:
+    """Build suggestions for workflow errors, adding strategy-specific hints.
+
+    Args:
+        error: Workflow error instance.
+
+    Returns:
+        List of suggestion strings.
+    """
+    suggestions = [
         "Check log files for detailed error information",
         "Verify system resources (memory, GPU, disk space)",
         "Try running with --verbose for more details",
-    ],
+    ]
+    match error.context.get("strategy"):
+        case "mlflow":
+            suggestions.append("Check MLflow tracking URI/env configuration and connectivity")
+        case "optuna":
+            suggestions.append("Verify Optuna study configuration and storage")
+    return suggestions
+
+
+_ERROR_SUGGESTIONS: dict[type[DLKitError], Callable[[DLKitError], list[str]]] = {
+    ConfigurationError: _configuration_error_suggestions,
+    StrategyError: _strategy_error_suggestions,
+    PluginError: _plugin_error_suggestions,
+    ModelStateError: _model_state_error_suggestions,
+    WorkflowError: _workflow_error_suggestions,
 }
 
 
@@ -94,32 +177,31 @@ def _get_error_suggestions(error: DLKitError) -> list[str]:
     Returns:
         List of suggestion strings
     """
-    suggestions: list[str] = []
-    for error_type, defaults in _ERROR_SUGGESTIONS.items():
+    for error_type, build_suggestions in _ERROR_SUGGESTIONS.items():
         if isinstance(error, error_type):
-            suggestions.extend(defaults)
-            break
+            return build_suggestions(error)
+    return []
 
-    if isinstance(error, ConfigurationError) and error.context.get("config_path"):
-        suggestions.append(f"Verify file exists: {error.context['config_path']}")
-    if isinstance(error, StrategyError) and "available_modes" in error.context:
-        modes = ", ".join(error.context["available_modes"])
-        suggestions.append(f"Available strategies: {modes}")
-    if isinstance(error, PluginError):
-        plugin_name = error.context.get("plugin", "unknown")
-        suggestions = [
-            suggestion.replace("the required plugin", plugin_name).replace("plugin", plugin_name)
-            if "plugin" in suggestion
-            else suggestion
-            for suggestion in suggestions
-        ]
-    if isinstance(error, WorkflowError):
-        strategy = error.context.get("strategy")
-        if strategy == "mlflow":
-            suggestions.append("Check MLflow tracking URI/env configuration and connectivity")
-        elif strategy == "optuna":
-            suggestions.append("Verify Optuna study configuration and storage")
-    return suggestions
+
+def _describe_pydantic_error(detail: ErrorDetails) -> str:
+    """Translate a single structured pydantic error into a user-friendly message.
+
+    Args:
+        detail: One entry from ``pydantic.ValidationError.errors()``.
+
+    Returns:
+        A short, user-facing description of the error.
+    """
+    error_type = detail["type"]
+    match error_type:
+        case "missing":
+            return "Required field is missing"
+        case "value_error":
+            return "Invalid value"
+        case _ if error_type.endswith(("_type", "_parsing")):
+            return "Invalid dataflow type"
+        case _:
+            return detail["msg"]
 
 
 def format_validation_error(error: Exception) -> str:
@@ -131,27 +213,10 @@ def format_validation_error(error: Exception) -> str:
     Returns:
         Formatted error message
     """
-    error_msg = str(error)
+    if not isinstance(error, pydantic.ValidationError):
+        return str(error)
 
-    # Clean up common pydantic validation error patterns
-    if "validation error" in error_msg.lower():
-        # Extract field information from pydantic errors
-        lines = error_msg.split("\n")
-        simplified_lines = []
-
-        for line in lines:
-            if "field required" in line.lower():
-                simplified_lines.append("• Required field is missing")
-            elif "type_error" in line.lower():
-                simplified_lines.append("• Invalid dataflow type")
-            elif "value_error" in line.lower():
-                simplified_lines.append("• Invalid value")
-            else:
-                simplified_lines.append(line)
-
-        return "\n".join(simplified_lines)
-
-    return error_msg
+    return "\n".join(f"• {_describe_pydantic_error(detail)}" for detail in error.errors())
 
 
 def handle_keyboard_interrupt(console: Console) -> None:

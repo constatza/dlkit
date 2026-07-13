@@ -335,7 +335,7 @@ def test_constant_width_factorized_default_activation_is_gelu(cls: type[nn.Modul
     first_block = cast(Any, model).body.blocks[0]
     if isinstance(first_block, SkipConnection):
         first_block = cast(Any, first_block).module
-    assert cast(Any, first_block).activation is F.gelu
+    assert first_block.activation is F.gelu
 
 
 @pytest.mark.parametrize("cls", [ConstantWidthFactorizedFFNN, ConstantWidthSimpleFactorizedFFNN])
@@ -381,7 +381,7 @@ def test_constant_width_softplus_factorized_default_activation_is_gelu() -> None
     first_block = cast(Any, model).body.blocks[0]
     if isinstance(first_block, SkipConnection):
         first_block = cast(Any, first_block).module
-    assert cast(Any, first_block).activation is F.gelu
+    assert first_block.activation is F.gelu
 
 
 def test_constant_width_softplus_factorized_from_context(
@@ -400,7 +400,7 @@ def test_constant_width_softplus_factorized_body_uses_softplus_layer() -> None:
     first_block = cast(Any, model).body.blocks[0]
     if isinstance(first_block, SkipConnection):
         first_block = cast(Any, first_block).module
-    assert isinstance(cast(Any, first_block).layer, SoftplusFactorizedLinear)
+    assert isinstance(first_block.layer, SoftplusFactorizedLinear)
 
 
 def test_constant_width_softplus_factorized_unit_scale_at_init() -> None:
@@ -415,7 +415,7 @@ def test_constant_width_softplus_factorized_unit_scale_at_init() -> None:
     for block in cast(Any, model).body.blocks:
         if isinstance(block, SkipConnection):
             block = cast(Any, block).module
-        log_scale = cast(Any, block).layer.log_scale
+        log_scale = block.layer.log_scale
         mean_scale = F.softplus(log_scale).mean().item()
         assert abs(mean_scale - 1.0) < 0.3
 
@@ -522,7 +522,7 @@ def test_embedded_softplus_factorized_body_uses_softplus_linear(
         first_block = cast(Any, model).body.blocks[0]
         if isinstance(first_block, SkipConnection):
             first_block = cast(Any, first_block).module
-        assert isinstance(cast(Any, first_block).layer, SoftplusFactorizedLinear)
+        assert isinstance(first_block.layer, SoftplusFactorizedLinear)
 
 
 def test_embedded_softplus_factorized_unit_scale_at_init() -> None:
@@ -539,7 +539,7 @@ def test_embedded_softplus_factorized_unit_scale_at_init() -> None:
     for block in cast(Any, model).body.blocks:
         if isinstance(block, SkipConnection):
             block = cast(Any, block).module
-        log_scale = cast(Any, block).layer.log_scale
+        log_scale = block.layer.log_scale
         mean_scale = F.softplus(log_scale).mean().item()
         assert abs(mean_scale - 1.0) < 0.3
 
@@ -557,7 +557,7 @@ def test_embedded_softplus_factorized_default_activation_is_gelu(cls: type[nn.Mo
     first_block = cast(Any, model).body.blocks[0]
     if isinstance(first_block, SkipConnection):
         first_block = cast(Any, first_block).module
-    assert cast(Any, first_block).activation is F.gelu
+    assert first_block.activation is F.gelu
 
 
 @pytest.mark.parametrize(
@@ -920,7 +920,7 @@ def test_embedded_fully_softplus_factorized_unit_scale_at_init_all_layers(
         for block in cast(Any, model).body.blocks:
             if isinstance(block, SkipConnection):
                 block = cast(Any, block).module
-            log_scale = cast(Any, block).layer.log_scale
+            log_scale = block.layer.log_scale
             mean_scale = F.softplus(log_scale).mean().item()
             assert abs(mean_scale - 1.0) < UNIT_SCALE_TOLERANCE, (
                 f"{cls.__name__} body block mean_scale={mean_scale:.3f}"

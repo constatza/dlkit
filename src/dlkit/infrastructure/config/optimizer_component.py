@@ -5,12 +5,13 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated, Any, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from dlkit.common.metric_stages import DEFAULT_VAL_LOSS_METRIC
 
 from .core.base_settings import BasicSettings, ComponentSettings
+from .enums import AdjustLrFn
 from .optimization_selector import ParameterSelectorSettings
 
 
@@ -157,10 +158,10 @@ class _MuonBaseSettings(OptimizerComponentSettings):
         eps: Spectral-norm floor added for Newton-Schulz numerical stability.
         ns_coefficients: Quintic polynomial coefficients ``(a, b, c)`` for
             the Newton–Schulz orthogonalization.
-        adjust_lr_fn: Learning-rate shape adjustment strategy. ``"match_rms_adamw"``
+        adjust_lr_fn: Learning-rate shape adjustment strategy. ``AdjustLrFn.MATCH_RMS_ADAMW``
             is the default so Muon can reuse AdamW-tuned learning rate and
-            weight decay values directly. ``None`` and ``"original"`` both apply
-            ``lr * sqrt(max(1, A/B))``; ``"match_rms_adamw"`` applies
+            weight decay values directly. ``None`` and ``AdjustLrFn.ORIGINAL`` both apply
+            ``lr * sqrt(max(1, A/B))``; ``AdjustLrFn.MATCH_RMS_ADAMW`` applies
             ``0.2 * lr * sqrt(max(A, B))``.
     """
 
@@ -179,22 +180,14 @@ class _MuonBaseSettings(OptimizerComponentSettings):
         default=(3.4445, -4.775, 2.0315),
         description="Quintic polynomial coefficients (a, b, c) for Newton-Schulz orthogonalization",
     )
-    adjust_lr_fn: str | None = Field(
-        default="match_rms_adamw",
+    adjust_lr_fn: AdjustLrFn | None = Field(
+        default=AdjustLrFn.MATCH_RMS_ADAMW,
         description=(
-            "LR shape adjustment: None/'original' applies lr*sqrt(max(1,A/B)); "
-            "'match_rms_adamw' applies 0.2*lr*sqrt(max(A,B)); default is "
-            "'match_rms_adamw' so Muon can reuse AdamW-tuned hyperparameters"
+            "LR shape adjustment: None/AdjustLrFn.ORIGINAL applies lr*sqrt(max(1,A/B)); "
+            "AdjustLrFn.MATCH_RMS_ADAMW applies 0.2*lr*sqrt(max(A,B)); default is "
+            "AdjustLrFn.MATCH_RMS_ADAMW so Muon can reuse AdamW-tuned hyperparameters"
         ),
     )
-
-    @field_validator("adjust_lr_fn")
-    @classmethod
-    def _validate_adjust_lr_fn(cls, v: str | None) -> str | None:
-        allowed = {None, "original", "match_rms_adamw"}
-        if v not in allowed:
-            raise ValueError(f"adjust_lr_fn must be one of {allowed!r}, got {v!r}")
-        return v
 
 
 class MuonSettings(_MuonBaseSettings):

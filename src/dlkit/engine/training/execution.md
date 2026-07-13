@@ -144,6 +144,9 @@ print(f"Last checkpoint: {result.artifacts.get('last_checkpoint')}")
 - Post-training `predict()` and `test()` are best-effort: a missing dataloader
   (`MisconfigurationException`) logs at debug, any other failure logs at warning —
   neither crashes the workflow
+- Fit-stage metrics are snapshotted immediately after `trainer.fit()` before any
+  checkpoint reload, validation, prediction, or test stage can replace Lightning's
+  metric dictionaries; post-training metrics are collected afterward and merged in
 - Metrics collected from multiple trainer sources (callback_metrics, progress_bar_metrics, logged_metrics)
 - Checkpoint artifacts extracted from `ModelCheckpoint` callbacks
 - Fallback checkpoint discovery via filesystem globbing if callback paths not set

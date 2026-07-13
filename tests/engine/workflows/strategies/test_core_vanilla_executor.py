@@ -123,6 +123,50 @@ def test_vanilla_executor_metric_extraction(
     assert result.metrics["tensor_val"] == "non_numeric"
 
 
+def test_vanilla_executor_preserves_fit_metrics_after_post_training_stage(
+    settings: TrainingJobConfig,
+) -> None:
+    """Fit metrics must survive Lightning metric replacement in later stages."""
+
+    class StageReplacingTrainer:
+        def __init__(self) -> None:
+            self.called = {"fit": 0, "predict": 0, "test": 0}
+            self.callback_metrics: dict[str, float] = {}
+            self.progress_bar_metrics: dict[str, float] = {}
+            self.logged_metrics: dict[str, float] = {}
+            self.callbacks = []
+            self.checkpoint_callback = None
+
+        def fit(self, *args: Any, **kwargs: Any) -> None:
+            self.called["fit"] += 1
+            self.callback_metrics = {"train/loss": 0.4}
+            self.logged_metrics = {"fit/logged": 1.0}
+
+        def predict(self, *args: Any, **kwargs: Any) -> list[Any]:
+            self.called["predict"] += 1
+            return []
+
+        def test(self, *args: Any, **kwargs: Any) -> None:
+            self.called["test"] += 1
+            self.callback_metrics = {"test/loss": 0.8}
+            self.logged_metrics = {}
+
+    trainer = StageReplacingTrainer()
+    components = RuntimeComponents(
+        model=cast(Any, object()),
+        datamodule=cast(Any, object()),
+        trainer=cast(Any, trainer),
+        meta={},
+    )
+
+    result = VanillaExecutor().execute(components, settings)
+
+    assert trainer.called == {"fit": 1, "predict": 1, "test": 1}
+    assert result.metrics["train/loss"] == 0.4
+    assert result.metrics["fit/logged"] == 1.0
+    assert result.metrics["test/loss"] == 0.8
+
+
 def test_vanilla_executor_no_trainer_error(settings: TrainingJobConfig) -> None:
     """Test that executor raises WorkflowError when trainer is None."""
     components = RuntimeComponents(
@@ -142,7 +186,11 @@ def test_vanilla_executor_no_trainer_error(settings: TrainingJobConfig) -> None:
 
 
 def test_vanilla_executor_trainer_exception_handling(settings: TrainingJobConfig) -> None:
-    """Test that trainer exceptions are properly wrapped."""
+    """Test that trainer.fit() exceptions are wrapped with a 'fit'-stage WorkflowError.
+
+    Only the fit/reload step is wrapped now (not the whole execute() body), so the
+    context's stage tag reflects the step that actually failed.
+    """
 
     class FailingTrainer:
         def fit(self, *args, **kwargs):
@@ -162,7 +210,7 @@ def test_vanilla_executor_trainer_exception_handling(settings: TrainingJobConfig
 
     assert "Vanilla execution failed" in str(exc_info.value.message)
     assert "Training failed" in str(exc_info.value.message)
-    assert exc_info.value.context["stage"] == "execute"
+    assert exc_info.value.context["stage"] == "fit"
 
 
 def test_vanilla_executor_post_training_exception_handling(

@@ -9,8 +9,11 @@ from typing import Any, cast
 
 from dlkit.infrastructure.config.core.base_settings import ComponentSettings
 from dlkit.infrastructure.utils.general import import_object, kwargs_compatible_with
+from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .context import BuildContext
+
+logger = get_logger(__name__)
 
 
 class ComponentFactory[T](ABC):
@@ -95,8 +98,8 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
                     rp = str(_Path(wd).resolve())
                     if rp not in _sys.path:
                         _sys.path.insert(0, rp)
-            except Exception:
-                pass
+            except OSError as exc:
+                logger.debug("Could not resolve working directory {} for sys.path: {}", wd, exc)
             # Try to resolve via user registries first (with forced selection),
             # then fall back to import for built-in/third-party objects.
             kind = self._infer_kind_from_settings(settings)
@@ -141,7 +144,8 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
                 (kind for cls, kind in _SETTINGS_KIND.items() if isinstance(settings, cls)),
                 None,
             )
-        except Exception:
+        except ImportError as exc:
+            logger.debug("Could not import component-settings classes to infer kind: {}", exc)
             return None
 
     def _prepare_init_kwargs(
@@ -170,9 +174,8 @@ class DefaultComponentFactory[T](ComponentFactory[T]):
                 # Do not overwrite explicitly set top-level keys
                 for k, v in nested_params.items():
                     base_kwargs.setdefault(k, v)
-        except Exception:
-            # Be resilient to any unexpected structure
-            pass
+        except (AttributeError, TypeError) as exc:
+            logger.debug("Could not merge nested 'params' dict into init kwargs: {}", exc)
         # For classes that accept **kwargs, allow all kwargs through without checking.
         from inspect import Parameter, signature
 

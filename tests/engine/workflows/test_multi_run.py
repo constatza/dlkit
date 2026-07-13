@@ -236,8 +236,12 @@ def test_run_variant_is_frozen(variant_a: RunVariant) -> None:
     Args:
         variant_a: A RunVariant fixture.
     """
+    # RunVariant is statically frozen (ty flags direct assignment as
+    # invalid); cast to Any to exercise the runtime FrozenInstanceError
+    # without a statically-known-invalid attribute assignment.
+    mutable_variant = cast(Any, variant_a)
     with pytest.raises(FrozenInstanceError):
-        variant_a.run_name = "other"  # type: ignore[misc]
+        mutable_variant.run_name = "other"
 
 
 def test_run_variant_stores_run_name(variant_a: RunVariant) -> None:

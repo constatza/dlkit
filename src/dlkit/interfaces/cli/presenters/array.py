@@ -8,7 +8,11 @@ from typing import Any
 import numpy as np
 from rich.pretty import Pretty
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
 from .presenter_utils import NotStackableError
+
+logger = get_logger(__name__)
 
 
 def to_numpy(obj: Any) -> Any:
@@ -19,8 +23,8 @@ def to_numpy(obj: Any) -> Any:
 
         if isinstance(obj, torch.Tensor):
             return obj.detach().cpu().numpy()
-    except Exception:
-        pass
+    except ImportError as exc:
+        logger.debug("torch unavailable, skipping tensor-to-numpy conversion: {}", exc)
 
     if isinstance(obj, np.ndarray):
         return obj
@@ -46,7 +50,8 @@ def stack_batches(
 
         if isinstance(first, (torch.Tensor, np.ndarray)):
             return _stack_list_tensors(batches, mode=mode)
-    except Exception:
+    except ImportError as exc:
+        logger.debug("torch unavailable, falling back to numpy-only stacking: {}", exc)
         if isinstance(first, np.ndarray):
             return _stack_list_tensors(batches, mode=mode)
 

@@ -6,6 +6,7 @@ precision strategy resolution across all DLKit components.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import torch
@@ -16,6 +17,11 @@ from dlkit.infrastructure.precision.context import (
     get_global_precision_context,
 )
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
+
+# `infrastructure.precision` is a dependency-free leaf module (tach.toml
+# depends_on = []); use stdlib logging directly rather than
+# infrastructure.utils.logging_config, which would create a disallowed edge.
+logger = logging.getLogger(__name__)
 
 
 class PrecisionService:
@@ -82,9 +88,9 @@ class PrecisionService:
         if provider is not None:
             try:
                 return provider.get_precision_strategy()
-            except AttributeError, NotImplementedError, RuntimeError:
+            except (AttributeError, NotImplementedError, RuntimeError) as exc:
                 # Provider doesn't support precision or is broken, continue to next priority
-                pass
+                logger.debug("Provider %s could not supply a precision strategy: %s", provider, exc)
 
         # Priority 3: Explicit default
         if default is not None:

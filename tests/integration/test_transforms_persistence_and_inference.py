@@ -165,6 +165,39 @@ def _extract_prediction_tensor(result: Any) -> torch.Tensor:
     raise AssertionError(f"Expected PredictionOutput but got {type(result)}: {result}")
 
 
+@pytest.fixture
+def leakage_split_arrays(tmp_path: Path) -> dict[str, Any]:
+    """Feature/target arrays whose train split is numerically disjoint from val/test.
+
+    Train rows are drawn from ``U[0, 1)``; validation and test rows are drawn
+    from a completely different, non-overlapping ``U[100, 200)`` range. A
+    ``MinMaxScaler`` fitted on anything beyond the train split would report a
+    max far above ``1.0``, which is what the leakage regression test below
+    checks for.
+    """
+    rng = np.random.default_rng(0)
+    n_train, n_val, n_test, d = 16, 8, 8, 4
+    train_x = rng.uniform(0.0, 1.0, size=(n_train, d)).astype(np.float32)
+    val_x = rng.uniform(100.0, 200.0, size=(n_val, d)).astype(np.float32)
+    test_x = rng.uniform(100.0, 200.0, size=(n_test, d)).astype(np.float32)
+    X = np.concatenate([train_x, val_x, test_x], axis=0)
+    Y = X.copy()
+
+    fx = tmp_path / "leakage_features.npy"
+    fy = tmp_path / "leakage_targets.npy"
+    np.save(fx, X)
+    np.save(fy, Y)
+
+    return {
+        "fx": fx,
+        "fy": fy,
+        "train_idx": tuple(range(0, n_train)),
+        "val_idx": tuple(range(n_train, n_train + n_val)),
+        "test_idx": tuple(range(n_train + n_val, n_train + n_val + n_test)),
+        "train_x": torch.from_numpy(train_x),
+    }
+
+
 @pytest.fixture(scope="module")
 def predictor_transform_setup(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     """Train a lightweight checkpoint with fitted transforms for reuse across tests."""
@@ -494,3 +527,79 @@ def test_transforms_persist_and_apply_with_torch_save(tmp_path: Path) -> None:
     raw_x = next(iter(dm.predict_dataloader()))["features", "x"]
     expected_x_in = cast(Any, rewrapped._batch_transformer)._feature_chains["x"](raw_x)
     assert torch.allclose(x_in, expected_x_in, atol=1e-6, rtol=0)
+
+
+def test_fit_transforms_if_needed_fits_only_on_train_split(
+    leakage_split_arrays: dict[str, Any],
+) -> None:
+    """Regression guard: transform fitting must never see val/test data.
+
+    ``fit_transforms_if_needed`` (``engine.training.transform_fitting``) is the
+    single production entrypoint that fits a wrapper's batch transformer, and
+    it must only ever be handed ``datamodule.train_dataloader()`` — a
+    ``DataLoader`` over ``SplitDataset.train`` (``engine.data.splits``), an
+    index-based subset restricted to the train split.
+
+    ``leakage_split_arrays`` draws train rows from ``U[0, 1)`` and val/test
+    rows from a disjoint ``U[100, 200)`` range, so this test would fail if
+    fitting ever regressed to running over the full dataset instead of just
+    the train split: the fitted ``MinMaxScaler`` min/max would then reflect
+    the val/test range instead of train's.
+    """
+    data = leakage_split_arrays
+    dataset = FlexibleDataset(
+        entries=[
+            NpyEntry(name="x", path=data["fx"], data_role=DataRole.FEATURE),
+            NpyEntry(name="y", path=data["fy"], data_role=DataRole.TARGET),
+        ]
+    )
+    split = IndexSplit(
+        train=data["train_idx"],
+        validation=data["val_idx"],
+        test=data["test_idx"],
+        predict=data["train_idx"],
+    )
+    from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
+
+    dm = ArrayDataModule(
+        dataset=dataset,
+        split=split,
+        dataloader=DataloaderSettings(
+            batch_size=len(data["train_idx"]),
+            num_workers=0,
+            shuffle=False,
+            pin_memory=False,
+            persistent_workers=False,
+        ),
+    )
+    dm.setup("fit")
+
+    entries = (
+        NpyEntry(
+            name="x",
+            path=data["fx"],
+            data_role=DataRole.FEATURE,
+            transforms=[
+                TransformSettings(
+                    name="MinMaxScaler", module_path="dlkit.domain.transforms.minmax", dim=0
+                )
+            ],
+        ),
+        NpyEntry(name="y", path=data["fy"], data_role=DataRole.TARGET),
+    )
+    wrapper = _build_wrapper(entries)
+
+    # Act: the real production fit entrypoint.
+    fit_transforms_if_needed(wrapper, dm)
+
+    chain = cast(Any, wrapper._batch_transformer)._feature_chains["x"]
+    scaler = chain.transforms[0]
+    train_x = data["train_x"]
+
+    assert torch.allclose(scaler.min.squeeze(0), train_x.min(dim=0).values, atol=1e-6)
+    assert torch.allclose(scaler.max.squeeze(0), train_x.max(dim=0).values, atol=1e-6)
+    # A scaler that leaked val/test into fitting would report a max near 200,
+    # not near train's own [0, 1) range.
+    assert scaler.max.max().item() < 2.0, (
+        f"fitted max {scaler.max.max().item()} leaked into the val/test [100, 200) range"
+    )

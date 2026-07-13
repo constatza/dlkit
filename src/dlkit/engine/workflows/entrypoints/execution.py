@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
@@ -24,6 +26,47 @@ from ._override_types import (
 from .convergence import converge
 from .optimization import optimize
 from .training import train
+
+# Per-workflow allow-list of override keys accepted from the raw override
+# payload before validating into the workflow-specific overrides model.
+_ALLOWED_OVERRIDE_KEYS: Mapping[type[JobConfig], frozenset[str]] = {
+    SearchJobConfig: frozenset(
+        {
+            "checkpoint_path",
+            "trials",
+            "study_name",
+            "experiment_name",
+            "run_name",
+            "enable_optuna",
+            "register_model",
+            "tags",
+        }
+    ),
+    TrainingJobConfig: frozenset(
+        {
+            "checkpoint_path",
+            "epochs",
+            "batch_size",
+            "learning_rate",
+            "experiment_name",
+            "run_name",
+            "register_model",
+            "tags",
+            "loss_function",
+            "loss_module",
+        }
+    ),
+    ConvergenceJobConfig: frozenset(
+        {
+            "experiment_name",
+            "run_name",
+            "tags",
+            "sizes",
+            "repeats",
+            "target",
+        }
+    ),
+}
 
 
 def execute(
@@ -48,17 +91,7 @@ def execute(
                 {
                     key: value
                     for key, value in override_payload.items()
-                    if key
-                    in {
-                        "checkpoint_path",
-                        "trials",
-                        "study_name",
-                        "experiment_name",
-                        "run_name",
-                        "enable_optuna",
-                        "register_model",
-                        "tags",
-                    }
+                    if key in _ALLOWED_OVERRIDE_KEYS[SearchJobConfig]
                 }
             )
             return optimize(
@@ -76,19 +109,7 @@ def execute(
                 {
                     key: value
                     for key, value in override_payload.items()
-                    if key
-                    in {
-                        "checkpoint_path",
-                        "epochs",
-                        "batch_size",
-                        "learning_rate",
-                        "experiment_name",
-                        "run_name",
-                        "register_model",
-                        "tags",
-                        "loss_function",
-                        "loss_module",
-                    }
+                    if key in _ALLOWED_OVERRIDE_KEYS[TrainingJobConfig]
                 }
             )
             return train(settings, training_overrides if override_payload else None, hooks=hooks)
@@ -98,15 +119,7 @@ def execute(
                 {
                     key: value
                     for key, value in override_payload.items()
-                    if key
-                    in {
-                        "experiment_name",
-                        "run_name",
-                        "tags",
-                        "sizes",
-                        "repeats",
-                        "target",
-                    }
+                    if key in _ALLOWED_OVERRIDE_KEYS[ConvergenceJobConfig]
                 }
             )
             return converge(settings, convergence_overrides if override_payload else None)

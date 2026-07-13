@@ -54,8 +54,8 @@ class _WALRegistration:
                         try:
                             dbapi_connection.execute("PRAGMA journal_mode=WAL")
                             dbapi_connection.execute("PRAGMA busy_timeout=30000")
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug("Failed to set SQLite WAL pragmas on connect: {}", e)
 
                 cls._done = True
                 logger.debug("Registered SQLite WAL mode listener for all SQLAlchemy connections")
@@ -316,8 +316,8 @@ class MLflowResourceManager:
 
         try:
             mlflow.end_run()
-        except Exception:
-            pass
+        except Exception as e:  # pragma: no cover - best-effort safety
+            logger.warning("Failed to end active MLflow run during cleanup: {}", e)
 
         for callback in reversed(self._state.cleanup_callbacks):
             try:

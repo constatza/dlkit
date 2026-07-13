@@ -23,6 +23,7 @@ resolved independently against its own dataloader with shuffling disabled
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch
 
 import torch
@@ -123,7 +124,10 @@ def test_trainer_settings_build_applies_overfit_batches_to_real_trainer():
     # No FactoryProvider mocking: exercises the real settings -> kwargs-filtering
     # -> Trainer construction path, so a signature/filtering regression would fail here.
     trainer = TrainerSettings(overfit_batches=1, max_epochs=1, accelerator="cpu").build()
-    assert trainer.overfit_batches == 1
+    # `overfit_batches` is set dynamically by Lightning's
+    # `setup._init_debugging_flags` outside `Trainer.__init__`, so it is a
+    # genuine runtime attribute invisible to static attribute inference.
+    assert cast(Any, trainer).overfit_batches == 1
 
 
 def test_overfit_batches_repeats_the_identical_sample_every_epoch(train_val_test_dataloaders):
@@ -134,12 +138,18 @@ def test_overfit_batches_repeats_the_identical_sample_every_epoch(train_val_test
     check depends on the model seeing identical inputs each pass.
     """
     train_loader, val_loader, _test_loader = train_val_test_dataloaders
-    trainer = TrainerSettings(
-        overfit_batches=1,
-        max_epochs=5,
-        accelerator="cpu",
-        enable_checkpointing=False,
-        num_sanity_val_steps=0,
+    # `num_sanity_val_steps` is not a declared TrainerSettings field - it is
+    # accepted only via the model's `extra="allow"` config and forwarded to
+    # Trainer by the factory's kwargs filtering. `model_validate` exercises
+    # that same runtime path without a statically-unknown keyword argument.
+    trainer = TrainerSettings.model_validate(
+        {
+            "overfit_batches": 1,
+            "max_epochs": 5,
+            "accelerator": "cpu",
+            "enable_checkpointing": False,
+            "num_sanity_val_steps": 0,
+        }
     ).build()
     model = _RecordingProbe()
 
@@ -163,12 +173,14 @@ def test_overfit_batches_does_not_alias_val_to_the_train_sample(train_val_test_d
     doesn't: val is truncated on its own dataloader.
     """
     train_loader, val_loader, _test_loader = train_val_test_dataloaders
-    trainer = TrainerSettings(
-        overfit_batches=1,
-        max_epochs=1,
-        accelerator="cpu",
-        enable_checkpointing=False,
-        num_sanity_val_steps=0,
+    trainer = TrainerSettings.model_validate(
+        {
+            "overfit_batches": 1,
+            "max_epochs": 1,
+            "accelerator": "cpu",
+            "enable_checkpointing": False,
+            "num_sanity_val_steps": 0,
+        }
     ).build()
     model = _RecordingProbe()
 

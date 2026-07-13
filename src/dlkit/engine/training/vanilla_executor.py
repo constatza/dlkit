@@ -56,76 +56,78 @@ class VanillaExecutor(ITrainingExecutor):
             TrainingResult with metrics and artifacts.
 
         Raises:
-            WorkflowError: If training execution fails.
+            WorkflowError: If trainer is missing, checkpoint-path resolution fails,
+                or ``trainer.fit(...)`` raises.
             TypeError: If settings is not a JobConfig instance.
         """
         if not isinstance(settings, JobConfig):
             raise TypeError(
                 f"VanillaExecutor.execute requires a JobConfig, got {type(settings).__name__}"
             )
+        # Set reproducible seed from settings
+        from lightning.pytorch import seed_everything
+
+        seed_everything(_get_seed(settings), workers=True)
+
+        trainer = components.trainer
+        model = components.model
+        datamodule = components.datamodule
+
+        if trainer is None:
+            raise WorkflowError("Trainer is required for training", {"stage": "execute"})
+
+        # Log precision information for debugging
+        precision_service = get_precision_service()
+        precision_info = precision_service.get_precision_info(None)
+        logger.debug(
+            "Training precision strategy='{}' torch_dtype='{}'",
+            precision_info.get("strategy"),
+            precision_info.get("torch_dtype"),
+        )
+
+        # Apply automatic learning rate tuning if configured
+        self._apply_lr_tuning(model, datamodule, settings)
+
+        # Determine if we should resume from checkpoint
+        ckpt_path = _resolve_checkpoint_path(settings)
+
+        # Core training execution: trainer.fit() and the immediately-following
+        # best-checkpoint reload are the same class of Lightning-internal failure
+        # surface (corrupt checkpoint file, IO errors, OOM) that callers need
+        # translated into a domain-specific WorkflowError.
         try:
-            # Set reproducible seed from settings
-            from lightning.pytorch import seed_everything
-
-            seed_everything(_get_seed(settings), workers=True)
-
-            trainer = components.trainer
-            model = components.model
-            datamodule = components.datamodule
-
-            if trainer is None:
-                raise WorkflowError("Trainer is required for training", {"stage": "execute"})
-
-            # Log precision information for debugging
-            precision_service = get_precision_service()
-            precision_info = precision_service.get_precision_info(None)
-            logger.debug(
-                "Training precision strategy='{}' torch_dtype='{}'",
-                precision_info.get("strategy"),
-                precision_info.get("torch_dtype"),
-            )
-
-            # Apply automatic learning rate tuning if configured
-            self._apply_lr_tuning(model, datamodule, settings)
-
-            # Determine if we should resume from checkpoint
-            ckpt_path = _resolve_checkpoint_path(settings)
-
-            # Core training execution
             with _suppress_training_runtime_warnings():
                 trainer.fit(model, datamodule=datamodule, ckpt_path=ckpt_path, weights_only=False)
 
+            fit_metrics = self._collect_metrics(trainer)
+
             # Reload best-checkpoint weights (no-op if no ModelCheckpoint configured)
             _reload_best_checkpoint_weights(model, trainer, datamodule)
-
-            # Optional post-training steps (best effort)
-            predictions = self._run_optional_steps(trainer, model, datamodule)
-
-            # Collect metrics and artifacts
-            metrics = self._collect_metrics(trainer)
-            artifacts = self._collect_artifacts(trainer)
-
-            return TrainingResult(
-                model_state=ModelState(
-                    model=cast(ITrainableModule, model),
-                    datamodule=cast(IDataModule, datamodule),
-                    trainer=trainer,
-                    settings=settings,
-                ),
-                metrics=metrics,
-                artifacts=artifacts,
-                duration_seconds=0.0,
-                predictions=predictions,
-            )
-
         except Exception as e:
-            import traceback
-
-            tb = traceback.format_exc()
             raise WorkflowError(
-                f"Vanilla execution failed: {e}\n{tb}",
-                {"stage": "execute", "trace": tb},
+                f"Vanilla execution failed: {e}",
+                {"stage": "fit"},
             ) from e
+
+        # Optional post-training steps (best effort)
+        predictions = self._run_optional_steps(trainer, model, datamodule)
+
+        # Collect metrics and artifacts
+        metrics = {**fit_metrics, **self._collect_metrics(trainer)}
+        artifacts = self._collect_artifacts(trainer)
+
+        return TrainingResult(
+            model_state=ModelState(
+                model=cast(ITrainableModule, model),
+                datamodule=cast(IDataModule, datamodule),
+                trainer=trainer,
+                settings=settings,
+            ),
+            metrics=metrics,
+            artifacts=artifacts,
+            duration_seconds=0.0,
+            predictions=predictions,
+        )
 
     def _apply_lr_tuning(
         self,

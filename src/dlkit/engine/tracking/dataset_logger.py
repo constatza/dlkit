@@ -99,8 +99,8 @@ class DatasetLogger:
                 if split_cfg is not None:
                     tags["split_test_ratio"] = str(split_cfg.test_ratio)
                     tags["split_val_ratio"] = str(split_cfg.val_ratio)
-            except Exception:
-                pass
+            except AttributeError as exc:
+                logger.debug("Could not read split ratios for dataset tags: {}", exc)
             dataset_type = getattr(settings.data, "family", None)
             if dataset_type:
                 tags["dataset_type"] = str(dataset_type)

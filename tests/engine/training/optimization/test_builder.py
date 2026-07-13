@@ -15,6 +15,7 @@ from dlkit.engine.training.optimization.triggers import (
     EpochTransitionTrigger,
     PlateauTransitionTrigger,
 )
+from dlkit.infrastructure.config.enums import AdjustLrFn
 from dlkit.infrastructure.config.optimization_selector import ParameterSelectorSettings
 from dlkit.infrastructure.config.optimization_stage import OptimizationStageSettings
 from dlkit.infrastructure.config.optimization_trigger import TriggerSettings
@@ -259,7 +260,7 @@ class TestOptimizerPolicyBuilder:
         settings = OptimizerPolicySettings(
             default_optimizer=ConcurrentOptimizerSettings(
                 optimizers=(
-                    MuonSettings(lr=0.02, adjust_lr_fn="match_rms_adamw"),
+                    MuonSettings(lr=0.02, adjust_lr_fn=AdjustLrFn.MATCH_RMS_ADAMW),
                     AdamWSettings(lr=1e-3, weight_decay=0.123),
                 )
             ),

@@ -13,11 +13,13 @@ Covers:
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import torch
+from lightning import Trainer
 
 from dlkit.engine.adapters.lightning.plot_callbacks import (
     LossCurvePlotCallback,
@@ -304,7 +306,7 @@ class TestLossCurvePlotCallbackFitEnd:
             mock_trainer: Minimal trainer stand-in.
             pl_module: Bare MagicMock module.
         """
-        loss_curve_callback.on_fit_end(mock_trainer, pl_module)
+        loss_curve_callback.on_fit_end(cast(Trainer, mock_trainer), pl_module)
         mock_run_context.log_artifact.assert_not_called()
 
     def test_log_artifact_called_when_losses_present(
@@ -325,12 +327,12 @@ class TestLossCurvePlotCallbackFitEnd:
             train_loss_metrics: Metrics dict with a plain float train_loss.
         """
         mock_trainer.callback_metrics = train_loss_metrics
-        loss_curve_callback.on_train_epoch_end(mock_trainer, pl_module)
+        loss_curve_callback.on_train_epoch_end(cast(Trainer, mock_trainer), pl_module)
 
         with patch(
             "dlkit.engine.adapters.lightning.plot_callbacks._plot_and_log"
         ) as mock_plot_and_log:
-            loss_curve_callback.on_fit_end(mock_trainer, pl_module)
+            loss_curve_callback.on_fit_end(cast(Trainer, mock_trainer), pl_module)
             mock_plot_and_log.assert_called_once()
 
     def test_log_artifact_called_with_tensor_loss(
@@ -351,12 +353,12 @@ class TestLossCurvePlotCallbackFitEnd:
             train_loss_tensor_metrics: Metrics dict with a tensor train_loss.
         """
         mock_trainer.callback_metrics = train_loss_tensor_metrics
-        loss_curve_callback.on_train_epoch_end(mock_trainer, pl_module)
+        loss_curve_callback.on_train_epoch_end(cast(Trainer, mock_trainer), pl_module)
 
         with patch(
             "dlkit.engine.adapters.lightning.plot_callbacks._plot_and_log"
         ) as mock_plot_and_log:
-            loss_curve_callback.on_fit_end(mock_trainer, pl_module)
+            loss_curve_callback.on_fit_end(cast(Trainer, mock_trainer), pl_module)
             mock_plot_and_log.assert_called_once()
 
 
@@ -380,7 +382,7 @@ class TestLossCurvePlotCallbackSanityCheck:
         """
         mock_trainer.callback_metrics = train_loss_metrics
         mock_trainer.sanity_checking = True
-        loss_curve_callback.on_train_epoch_end(mock_trainer, pl_module)
+        loss_curve_callback.on_train_epoch_end(cast(Trainer, mock_trainer), pl_module)
         # pylint: disable=protected-access
         assert loss_curve_callback._train_losses == []
 
@@ -400,7 +402,7 @@ class TestLossCurvePlotCallbackSanityCheck:
             train_loss_metrics: Metrics dict with a plain float train_loss.
         """
         mock_trainer.callback_metrics = train_loss_metrics
-        loss_curve_callback.on_train_epoch_end(mock_trainer, pl_module)
+        loss_curve_callback.on_train_epoch_end(cast(Trainer, mock_trainer), pl_module)
         # pylint: disable=protected-access
         assert len(loss_curve_callback._train_losses) == 1
 
@@ -421,7 +423,7 @@ class TestLossCurvePlotCallbackSanityCheck:
         """
         mock_trainer.callback_metrics = val_loss_metrics
         mock_trainer.sanity_checking = True
-        loss_curve_callback.on_validation_epoch_end(mock_trainer, pl_module)
+        loss_curve_callback.on_validation_epoch_end(cast(Trainer, mock_trainer), pl_module)
         # pylint: disable=protected-access
         assert loss_curve_callback._val_losses == []
 
@@ -441,7 +443,7 @@ class TestLossCurvePlotCallbackSanityCheck:
             val_loss_metrics: Metrics dict with a plain float val_loss.
         """
         mock_trainer.callback_metrics = val_loss_metrics
-        loss_curve_callback.on_validation_epoch_end(mock_trainer, pl_module)
+        loss_curve_callback.on_validation_epoch_end(cast(Trainer, mock_trainer), pl_module)
         # pylint: disable=protected-access
         assert len(loss_curve_callback._val_losses) == 1
 
@@ -470,7 +472,7 @@ class TestPredictionBatchEnd:
             prediction_batch_output: Valid output with predictions and targets.
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, prediction_batch_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer), pl_module, prediction_batch_output, batch=None, batch_idx=0
         )
         # pylint: disable=protected-access
         assert len(prediction_callback._pred_batches) == 1
@@ -492,7 +494,7 @@ class TestPredictionBatchEnd:
             missing_keys_output: Output dict with unrelated keys only.
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, missing_keys_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer), pl_module, missing_keys_output, batch=None, batch_idx=0
         )
         # pylint: disable=protected-access
         assert prediction_callback._pred_batches == []
@@ -512,7 +514,7 @@ class TestPredictionBatchEnd:
             pl_module: Bare MagicMock module.
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, torch.randn(4, 3), batch=None, batch_idx=0
+            cast(Trainer, mock_trainer), pl_module, torch.randn(4, 3), batch=None, batch_idx=0
         )
         # pylint: disable=protected-access
         assert prediction_callback._pred_batches == []
@@ -534,7 +536,11 @@ class TestPredictionBatchEnd:
             tensordict_targets_output: Output with 'targets' as a single-key TensorDict.
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, tensordict_targets_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer),
+            pl_module,
+            tensordict_targets_output,
+            batch=None,
+            batch_idx=0,
         )
         # pylint: disable=protected-access
         assert len(prediction_callback._pred_batches) == 1
@@ -558,7 +564,11 @@ class TestPredictionBatchEnd:
             caplog: Pytest log capture fixture.
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, multi_target_tensordict_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer),
+            pl_module,
+            multi_target_tensordict_output,
+            batch=None,
+            batch_idx=0,
         )
         # pylint: disable=protected-access
         assert prediction_callback._pred_batches == []
@@ -587,7 +597,7 @@ class TestPredictionEpochEnd:
             mock_trainer: Minimal trainer stand-in.
             pl_module: Bare MagicMock module.
         """
-        prediction_callback.on_predict_epoch_end(mock_trainer, pl_module)
+        prediction_callback.on_predict_epoch_end(cast(Trainer, mock_trainer), pl_module)
         mock_run_context.log_artifact.assert_not_called()
 
     def test_generator_called_once_per_generator(
@@ -608,12 +618,12 @@ class TestPredictionEpochEnd:
             prediction_batch_output: Valid output with predictions and targets.
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, prediction_batch_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer), pl_module, prediction_batch_output, batch=None, batch_idx=0
         )
         with patch(
             "dlkit.engine.adapters.lightning.plot_callbacks._plot_and_log"
         ) as mock_plot_and_log:
-            prediction_callback.on_predict_epoch_end(mock_trainer, pl_module)
+            prediction_callback.on_predict_epoch_end(cast(Trainer, mock_trainer), pl_module)
             fake_generator.generate.assert_called_once()
             mock_plot_and_log.assert_called_once()
 
@@ -654,12 +664,12 @@ class TestPredictionEpochEnd:
             settings=plot_settings,
         )
         cb.on_predict_batch_end(
-            mock_trainer, pl_module, prediction_batch_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer), pl_module, prediction_batch_output, batch=None, batch_idx=0
         )
         with patch(
             "dlkit.engine.adapters.lightning.plot_callbacks._plot_and_log"
         ) as mock_plot_and_log:
-            cb.on_predict_epoch_end(mock_trainer, pl_module)
+            cb.on_predict_epoch_end(cast(Trainer, mock_trainer), pl_module)
             assert mock_plot_and_log.call_count == 2
 
     def test_predictions_flattened_to_1d_before_generate(
@@ -680,10 +690,10 @@ class TestPredictionEpochEnd:
             prediction_batch_output: Valid output batch (BATCH_SIZE x NUM_OUTPUTS).
         """
         prediction_callback.on_predict_batch_end(
-            mock_trainer, pl_module, prediction_batch_output, batch=None, batch_idx=0
+            cast(Trainer, mock_trainer), pl_module, prediction_batch_output, batch=None, batch_idx=0
         )
         with patch("dlkit.engine.adapters.lightning.plot_callbacks._plot_and_log"):
-            prediction_callback.on_predict_epoch_end(mock_trainer, pl_module)
+            prediction_callback.on_predict_epoch_end(cast(Trainer, mock_trainer), pl_module)
 
         # Inspect the numpy arrays passed to generate
         args, _ = fake_generator.generate.call_args

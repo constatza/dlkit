@@ -6,6 +6,9 @@ transformations, inheritance, and normalization/regularization.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import cast
+
 import pytest
 import torch
 from torch import nn
@@ -52,8 +55,12 @@ class TestResolveHiddenSize:
 
 class TestFFNNHiddenSize:
     def test_hidden_size_is_required(self) -> None:
+        # `hidden_size` has no default (see FFNN.__init__ docstring); erase the
+        # constructor's static signature so ty doesn't flag the deliberately
+        # missing argument this test exercises at runtime.
+        ffnn_ctor = cast("Callable[..., FFNN]", FFNN)
         with pytest.raises(TypeError, match="hidden_size"):
-            FFNN(in_features=2, out_features=2, num_layers=2)  # type: ignore[call-arg]
+            ffnn_ctor(in_features=2, out_features=2, num_layers=2)
 
     def test_explicit_hidden_size_works(self, dense_input: torch.Tensor) -> None:
         m = FFNN(in_features=2, out_features=2, hidden_size=8, num_layers=2)

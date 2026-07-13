@@ -95,47 +95,6 @@ class TestImportRules:
         src_dir = project_root / "src" / "dlkit"
         return get_python_files(src_dir)
 
-    def test_no_direct_model_imports_in_tests(self, test_files: list[Path]) -> None:
-        """Ensure tests don't directly import concrete model classes.
-
-        This enforces the Dependency Inversion Principle by ensuring tests
-        depend on abstractions (protocols/factories) rather than concrete classes.
-        """
-        violations = []
-        prohibited_patterns = [
-            # Specific patterns for the old BaseModel that was removed
-            r"from dlkit\.presenter_utils\.models\.nn\.base import BaseModel",
-            r"import.*BaseModel.*from.*dlkit",
-        ]
-
-        # Allow certain legitimate imports
-        allowed_exceptions = [
-            "conftest.py",  # Test utilities and factories
-            "test_import_rules.py",  # This file needs to check patterns
-            "test_abc_shape_architecture.py",  # Tests the new architecture directly
-        ]
-
-        for file_path in test_files:
-            # Skip allowed exceptions
-            if any(exception in str(file_path) for exception in allowed_exceptions):
-                continue
-
-            try:
-                with open(file_path, encoding="utf-8") as f:
-                    content = f.read()
-
-                for pattern in prohibited_patterns:
-                    if re.search(pattern, content):
-                        violations.append(str(file_path))
-                        break
-            except OSError, UnicodeDecodeError:
-                continue
-
-        assert not violations, (
-            f"Tests should not directly import removed BaseModel class. "
-            f"Use factory patterns or protocols instead. Violations: {violations}"
-        )
-
     def test_integration_tests_use_high_level_api(self, project_root: Path) -> None:
         """Ensure integration tests use dlkit.train/infer/optimize APIs.
 
@@ -255,22 +214,24 @@ class TestImportRules:
         """Ensure domain layer doesn't depend on infrastructure concerns.
 
         This enforces the Dependency Inversion Principle by ensuring the domain
-        layer (core models, services) doesn't import infrastructure components.
+        layer (``src/dlkit/domain/``, per CLAUDE.md's package DAG) never imports
+        the orchestration frameworks that belong to the engine layer: Lightning
+        (training-loop orchestration), MLflow (experiment tracking), and Optuna
+        (hyperparameter-optimization orchestration). Plain ``torch`` is not
+        checked here: the domain layer legitimately builds ``torch.nn.Module``
+        model architectures, and CLAUDE.md's DAG rules govern dlkit's own
+        internal package dependencies, not third-party tensor libraries.
         """
         violations = []
 
-        # Define domain and infrastructure patterns
         domain_patterns = [
-            r"src/dlkit/core/",
-            r"src/dlkit/interfaces/api/domain/",
+            r"src/dlkit/domain/",
         ]
 
         infrastructure_patterns = [
-            r"import.*torch\.",
             r"import.*lightning",
             r"import.*mlflow",
             r"import.*optuna",
-            r"from.*torch\.",
             r"from.*lightning",
             r"from.*mlflow",
             r"from.*optuna",
@@ -294,42 +255,7 @@ class TestImportRules:
             except OSError, UnicodeDecodeError:
                 continue
 
-        # Allow some exceptions for necessary integrations
-        allowed_exceptions = [
-            # torch is allowed in model implementations
-            ("core/models", "torch"),
-            # torch is allowed in data modules (tensor operations)
-            ("core/datamodules", "torch"),
-            # torch is allowed in datasets (tensor creation)
-            ("core/datasets", "torch"),
-            # torch is allowed in datatypes (tensor collation and Batch handling)
-            ("core/datatypes", "torch"),
-            # torch is allowed in transforms (tensor transformations)
-            ("core/training/transforms", "torch"),
-            # lightning is allowed in domain models (Lightning integration)
-            ("interfaces/api/domain/models", "lightning"),
-            # lightning is allowed in core models (Lightning base classes)
-            ("core/models", "lightning"),
-            # lightning is allowed in shape specs (checkpoint handling)
-            ("core/shape_specs", "lightning"),
-            # mlflow is allowed in callbacks (experiment tracking)
-            ("core/training/callbacks", "mlflow"),
-            # lightning is allowed in callbacks (callback base classes)
-            ("core/training/callbacks", "lightning"),
-            # precision service can import torch for dtype handling
-            ("precision_service", "torch"),
-        ]
-
-        filtered_violations = []
-        for file_path, pattern in violations:
-            is_exception = any(
-                exception_path in file_path and exception_import in pattern
-                for exception_path, exception_import in allowed_exceptions
-            )
-            if not is_exception:
-                filtered_violations.append((file_path, pattern))
-
-        assert not filtered_violations, (
-            f"Domain layer should not depend on infrastructure concerns. "
-            f"Violations: {filtered_violations}"
+        assert not violations, (
+            f"Domain layer (src/dlkit/domain/) should not depend on orchestration "
+            f"frameworks (lightning/mlflow/optuna). Violations: {violations}"
         )

@@ -338,7 +338,7 @@ def test_se_constant_width_softplus_factorized_body_uses_softplus_layer() -> Non
     first_block = blocks[0]
     if isinstance(first_block, SkipConnection):
         first_block = cast(Any, first_block).module
-    assert isinstance(cast(Any, first_block).layer, SoftplusFactorizedLinear)
+    assert isinstance(first_block.layer, SoftplusFactorizedLinear)
 
 
 def test_se_constant_width_softplus_factorized_unit_scale_at_init() -> None:
@@ -356,7 +356,7 @@ def test_se_constant_width_softplus_factorized_unit_scale_at_init() -> None:
     for block in cast(Any, model.base_model).body.blocks:
         if isinstance(block, SkipConnection):
             block = cast(Any, block).module
-        log_scale = cast(Any, block).layer.log_scale
+        log_scale = block.layer.log_scale
         mean_scale = F.softplus(log_scale).mean().item()
         assert abs(mean_scale - 1.0) < 0.3
 
@@ -422,7 +422,7 @@ def test_se_embedded_softplus_factorized_body_uses_softplus_linear() -> None:
     first_block = cast(Any, model.base_model).body.blocks[0]
     if isinstance(first_block, SkipConnection):
         first_block = cast(Any, first_block).module
-    assert isinstance(cast(Any, first_block).layer, SoftplusFactorizedLinear)
+    assert isinstance(first_block.layer, SoftplusFactorizedLinear)
 
 
 def test_se_embedded_softplus_factorized_unit_scale_at_init() -> None:
@@ -434,7 +434,7 @@ def test_se_embedded_softplus_factorized_unit_scale_at_init() -> None:
     for block in cast(Any, model.base_model).body.blocks:
         if isinstance(block, SkipConnection):
             block = cast(Any, block).module
-        log_scale = cast(Any, block).layer.log_scale
+        log_scale = block.layer.log_scale
         mean_scale = F.softplus(log_scale).mean().item()
         assert abs(mean_scale - 1.0) < 0.3
 

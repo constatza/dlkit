@@ -14,11 +14,18 @@ import pytest
 
 from dlkit.common import TrainingResult
 from dlkit.common.hooks import ParamValue
+from dlkit.engine.tracking.interfaces import NullRunContext
 from dlkit.engine.tracking.metric_logger import MetricLogger
 
 
-class FakeRunContext:
-    """Minimal IMetricSink double capturing logged metrics/params."""
+class FakeRunContext(NullRunContext):
+    """Minimal IMetricSink double capturing logged metrics/params.
+
+    Subclasses ``NullRunContext`` to inherit safe no-op implementations of the
+    ``IRunContext``/``IMetricSink`` members that ``MetricLogger`` never calls
+    (e.g. ``set_tag``), so this double genuinely satisfies ``IMetricSink``
+    rather than only duck-typing the two methods it exercises.
+    """
 
     def __init__(self) -> None:
         self.logged_metrics: dict[str, float] = {}

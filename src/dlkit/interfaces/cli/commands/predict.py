@@ -21,6 +21,8 @@ import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+from dlkit.common import InferenceResult
+from dlkit.engine.inference import run_batched_prediction
 from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.api import build_inference_datamodule
 from dlkit.interfaces.inference import load_model_from_settings
@@ -99,50 +101,19 @@ def _run_inference_impl(
         )
         progress.remove_task(load_task)
 
-        # Build datamodule from settings, iterate batches, call predict()
+        # Build datamodule from settings, then delegate batch-iterate/predict/
+        # concatenate orchestration to the engine layer.
         inference_task = progress.add_task("Running inference...", total=None)
 
-        # Get ordered feature names for kwarg dispatch (from checkpoint metadata)
-        feature_names = predictor.feature_names
-
         datamodule = build_inference_datamodule(job) if job.data is not None else None
-        if datamodule is not None:
-            datamodule.setup("predict")
-            loader = datamodule.predict_dataloader()
-        else:
-            loader = []
-
-        import torch as _torch
-
-        all_predictions = []
-        for batch in loader:
-            features_td = batch["features"]
-            if feature_names:
-                feature_kwargs = {
-                    name: features_td[name] for name in feature_names if name in features_td.keys()
-                }
-            else:
-                # Fallback: use all feature keys from batch
-                feature_kwargs = {k: features_td[k] for k in features_td.keys()}
-
-            output = predictor.predict(**feature_kwargs)
-            prediction = output.predictions
-            if isinstance(prediction, _torch.Tensor):
-                all_predictions.append(prediction)
+        predictions = run_batched_prediction(predictor, datamodule)
 
         progress.remove_task(inference_task)
 
         # Unload predictor to free resources
         predictor.unload()
 
-    # Combine predictions from all batches (all elements are Tensors)
-    import torch
-
-    predictions = torch.cat(all_predictions, dim=0) if all_predictions else None
-
     # Create InferenceResult for presentation
-    from dlkit.common import InferenceResult
-
     result = InferenceResult(
         model_state=None, predictions=predictions, metrics=None, duration_seconds=0.0
     )

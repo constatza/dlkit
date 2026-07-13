@@ -257,6 +257,7 @@ def test_aggregate_two_sizes_marginal_gain_value(
     """
     first, second = two_point_no_target
     expected = first.val_mean - second.val_mean
+    assert second.marginal_gain is not None
     assert abs(second.marginal_gain - expected) < 1e-9
 
 
@@ -460,7 +461,9 @@ def test_build_summary_dict_points_count(
     """
     n_star = find_n_star(two_point_with_target_mixed)
     summary = build_summary_dict(two_point_with_target_mixed, n_star)
-    assert len(summary["points"]) == 2
+    points = summary["points"]
+    assert isinstance(points, list)
+    assert len(points) == 2
 
 
 def test_build_summary_dict_none_n_star() -> None:

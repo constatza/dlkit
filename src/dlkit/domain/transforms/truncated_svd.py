@@ -136,3 +136,12 @@ class TruncatedSVD(Transform):
             Output shape with last dimension = n_components.
         """
         return in_shape[:-1] + (self.n_components,)
+
+    def fit_summary(self) -> dict[str, float | int]:
+        """Return TruncatedSVD fit-quality metrics (``IReportsFitQuality`` protocol).
+
+        Returns:
+            Mapping with ``"explained energy ratio"`` -> fraction of the
+            Frobenius-norm energy captured by the retained components.
+        """
+        return {"explained energy ratio": cast(torch.Tensor, self.explained_energy_ratio).item()}

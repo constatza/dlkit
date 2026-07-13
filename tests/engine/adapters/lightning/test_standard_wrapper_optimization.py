@@ -26,6 +26,7 @@ from torch import nn
 from torch.nn import ModuleList
 from torch.utils.data import DataLoader, IterableDataset
 
+from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.standard import StandardLightningWrapper
 from dlkit.engine.adapters.lightning.wrapper_types import WrapperComponents
 from dlkit.engine.training.optimization.builder import OptimizerPolicyBuilder
@@ -551,7 +552,7 @@ class TestBothOptimizersStep:
 
         batch = _make_batch()
         opt.zero_grad()
-        loss, _, _ = wrapper._run_step(batch, 0, "train")
+        loss, _, _ = wrapper._run_step(batch, 0, MetricStage.TRAIN)
         loss.backward()
         opt.step()
 

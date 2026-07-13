@@ -7,6 +7,10 @@ from typing import Any, cast
 from rich.console import Console
 from rich.table import Table
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def as_config_dict(obj: Any) -> dict[str, Any]:
     """Serialize a settings object to a plain dict for display."""
@@ -16,17 +20,18 @@ def as_config_dict(obj: Any) -> dict[str, Any]:
             data = fn()
             if isinstance(data, dict):
                 return data
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("obj.to_dict() raised while building config display: {}", exc)
     try:
         model_dump = getattr(obj, "model_dump", None)
         if callable(model_dump):
             return cast(dict[str, Any], model_dump(exclude_none=True))
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("obj.model_dump() raised while building config display: {}", exc)
     try:
         return dict(obj)
-    except Exception:
+    except (TypeError, ValueError) as exc:
+        logger.debug("Could not coerce {} to dict for config display: {}", type(obj).__name__, exc)
         return {}
 
 

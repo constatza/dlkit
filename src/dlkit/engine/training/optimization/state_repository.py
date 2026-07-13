@@ -103,39 +103,42 @@ class OptimizationStateRepository(IOptimizationStateRepository):
 
         # Restore each stage's optimizer, scheduler, and trigger
         for i, stage in enumerate(all_stages):
-            if i < len(stages_state):
-                stage_dict_obj = stages_state[i]
-                stage_dict: dict[str, Any] = (
-                    cast(dict[str, Any], stage_dict_obj) if isinstance(stage_dict_obj, dict) else {}
-                )
+            if i >= len(stages_state):
+                continue
 
-                # Restore optimizer state
-                if "optimizer_state" in stage_dict:
-                    optimizer_state = cast(dict[str, Any], stage_dict["optimizer_state"])
-                    if optimizer_state is not None and isinstance(optimizer_state, dict):
-                        stage.optimizer.load_state_dict(optimizer_state)
-
-                # Restore scheduler state if present
-                if (
-                    stage.scheduler is not None
-                    and hasattr(stage.scheduler, "load_state_dict")
-                    and "scheduler_state" in stage_dict
-                    and stage_dict["scheduler_state"] is not None
-                ):
-                    scheduler_state = cast(dict[str, Any], stage_dict["scheduler_state"])
-                    if isinstance(scheduler_state, dict):
-                        load_method = getattr(stage.scheduler, "load_state_dict", None)
-                        if callable(load_method):
-                            load_method(scheduler_state)
-
-                # Restore trigger state
-                if "trigger_state" in stage_dict:
-                    trigger_state = cast(dict[str, Any], stage_dict["trigger_state"])
-                    if isinstance(trigger_state, dict):
-                        stage.trigger.load_state_dict(trigger_state)
+            stage_dict_obj = stages_state[i]
+            stage_dict: dict[str, Any] = (
+                cast(dict[str, Any], stage_dict_obj) if isinstance(stage_dict_obj, dict) else {}
+            )
+            self._restore_stage(stage, stage_dict)
 
         # Restore active_index
         if "active_index" in state:
             active_idx = state["active_index"]
             if isinstance(active_idx, int):
                 program.active_index = active_idx
+
+    @staticmethod
+    def _restore_stage(stage: ActiveStage, stage_dict: dict[str, Any]) -> None:
+        """Restore a single stage's optimizer, scheduler, and trigger state.
+
+        Args:
+            stage: The active stage to restore into (modified in-place).
+            stage_dict: State dict for this stage, as produced by save().
+        """
+        optimizer_state = stage_dict.get("optimizer_state")
+        if isinstance(optimizer_state, dict):
+            stage.optimizer.load_state_dict(cast(dict[str, Any], optimizer_state))
+
+        scheduler_state = stage_dict.get("scheduler_state")
+        load_method = getattr(stage.scheduler, "load_state_dict", None)
+        if (
+            stage.scheduler is not None
+            and callable(load_method)
+            and isinstance(scheduler_state, dict)
+        ):
+            load_method(cast(dict[str, Any], scheduler_state))
+
+        trigger_state = stage_dict.get("trigger_state")
+        if isinstance(trigger_state, dict):
+            stage.trigger.load_state_dict(cast(dict[str, Any], trigger_state))

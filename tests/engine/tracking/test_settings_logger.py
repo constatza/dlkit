@@ -9,18 +9,27 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from lightning.pytorch import LightningModule
 
 from dlkit.common.hooks import ParamValue
+from dlkit.engine.tracking.interfaces import NullRunContext
 from dlkit.engine.tracking.settings_logger import SettingsLogger
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.config.model_components import ModelComponentSettings
 from dlkit.infrastructure.config.run_settings import RunSettings
 
 
-class FakeRunContext:
-    """Minimal IRunContext double capturing logged params."""
+class FakeRunContext(NullRunContext):
+    """Minimal IRunContext double capturing logged params.
+
+    Subclasses ``NullRunContext`` to inherit safe no-op implementations of the
+    ``IRunContext`` members ``SettingsLogger`` never calls, so this double
+    genuinely satisfies ``IRunContext`` rather than only duck-typing
+    ``log_params``.
+    """
 
     def __init__(self) -> None:
         self.logged_params: dict[str, ParamValue] = {}
@@ -56,7 +65,7 @@ class TestLogModelParameters:
         self, logger: SettingsLogger, run_context: FakeRunContext, settings_with_model: JobConfig
     ) -> None:
         model = SimpleNamespace(hparams={"activation": "gelu", "num_layers": 2})
-        logger.log_model_parameters(model, run_context, settings_with_model)
+        logger.log_model_parameters(cast(LightningModule, model), run_context, settings_with_model)
         assert run_context.logged_params == {"activation": "gelu", "num_layers": 2}
         assert run_context.call_count == 1
 
@@ -64,14 +73,16 @@ class TestLogModelParameters:
         self, logger: SettingsLogger, run_context: FakeRunContext, settings_without_model: JobConfig
     ) -> None:
         model = SimpleNamespace(hparams={"activation": "gelu"})
-        logger.log_model_parameters(model, run_context, settings_without_model)
+        logger.log_model_parameters(
+            cast(LightningModule, model), run_context, settings_without_model
+        )
         assert run_context.call_count == 0
 
     def test_skips_when_hparams_empty(
         self, logger: SettingsLogger, run_context: FakeRunContext, settings_with_model: JobConfig
     ) -> None:
         model = SimpleNamespace(hparams={})
-        logger.log_model_parameters(model, run_context, settings_with_model)
+        logger.log_model_parameters(cast(LightningModule, model), run_context, settings_with_model)
         assert run_context.call_count == 0
 
     def test_wraps_failures_in_runtime_error(
@@ -83,4 +94,6 @@ class TestLogModelParameters:
                 raise ValueError("boom")
 
         with pytest.raises(RuntimeError, match="Couldn't log model parameters"):
-            logger.log_model_parameters(BoomModel(), run_context, settings_with_model)
+            logger.log_model_parameters(
+                cast(LightningModule, BoomModel()), run_context, settings_with_model
+            )

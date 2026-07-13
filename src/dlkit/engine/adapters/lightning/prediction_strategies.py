@@ -14,6 +14,9 @@ from tensordict import TensorDict
 from torch import Tensor, nn
 
 from dlkit.engine.adapters.lightning.base import _batch_size_of, _leaf_device, _leaf_dtype
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from dlkit.engine.adapters.lightning.protocols import IBatchTransformer, IModelInvoker
@@ -180,8 +183,12 @@ class ODEPredictionStrategy:
         first_tensor: Tensor | None = None
         try:
             first_tensor = next(iter(features.values()))
-        except StopIteration, AttributeError:
-            pass
+        except (StopIteration, AttributeError) as exc:
+            logger.debug(
+                "Could not infer size/device/dtype from batch features, falling back "
+                "to batch_size/cpu/float32: {}",
+                exc,
+            )
 
         if first_tensor is not None:
             n = first_tensor.shape[0]
@@ -206,7 +213,7 @@ class ODEPredictionStrategy:
         # Clone targets for output alignment
         try:
             targets = batch["targets"].clone()
-        except Exception:
+        except KeyError:
             targets = TensorDict({}, batch_size=[n])
 
         latents = torch.zeros(n, 0, dtype=dtype, device=device)

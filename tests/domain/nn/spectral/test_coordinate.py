@@ -255,7 +255,7 @@ class TestModifiedMLP:
             net.encoder_u,
             net.encoder_v,
             net.input_layer,
-            *net.hidden_layers,
+            *(cast("torch.nn.Linear", hidden) for hidden in net.hidden_layers),
             net.output_layer,
         ):
             bound = math.sqrt(6.0 / (layer.in_features + layer.out_features))

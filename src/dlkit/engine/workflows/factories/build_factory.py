@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dlkit.engine.adapters.lightning.factories import WrapperFactory
+from dlkit.engine.adapters.lightning.model_detection import ModelType, detect_model_type
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.config.validators import validate_config_complete
@@ -16,7 +17,6 @@ from .build_strategy import (
 )
 from .flexible_build_strategy import FlexibleBuildStrategy
 from .generative_build_strategies import FlowMatchingBuildStrategy
-from .model_detection import ModelType, detect_model_type
 
 
 def _get_seed(settings: WorkflowSettings) -> int:

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock
 
 import mlflow
+import mlflow.tracking.fluent
 import pytest
 
 import dlkit.engine.tracking.uri_resolver as uri_resolver

@@ -62,8 +62,10 @@ class LRTuner:
         # Import torch.serialization for safe globals registration
         import torch.serialization
 
+        from dlkit.infrastructure.config.safe_globals import dlkit_safe_globals
+
         # Collect all dlkit config classes that might be in checkpoints
-        safe_classes = self._get_safe_globals()
+        safe_classes = dlkit_safe_globals()
 
         if datamodule is not None:
             # Trainer.datamodule is a mutable attribute; cast to Any to satisfy ty stubs
@@ -143,66 +145,3 @@ class LRTuner:
         # Lightning Trainer.callbacks is always a plain mutable list attribute;
         # cast to Any to satisfy ty (Trainer stub does not declare callbacks).
         cast(Any, trainer).callbacks = list(original_callbacks)
-
-    def _get_safe_globals(self) -> list[type[object]]:
-        """Get list of dlkit classes to register as safe globals for checkpoint loading.
-
-        Returns:
-            list[type]: List of classes that should be allowed in checkpoint loading
-        """
-        from dlkit.infrastructure.config.core.base_settings import BasicSettings
-        from dlkit.infrastructure.config.data_settings import DataModuleSelector, DataSettings
-        from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-        from dlkit.infrastructure.config.job_config import (
-            InferenceJobConfig,
-            JobConfig,
-            SearchJobConfig,
-            TrainingJobConfig,
-        )
-        from dlkit.infrastructure.config.lr_tuner_settings import LRTunerSettings
-        from dlkit.infrastructure.config.model_components import (
-            LossComponentSettings,
-            MetricComponentSettings,
-            ModelComponentSettings,
-            WrapperComponentSettings,
-        )
-        from dlkit.infrastructure.config.optimizer_settings import (
-            OptimizerSettings,
-            SchedulerSettings,
-        )
-        from dlkit.infrastructure.config.paths_settings import PathsSettings
-        from dlkit.infrastructure.config.run_settings import RunSettings
-        from dlkit.infrastructure.config.split_settings import IndexSplitSettings
-        from dlkit.infrastructure.config.tracking_settings import TrackingSettings
-        from dlkit.infrastructure.config.training_settings import StoppingSettings, TrainingSettings
-
-        return [
-            # Base settings
-            BasicSettings,
-            TrainingSettings,
-            StoppingSettings,
-            PathsSettings,
-            RunSettings,
-            # JobConfig classes
-            JobConfig,
-            TrainingJobConfig,
-            InferenceJobConfig,
-            SearchJobConfig,
-            # Model settings
-            ModelComponentSettings,
-            WrapperComponentSettings,
-            MetricComponentSettings,
-            LossComponentSettings,
-            # Training settings
-            OptimizerSettings,
-            SchedulerSettings,
-            # Data settings
-            DataSettings,
-            DataModuleSelector,
-            IndexSplitSettings,
-            DataloaderSettings,
-            # Tracking
-            TrackingSettings,
-            # Other settings
-            LRTunerSettings,
-        ]

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from dlkit.engine.data.families import resolve_family, resolve_family_from_dataset
+from dlkit.engine.data.families import resolve_family
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
 
@@ -51,26 +50,6 @@ class DatasetFamilySelector:
         """
         family = resolve_family(settings)
         return DatasetFamilySelector.default_wrapper_class_for_family(family)
-
-    @staticmethod
-    def resolve_family_from_dataset(dataset: object) -> DatasetFamily:
-        """Resolve dataset family from a constructed dataset instance.
-
-        Prefers instance-based detection over settings hints.
-        """
-        return resolve_family_from_dataset(cast(Sequence[object], dataset))
-
-    @staticmethod
-    def resolve_family(settings: JobConfig) -> DatasetFamily:
-        """Resolve dataset family from settings.
-
-        Args:
-            settings: Workflow configuration settings.
-
-        Returns:
-            Detected DatasetFamily enum value.
-        """
-        return resolve_family(settings)
 
     @staticmethod
     def default_datamodule_class_for_family(family: DatasetFamily) -> type[LightningDataModule]:

@@ -15,6 +15,7 @@ import torch
 from tensordict import TensorDict
 
 from dlkit.common.errors import WorkflowError
+from dlkit.engine.adapters.lightning.base import _unpack_model_output
 from dlkit.infrastructure.precision import (
     PrecisionService,
     get_precision_service,
@@ -281,34 +282,7 @@ class CheckpointPredictor(IPredictor):
             with torch.no_grad():
                 raw_output = self._model_state.model(*args, **kwargs)
 
-            if isinstance(raw_output, list):
-                raise TypeError(
-                    "forward() returned a list. Use a tuple or a TensorDict with a "
-                    "'predictions' key for direct inference outputs."
-                )
-            if isinstance(raw_output, tuple):
-                match len(raw_output):
-                    case 0:
-                        raise ValueError("forward() returned an empty tuple")
-                    case 1:
-                        predictions_raw = raw_output[0]
-                        latents_raw = None
-                    case 2:
-                        predictions_raw = raw_output[0]
-                        latents_raw = raw_output[1]
-                    case _:
-                        predictions_raw = raw_output[0]
-                        latents_raw = raw_output[1:]
-            elif isinstance(raw_output, (dict, TensorDict)) and "predictions" in raw_output:
-                predictions_raw = raw_output["predictions"]
-                latents_raw = (
-                    raw_output.get("latents", None)
-                    if isinstance(raw_output, TensorDict)
-                    else raw_output.get("latents")
-                )
-            else:
-                predictions_raw = raw_output
-                latents_raw = None
+            predictions_raw, latents_raw = _unpack_model_output(raw_output)
 
             if self._config.apply_transforms:
                 predictions_raw = self._apply_output_inverse_transform(predictions_raw)

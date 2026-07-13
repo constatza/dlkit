@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class NotStackableError(Exception):
     """Raised when dense batches cannot be stacked in strict mode."""
@@ -19,14 +23,9 @@ class NotStackableError(Exception):
 def is_graph_output(obj: Any) -> bool:
     """Heuristically detect whether an object represents a graph prediction."""
 
-    try:
-        if isinstance(obj, dict) and "edge_index" in obj:
-            return True
-        if hasattr(obj, "edge_index"):
-            return True
-    except Exception:
-        return False
-    return False
+    if isinstance(obj, dict) and "edge_index" in obj:
+        return True
+    return hasattr(obj, "edge_index")
 
 
 def summarize(obj: Any) -> dict[str, Any]:
@@ -63,8 +62,8 @@ def summarize(obj: Any) -> dict[str, Any]:
                     summary["shape"] = tuple(first.shape)
                 elif isinstance(first, dict):
                     summary["keys"] = list(first.keys())
-            except Exception:
-                pass
+            except ImportError as e:
+                logger.debug("torch unavailable, skipping shape/keys summary: {}", e)
         return summary
 
     if is_graph_output(obj):
@@ -83,8 +82,8 @@ def summarize(obj: Any) -> dict[str, Any]:
         if isinstance(obj, torch.Tensor):
             summary["shape"] = tuple(obj.shape)
             summary["dtype"] = str(obj.dtype)
-    except Exception:
-        pass
+    except ImportError as e:
+        logger.debug("torch unavailable, skipping tensor summary: {}", e)
     return summary
 
 
@@ -98,7 +97,8 @@ def _graph_sizes(obj: Any) -> tuple[int | None, int | None]:
             edge_index = obj.get("edge_index")
             try:
                 num_edges = int(edge_index.shape[1])
-            except Exception:
+            except (AttributeError, IndexError, TypeError) as e:
+                logger.debug("Could not derive edge count from 'edge_index': {}", e)
                 num_edges = None
             return num_nodes, num_edges
 
@@ -115,5 +115,6 @@ def _graph_sizes(obj: Any) -> tuple[int | None, int | None]:
         else:
             num_edges = None
         return num_nodes, num_edges
-    except Exception:
+    except (AttributeError, IndexError, TypeError, ValueError) as e:
+        logger.debug("Could not derive graph sizes from object: {}", e)
         return None, None

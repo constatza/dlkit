@@ -156,6 +156,31 @@ class ShapeInferringTransform(Protocol):
 
 
 @runtime_checkable
+class IReportsFitQuality(Protocol):
+    """Protocol for transforms that expose fit-quality metrics after fitting.
+
+    Dimensionality-reduction transforms (PCA, ICA, TruncatedSVD, ...) each
+    surface a different fit-quality signal (explained variance, explained
+    energy, solver iteration count). Implementing ``fit_summary()`` lets
+    callers log whatever metrics are relevant without probing for
+    transform-specific attribute names.
+
+    Example:
+        >>> class MyReducer(Transform):
+        ...     def fit_summary(self) -> dict[str, float | int]:
+        ...         return {"explained variance ratio": self.total_explained_variance.item()}
+    """
+
+    def fit_summary(self) -> dict[str, float | int]:
+        """Return fit-quality metrics to log after fitting completes.
+
+        Returns:
+            Mapping of human-readable metric label to its scalar value.
+        """
+        ...
+
+
+@runtime_checkable
 class ShapeAwareTransform(Protocol):
     """Protocol for transforms that benefit from shape information.
 

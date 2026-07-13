@@ -15,8 +15,8 @@ from torch import Tensor, nn
 
 from dlkit.domain.transforms.base import (
     FittableTransform,
-    IncrementalFittableTransform,
     InvertibleTransform,
+    IReportsFitQuality,
 )
 from dlkit.domain.transforms.chain import TransformChain
 
@@ -37,23 +37,14 @@ class _FittableFromDataloader(Protocol):
 def _log_fit_summary(chain: nn.Module) -> None:
     """Log fit quality metrics exposed by dimensionality-reduction transforms."""
     for transform in chain.modules():
+        if not isinstance(transform, IReportsFitQuality):
+            continue
         cls = transform.__class__.__name__
-        if hasattr(transform, "total_explained_variance"):
-            val = transform.total_explained_variance
-            if isinstance(val, torch.Tensor) and val.numel() == 1:
-                logger.info("  {} explained variance ratio: {:.4e}", cls, val.item())
-        if hasattr(transform, "_total_explained_variance_ratio"):
-            logger.info(
-                "  {} explained variance ratio: {:.4e}",
-                cls,
-                transform._total_explained_variance_ratio,
-            )
-        if hasattr(transform, "explained_energy_ratio"):
-            val = transform.explained_energy_ratio
-            if isinstance(val, torch.Tensor) and val.numel() > 0:
-                logger.info("  {} explained energy ratio: {:.4e}", cls, val.sum().item())
-        if hasattr(transform, "n_iter_"):
-            logger.info("  {} converged in {} iterations", cls, transform.n_iter_)
+        for label, value in transform.fit_summary().items():
+            if isinstance(value, float):
+                logger.info("  {} {}: {:.4e}", cls, label, value)
+            else:
+                logger.info("  {} {}: {}", cls, label, value)
 
 
 def build_batch_transformer(
@@ -247,21 +238,6 @@ class NamedBatchTransformer(nn.Module):
                         dataloader,
                         lambda batch, ns=namespace, key=entry_name: cast(Tensor, batch[ns, key]),
                     )
-                    _log_fit_summary(chain)
-                    continue
-
-                if isinstance(chain, IncrementalFittableTransform):
-                    seen = False
-                    chain.reset_fit_state()
-                    for batch in dataloader:
-                        chain.update_fit(batch[namespace, entry_name])
-                        seen = True
-                    if not seen:
-                        raise ValueError("Cannot fit transforms on an empty dataloader.")
-                    # ponytail: per-rank local fit; DDP all-reduce of accumulated
-                    # stats would insert here (between update_fit and finalize_fit)
-                    # if/when distributed training is added — see finalize_fit().
-                    chain.finalize_fit()
                     _log_fit_summary(chain)
                     continue
 

@@ -49,6 +49,8 @@ import torch
 from torch import Tensor
 from torch.optim import Muon
 
+from dlkit.infrastructure.config.enums import AdjustLrFn
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -145,7 +147,8 @@ class BatchedMuon(Muon):
         ns_coefficients: Newton-Schulz quintic polynomial coefficients ``(a, b, c)``.
         eps: Spectral-norm floor for numerical stability.
         ns_steps: Number of Newton-Schulz iterations.
-        adjust_lr_fn: LR shape adjustment (``"original"`` or ``"match_rms_adamw"``).
+        adjust_lr_fn: LR shape adjustment (``AdjustLrFn.ORIGINAL`` or
+            ``AdjustLrFn.MATCH_RMS_ADAMW``).
     """
 
     @torch.no_grad()
@@ -179,7 +182,7 @@ class BatchedMuon(Muon):
             ns_coeff: tuple[float, float, float] = group["ns_coefficients"]
             eps: float = group["eps"]
             ns_steps: int = group["ns_steps"]
-            adjust_lr_fn: str | None = group["adjust_lr_fn"]
+            adjust_lr_fn: AdjustLrFn | None = group["adjust_lr_fn"]
 
             updates: list[Tensor] = []
             for g, buf in zip(grads, bufs, strict=True):
@@ -190,12 +193,13 @@ class BatchedMuon(Muon):
 
             for param, o in zip(params_with_grad, ortho, strict=True):
                 A, B = param.shape[:2]
-                if adjust_lr_fn is None or adjust_lr_fn == "original":
-                    adj_lr = lr * math.sqrt(max(1, A / B))
-                elif adjust_lr_fn == "match_rms_adamw":
-                    adj_lr = lr * 0.2 * math.sqrt(max(A, B))
-                else:
-                    adj_lr = lr
+                match adjust_lr_fn:
+                    case None | AdjustLrFn.ORIGINAL:
+                        adj_lr = lr * math.sqrt(max(1, A / B))
+                    case AdjustLrFn.MATCH_RMS_ADAMW:
+                        adj_lr = lr * 0.2 * math.sqrt(max(A, B))
+                    case _:
+                        raise ValueError(f"Unsupported adjust_lr_fn: {adjust_lr_fn!r}")
                 param.mul_(1 - lr * wd)
                 param.add_(o.to(param.dtype), alpha=-adj_lr)
 

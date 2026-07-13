@@ -8,6 +8,10 @@ source (our own training code), we disable weights_only for trusted checkpoints.
 import os
 from typing import Any, cast
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def configure_checkpoint_loading() -> None:
     """Configure PyTorch to allow loading DLKit checkpoints with Pydantic settings.
@@ -46,51 +50,11 @@ def register_dlkit_safe_globals() -> None:
     try:
         import torch.serialization
 
-        # Import all settings classes that may be pickled in checkpoints
-        from dlkit.infrastructure.config.core.base_settings import (
-            BasicSettings,
-            ComponentSettings,
-            HyperParameterSettings,
-        )
-        from dlkit.infrastructure.config.data_entries import (
-            AutoencoderTarget,
-            Latent,
-            Prediction,
-        )
-        from dlkit.infrastructure.config.model_components import (
-            LossComponentSettings,
-            MetricComponentSettings,
-            ModelComponentSettings,
-            WrapperComponentSettings,
-        )
-        from dlkit.infrastructure.config.optimizer_settings import (
-            OptimizerSettings,
-            SchedulerSettings,
-        )
+        from dlkit.infrastructure.config.safe_globals import dlkit_safe_globals
 
-        # Collect all classes to register
-        safe_classes: list[type[Any]] = [
-            # Base settings classes
-            BasicSettings,
-            ComponentSettings,
-            HyperParameterSettings,
-            # Component settings
-            WrapperComponentSettings,
-            ModelComponentSettings,
-            LossComponentSettings,
-            MetricComponentSettings,
-            OptimizerSettings,
-            SchedulerSettings,
-            # Data entry classes
-            Latent,
-            AutoencoderTarget,
-            Prediction,
-        ]
+        torch.serialization.add_safe_globals(cast(Any, dlkit_safe_globals()))
 
-        # Register all classes as safe for unpickling
-        torch.serialization.add_safe_globals(cast(Any, safe_classes))
-
-    except ImportError, AttributeError:
+    except (ImportError, AttributeError) as exc:
         # Older PyTorch versions don't have add_safe_globals - safe to ignore
         # or torch not installed yet
-        pass
+        logger.debug("Could not register DLKit safe globals for checkpoint loading: {}", exc)

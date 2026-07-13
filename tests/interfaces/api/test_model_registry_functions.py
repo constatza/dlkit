@@ -34,7 +34,7 @@ def test_build_registered_model_uri_rejects_version_and_alias_together() -> None
         build_registered_model_uri("MyModel", version=1, alias="candidate")
 
 
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_search_registered_models_uses_name_filter(mock_client_cls: Mock) -> None:
     mock_client = Mock()
     mock_client.search_registered_models.return_value = ["model-a"]
@@ -46,7 +46,7 @@ def test_search_registered_models_uses_name_filter(mock_client_cls: Mock) -> Non
     mock_client.search_registered_models.assert_called_once_with(filter_string="name = 'ModelA'")
 
 
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_list_model_versions_sorts_versions(mock_client_cls: Mock) -> None:
     mock_client = Mock()
     mock_client.search_model_versions.return_value = [
@@ -61,7 +61,7 @@ def test_list_model_versions_sorts_versions(mock_client_cls: Mock) -> None:
     assert versions == [1, 3, 5]
 
 
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_get_model_version_delegates_to_client(mock_client_cls: Mock) -> None:
     mock_client = Mock()
     expected = Mock(version="2")
@@ -75,7 +75,7 @@ def test_get_model_version_delegates_to_client(mock_client_cls: Mock) -> None:
 
 
 @patch("mlflow.register_model")
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_register_logged_model_creates_version(
     mock_client_cls: Mock,
     mock_register_model: Mock,
@@ -94,7 +94,7 @@ def test_register_logged_model_creates_version(
 
 
 @patch("mlflow.register_model")
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_register_logged_model_falls_back_to_run_artifact_uri(
     mock_client_cls: Mock,
     mock_register_model: Mock,
@@ -114,7 +114,7 @@ def test_register_logged_model_falls_back_to_run_artifact_uri(
     )
 
 
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_set_registered_model_alias_delegates_to_client(mock_client_cls: Mock) -> None:
     mock_client = Mock()
     mock_client_cls.return_value = mock_client
@@ -128,7 +128,7 @@ def test_set_registered_model_alias_delegates_to_client(mock_client_cls: Mock) -
     )
 
 
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_set_registered_model_version_tag_delegates_to_client(mock_client_cls: Mock) -> None:
     mock_client = Mock()
     mock_client_cls.return_value = mock_client
@@ -143,7 +143,7 @@ def test_set_registered_model_version_tag_delegates_to_client(mock_client_cls: M
     )
 
 
-@patch("mlflow.tracking.MlflowClient")
+@patch("dlkit.engine.tracking.mlflow_client_factory.MlflowClient")
 def test_set_registered_model_version_tags_sets_all(mock_client_cls: Mock) -> None:
     mock_client = Mock()
     mock_client_cls.return_value = mock_client

@@ -156,8 +156,8 @@ def validate_checkpoint(checkpoint_path: Path | str) -> CheckpointValidationResu
         try:
             extract_model_settings(checkpoint)
             has_model_settings = True
-        except WorkflowError:
-            pass
+        except WorkflowError as exc:
+            logger.debug("Checkpoint has no recoverable model settings: {}", exc)
         has_shape_metadata = bool(
             "dlkit_metadata" in checkpoint and checkpoint["dlkit_metadata"].get("input_shapes")
         )

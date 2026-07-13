@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
+import pydantic
+import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -21,6 +23,56 @@ from dlkit.interfaces.cli.middleware.error_handler import (
     handle_keyboard_interrupt,
     handle_unexpected_error,
 )
+
+
+class _RequiredFieldModel(pydantic.BaseModel):
+    """Minimal model used to produce a real 'missing field' ValidationError."""
+
+    name: str
+    count: int
+
+
+class _CustomValidatedModel(pydantic.BaseModel):
+    """Minimal model whose validator raises ValueError, producing a 'value_error' type."""
+
+    name: str
+
+    @pydantic.field_validator("name")
+    @classmethod
+    def _reject_bad_name(cls, value: str) -> str:
+        if value == "bad":
+            raise ValueError("name must not be 'bad'")
+        return value
+
+
+@pytest.fixture
+def missing_field_validation_error() -> pydantic.ValidationError:
+    """A real pydantic ValidationError produced by a missing required field."""
+    try:
+        _RequiredFieldModel(count=1)  # ty: ignore[missing-argument]
+    except pydantic.ValidationError as exc:
+        return exc
+    raise AssertionError("Expected a pydantic.ValidationError")
+
+
+@pytest.fixture
+def invalid_type_validation_error() -> pydantic.ValidationError:
+    """A real pydantic ValidationError produced by a field of the wrong type."""
+    try:
+        _RequiredFieldModel(name="ok", count="not-an-int")  # ty: ignore[invalid-argument-type]
+    except pydantic.ValidationError as exc:
+        return exc
+    raise AssertionError("Expected a pydantic.ValidationError")
+
+
+@pytest.fixture
+def custom_value_validation_error() -> pydantic.ValidationError:
+    """A real pydantic ValidationError produced by a custom field validator."""
+    try:
+        _CustomValidatedModel(name="bad")
+    except pydantic.ValidationError as exc:
+        return exc
+    raise AssertionError("Expected a pydantic.ValidationError")
 
 
 class TestHandleApiError:
@@ -180,30 +232,27 @@ class TestFormatValidationError:
 
         assert formatted == "Simple error message"
 
-    def test_format_validation_error_with_field_required(self) -> None:
-        """Test formatting validation error with field required."""
-        error_msg = "1 validation error\nfield required (type=value_error.missing)"
-        error = ValueError(error_msg)
-
-        formatted = format_validation_error(error)
+    def test_format_validation_error_with_field_required(
+        self, missing_field_validation_error: pydantic.ValidationError
+    ) -> None:
+        """Test formatting a real pydantic 'missing field' validation error."""
+        formatted = format_validation_error(missing_field_validation_error)
 
         assert "Required field is missing" in formatted
 
-    def test_format_validation_error_with_type_error(self) -> None:
-        """Test formatting validation error with type error."""
-        error_msg = "1 validation error\nvalue is not a valid integer (type=type_error.integer)"
-        error = ValueError(error_msg)
-
-        formatted = format_validation_error(error)
+    def test_format_validation_error_with_type_error(
+        self, invalid_type_validation_error: pydantic.ValidationError
+    ) -> None:
+        """Test formatting a real pydantic 'wrong type' validation error."""
+        formatted = format_validation_error(invalid_type_validation_error)
 
         assert "Invalid dataflow type" in formatted
 
-    def test_format_validation_error_with_value_error(self) -> None:
-        """Test formatting validation error with value error."""
-        error_msg = "1 validation error\nensure this value is greater than 0 (type=value_error.number.not_gt)"
-        error = ValueError(error_msg)
-
-        formatted = format_validation_error(error)
+    def test_format_validation_error_with_value_error(
+        self, custom_value_validation_error: pydantic.ValidationError
+    ) -> None:
+        """Test formatting a real pydantic 'value_error' validation error."""
+        formatted = format_validation_error(custom_value_validation_error)
 
         assert "Invalid value" in formatted
 

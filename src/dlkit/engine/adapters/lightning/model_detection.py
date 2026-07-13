@@ -1,7 +1,9 @@
-"""ABC-based model detection for SOLID compliance.
+"""Model-family detection helpers used during assembly.
 
-This module provides a clean, extensible model detection system that
-replaces the hardcoded isinstance checks with ABC-based classification.
+ABC-based model detection for SOLID compliance: replaces hardcoded
+isinstance checks with an extensible detector chain. Lives in the engine
+layer (not domain) because classification depends on ``lightning.pytorch``,
+which the domain layer must not import.
 """
 
 from __future__ import annotations
@@ -9,10 +11,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
-from importlib import import_module
 from typing import Any
 
 import torch.nn as nn
+
+from dlkit.infrastructure.utils.general import import_object
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class ModelType(Enum):
@@ -87,8 +93,8 @@ class ABCModelTypeDetector(IModelTypeDetector):
             if issubclass(model_cls, nn.Module):
                 return ModelType.SHAPE_AWARE_DLKIT
 
-        except ImportError:
-            pass
+        except ImportError as exc:
+            logger.debug("Model type detection could not import a classifier base: {}", exc)
 
         return ModelType.SHAPE_AGNOSTIC_EXTERNAL
 
@@ -101,45 +107,23 @@ class ABCModelTypeDetector(IModelTypeDetector):
         Returns:
             Model class if available, None otherwise
         """
-        try:
-            model_name = getattr(model_settings, "name", None)
-            if model_name is None:
+        model_name = getattr(model_settings, "name", None)
+        if model_name is None:
+            return None
+
+        if isinstance(model_name, type):
+            return model_name
+
+        if isinstance(model_name, str):
+            try:
+                return import_object(
+                    model_name, fallback_module=getattr(model_settings, "module_path", "")
+                )
+            except (ImportError, AttributeError) as exc:
+                logger.debug("Could not import model class '{}': {}", model_name, exc)
                 return None
 
-            if isinstance(model_name, type):
-                return model_name
-
-            if isinstance(model_name, str):
-                try:
-                    return _import_object(
-                        model_name, fallback_module=getattr(model_settings, "module_path", "")
-                    )
-                except Exception:
-                    return None
-
-        except Exception:
-            pass
-
         return None
-
-
-def _import_object(module_path: str, fallback_module: str = "") -> Callable[..., object]:
-    """Import an object by ``module:attr`` or ``attr`` with a fallback module."""
-    module_name, object_name = _split_module_path(module_path)
-    resolved_module = module_name if module_name is not None else fallback_module
-    module = import_module(resolved_module)
-    obj = getattr(module, object_name)
-    if obj is None:
-        raise ImportError(f"Could not find {object_name} in {module_path}")
-    return obj
-
-
-def _split_module_path(path: str) -> tuple[str | None, str]:
-    """Split ``module:attr`` notation into module and object parts."""
-    if ":" not in path:
-        return None, path
-    module_name, object_name = path.split(":", 1)
-    return module_name, object_name
 
 
 class ModelTypeDetectionChain:

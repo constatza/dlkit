@@ -209,3 +209,14 @@ class PCA(Transform):
             Output shape with last dimension = n_components.
         """
         return in_shape[:-1] + (self.n_components,)
+
+    def fit_summary(self) -> dict[str, float | int]:
+        """Return PCA fit-quality metrics (``IReportsFitQuality`` protocol).
+
+        Returns:
+            Mapping with ``"explained variance ratio"`` -> total explained
+            variance ratio across all retained components.
+        """
+        return {
+            "explained variance ratio": cast(torch.Tensor, self.total_explained_variance).item()
+        }

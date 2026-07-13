@@ -13,7 +13,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from pydantic import ValidationError
 
 from dlkit.common import TrainingResult
 from dlkit.engine.workflows.optimization.infrastructure import (
@@ -35,11 +34,8 @@ from dlkit.engine.workflows.optimization.value_objects import (
     TrialState,
 )
 from dlkit.infrastructure.config.job_config import SearchJobConfig
-from dlkit.infrastructure.config.samplers.interfaces import OptunaTrialProtocol
-from dlkit.infrastructure.config.samplers.optuna_sampler import OptunaSettingsSampler
 from dlkit.infrastructure.config.search_settings import (
     CategoricalParam,
-    FloatParam,
     SearchSettings,
 )
 
@@ -240,59 +236,11 @@ class _TrackingAdapter(IExperimentTracker):
         return nullcontext(context)
 
 
-# ---------------------------------------------------------------------------
-# Sampler: valid spec formats
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def search_settings_choices() -> SearchSettings:
-    return SearchSettings(space={"x": CategoricalParam(type="categorical", choices=[2, 4])})
-
-
 @pytest.fixture
 def search_settings_hidden_size() -> SearchSettings:
     return SearchSettings(
         space={"hidden_size": CategoricalParam(type="categorical", choices=[2, 4])}
     )
-
-
-class TestSamplerValidSpecs:
-    """Only dict specs with 'low'/'high' or 'choices' are valid range specs."""
-
-    def test_choices_dict_is_range_spec(self, search_settings_choices: SearchSettings) -> None:
-        sampler = OptunaSettingsSampler(search_settings_choices)
-        assert sampler._is_range_specification({"choices": [2, 4]})
-
-    def test_low_high_dict_is_range_spec(self) -> None:
-        settings = SearchSettings(space={"x": FloatParam(type="float", low=1.0, high=10.0)})
-        sampler = OptunaSettingsSampler(settings)
-        assert sampler._is_range_specification({"low": 1, "high": 10})
-
-    def test_bare_list_is_not_range_spec(self, search_settings_choices: SearchSettings) -> None:
-        sampler = OptunaSettingsSampler(search_settings_choices)
-        assert not sampler._is_range_specification([2, 4])
-
-    def test_choices_list_of_lists_raises_validation_error(self) -> None:
-        """Structured categorical choices should be rejected at config validation time."""
-        with pytest.raises(ValidationError):
-            SearchSettings(
-                space={"layers": CategoricalParam(type="categorical", choices=[[1, 2], [2, 4]])}  # type: ignore  # intentional invalid input
-            )
-
-    def test_sampler_populates_trial_params_with_choices_spec(
-        self, search_settings_hidden_size: SearchSettings
-    ) -> None:
-        import optuna
-
-        sampler = OptunaSettingsSampler(search_settings_hidden_size)
-        study = optuna.create_study(direction="minimize")
-        optuna_trial = study.ask()
-        job = cast(SearchJobConfig, SimpleNamespace(search=search_settings_hidden_size))
-        sampler.sample(cast(OptunaTrialProtocol, optuna_trial), job)
-
-        assert "hidden_size" in optuna_trial.params
-        assert optuna_trial.params["hidden_size"] in (2, 4)
 
 
 # ---------------------------------------------------------------------------

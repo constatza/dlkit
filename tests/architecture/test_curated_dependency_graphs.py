@@ -95,6 +95,27 @@ def _assert_acyclic(nodes: set[str], edges: set[tuple[str, str]], *, graph_name:
     assert visited == len(nodes), f"Curated dependency view for {graph_name!r} contains a cycle"
 
 
+def test_tach_check_passes() -> None:
+    """Enforce every ``[[modules]]`` ``depends_on`` rule declared in ``tach.toml``.
+
+    ``tach map`` (used by ``test_curated_dependency_graphs_are_acyclic`` below)
+    only verifies acyclicity across six curated roots. It does not enforce the
+    fine-grained ``depends_on`` allow-lists for all modules declared in
+    ``tach.toml``. ``tach check`` is the command that validates those rules.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    result = subprocess.run(
+        [sys.executable, "-m", "tach", "check"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, (
+        f"tach check failed:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+
+
 def test_curated_dependency_graphs_are_acyclic(tmp_path: Path) -> None:
     map_path = _load_tach_map(tmp_path)
 

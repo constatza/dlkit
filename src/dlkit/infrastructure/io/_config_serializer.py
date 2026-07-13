@@ -11,6 +11,10 @@ import torch
 from pydantic import BaseModel
 from tomlkit import document, dumps, table
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def _to_toml_compatible(value: Any) -> Any:
     """Convert values into TOML-serializable primitives.
@@ -44,7 +48,8 @@ def _to_toml_compatible(value: Any) -> Any:
     if callable(to_dict):
         try:
             serialized = to_dict()
-        except Exception:
+        except Exception as exc:
+            logger.debug("value.to_dict() raised during TOML serialization: {}", exc)
             serialized = None
         if serialized is not None:
             return _to_toml_compatible(serialized)
@@ -54,8 +59,8 @@ def _to_toml_compatible(value: Any) -> Any:
 
         if isinstance(value, _CoreUrl):
             return str(value)
-    except Exception:
-        pass
+    except ImportError as exc:
+        logger.debug("pydantic_core.Url unavailable, skipping URL-specific handling: {}", exc)
     # Handle torch.dtype objects by converting to string
     if isinstance(value, torch.dtype):
         return str(value)

@@ -162,3 +162,11 @@ class ICA(Transform):
             Output shape with last dimension = n_components.
         """
         return in_shape[:-1] + (self.n_components,)
+
+    def fit_summary(self) -> dict[str, float | int]:
+        """Return ICA fit-quality metrics (``IReportsFitQuality`` protocol).
+
+        Returns:
+            Mapping with ``"n_iter"`` -> number of iterations FastICA took to converge.
+        """
+        return {"n_iter": self.n_iter_}

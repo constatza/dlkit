@@ -26,7 +26,7 @@ from dlkit.infrastructure.config.data_entries import (
     is_value_based,
 )
 from dlkit.infrastructure.config.data_roles import DataRole
-from dlkit.infrastructure.config.dataset_settings import DatasetSettings
+from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.entry_types import (
     AutoencoderTarget,
     CsvEntry,
@@ -290,7 +290,7 @@ class TestDatasetEntryFormatInference:
         path = tmp_path / filename
         path.write_bytes(b"placeholder")
 
-        settings = DatasetSettings.model_validate(
+        settings = DataSettings.model_validate(
             {"features": [{"name": "x", "path": path, "data_role": "feature"}]}
         )
 
@@ -302,7 +302,7 @@ class TestDatasetEntryFormatInference:
         path.mkdir()
         (path / "zarr.json").write_text("{}")
 
-        settings = DatasetSettings.model_validate(
+        settings = DataSettings.model_validate(
             {"features": [{"name": "x", "path": path, "data_role": "feature"}]}
         )
 
@@ -313,21 +313,21 @@ class TestDatasetEntryFormatInference:
         path = tmp_path / "x.npy"
         path.write_bytes(b"placeholder")
 
-        settings = DatasetSettings.model_validate(
+        settings = DataSettings.model_validate(
             {"features": [{"name": "x", "path": path, "format": "npy", "data_role": "feature"}]}
         )
 
         assert isinstance(settings.features[0], NpyEntry)
 
     def test_placeholder_entry_without_path_is_preserved(self) -> None:
-        settings = DatasetSettings.model_validate({"features": [{"name": "x"}]})
+        settings = DataSettings.model_validate({"features": [{"name": "x"}]})
 
         assert len(settings.features) == 1
         assert isinstance(settings.features[0], ValueEntry)
         assert settings.features[0].is_placeholder()
 
     def test_value_entry_without_path_is_preserved(self, sample_numpy_array: np.ndarray) -> None:
-        settings = DatasetSettings.model_validate(
+        settings = DataSettings.model_validate(
             {"features": [{"name": "x", "value": sample_numpy_array}]}
         )
 
@@ -338,7 +338,7 @@ class TestDatasetEntryFormatInference:
         path = tmp_path / "target.npy"
         path.write_bytes(b"placeholder")
 
-        settings = DatasetSettings.model_validate(
+        settings = DataSettings.model_validate(
             {"targets": [{"name": "y", "path": path, "feature_ref": "x"}]}
         )
 
@@ -351,8 +351,8 @@ class TestDatasetEntryFormatInference:
         path = tmp_path / "x.bin"
         path.write_bytes(b"placeholder")
 
-        with pytest.raises(ValueError, match="Could not infer DATASET entry format"):
-            DatasetSettings.model_validate({"features": [{"name": "x", "path": path}]})
+        with pytest.raises(ValueError, match="Could not infer data entry format"):
+            DataSettings.model_validate({"features": [{"name": "x", "path": path}]})
 
     def test_plain_directory_without_zarr_suffix_raises_clear_validation_error(
         self, tmp_path: Path
@@ -361,14 +361,14 @@ class TestDatasetEntryFormatInference:
         path.mkdir()
 
         with pytest.raises(ValueError, match="Directory-backed entries must use a '.zarr' suffix"):
-            DatasetSettings.model_validate({"features": [{"name": "x", "path": path}]})
+            DataSettings.model_validate({"features": [{"name": "x", "path": path}]})
 
     def test_zarr_suffix_still_uses_existing_store_validation(self, tmp_path: Path) -> None:
         path = tmp_path / "broken.zarr"
         path.mkdir()
 
         with pytest.raises(ValueError, match="missing zarr.json"):
-            DatasetSettings.model_validate({"features": [{"name": "x", "path": path}]})
+            DataSettings.model_validate({"features": [{"name": "x", "path": path}]})
 
 
 # ============================================================================
@@ -418,27 +418,27 @@ class TestStrictValidation:
 
 
 # ============================================================================
-# DatasetSettings Integration Tests
+# DataSettings Integration Tests
 # ============================================================================
 
 
-class TestDatasetSettingsValuePreservation:
-    """Regression tests for ValueEntry preservation in DatasetSettings.
+class TestDataSettingsValuePreservation:
+    """Regression tests for ValueEntry preservation in DataSettings.
 
     These tests guard against the bug where nested_model_default_partial_update=True
     caused ValueEntry objects to be converted to NpyEntry objects during
-    DatasetSettings validation (losing the in-memory value field).
+    DataSettings validation (losing the in-memory value field).
     """
 
     def test_value_entry_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
-        """ValueEntry should remain ValueEntry when stored in DatasetSettings.features."""
+        """ValueEntry should remain ValueEntry when stored in DataSettings.features."""
         feat = ValueEntry(name="x", value=sample_numpy_array, data_role=DataRole.FEATURE)
         assert isinstance(feat, ValueEntry)
         assert feat.has_value()
         feat_id = id(feat)
 
-        # Create DatasetSettings with ValueEntry
-        ds_settings = DatasetSettings(features=(feat,))
+        # Create DataSettings with ValueEntry
+        ds_settings = DataSettings(features=(feat,))
 
         # Verify type preservation
         assert isinstance(ds_settings.features[0], ValueEntry)
@@ -453,14 +453,14 @@ class TestDatasetSettingsValuePreservation:
         assert ds_settings.features[0] is feat
 
     def test_value_entry_target_preserved_in_dataset_settings(self, sample_numpy_array: np.ndarray):
-        """ValueEntry (target) should remain ValueEntry when stored in DatasetSettings.targets."""
+        """ValueEntry (target) should remain ValueEntry when stored in DataSettings.targets."""
         targ = ValueEntry(name="y", value=sample_numpy_array, data_role=DataRole.TARGET)
         assert isinstance(targ, ValueEntry)
         assert targ.has_value()
         targ_id = id(targ)
 
-        # Create DatasetSettings with ValueEntry target
-        ds_settings = DatasetSettings(features=(), targets=(targ,))
+        # Create DataSettings with ValueEntry target
+        ds_settings = DataSettings(features=(), targets=(targ,))
 
         # Verify type preservation
         assert isinstance(ds_settings.targets[0], ValueEntry)
@@ -477,7 +477,7 @@ class TestDatasetSettingsValuePreservation:
     def test_mixed_value_and_path_entries_in_dataset_settings(
         self, tmp_path: Path, sample_numpy_array: np.ndarray
     ):
-        """DatasetSettings should handle mixed ValueEntry and NpyEntry correctly."""
+        """DataSettings should handle mixed ValueEntry and NpyEntry correctly."""
         # Create path-based feature
         x_path = tmp_path / "x.npy"
         np.save(x_path, sample_numpy_array)
@@ -488,8 +488,8 @@ class TestDatasetSettingsValuePreservation:
             name="x_value", value=sample_numpy_array, data_role=DataRole.FEATURE
         )
 
-        # Create DatasetSettings with mixed entries
-        ds_settings = DatasetSettings(features=(path_feat, value_feat))
+        # Create DataSettings with mixed entries
+        ds_settings = DataSettings(features=(path_feat, value_feat))
 
         # Verify path feature is NpyEntry (PathBasedEntry)
         assert isinstance(ds_settings.features[0], NpyEntry)
@@ -508,17 +508,17 @@ class TestDatasetSettingsValuePreservation:
         assert ds_settings.features[1] is value_feat
 
     def test_value_entries_work_with_flexible_dataset(self, sample_numpy_array: np.ndarray):
-        """ValueEntry should work with FlexibleDataset when passed through DatasetSettings."""
+        """ValueEntry should work with FlexibleDataset when passed through DataSettings."""
         from dlkit.engine.data.datasets.flexible import FlexibleDataset
 
         # Create value-based entries
         feat = ValueEntry(name="x", value=sample_numpy_array, data_role=DataRole.FEATURE)
         targ = ValueEntry(name="y", value=sample_numpy_array[:, :1], data_role=DataRole.TARGET)
 
-        # Create DatasetSettings
-        ds_settings = DatasetSettings(features=(feat,), targets=(targ,))
+        # Create DataSettings
+        ds_settings = DataSettings(features=(feat,), targets=(targ,))
 
-        # Create FlexibleDataset using features/targets from DatasetSettings
+        # Create FlexibleDataset using features/targets from DataSettings
         dataset = FlexibleDataset(entries=list(ds_settings.features) + list(ds_settings.targets))
 
         # Verify dataset works

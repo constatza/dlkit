@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from dlkit.engine.tracking.mlflow_client_factory import MLflowClientFactory
+
+if TYPE_CHECKING:
+    from mlflow import MlflowClient
 
 
 @runtime_checkable
@@ -103,15 +108,9 @@ class StubTrackingContext:
         self.exit()
 
 
-def create_mlflow_client(tracking_uri: str | None = None):
+def create_mlflow_client(tracking_uri: str | None = None) -> MlflowClient:
     """Create an MLflow client, optionally bound to a tracking URI."""
-    from mlflow.tracking import MlflowClient
-
-    match tracking_uri:
-        case str() as configured_uri if configured_uri:
-            return MlflowClient(tracking_uri=configured_uri)
-        case _:
-            return MlflowClient()
+    return MLflowClientFactory.create_client(tracking_uri)
 
 
 @contextmanager

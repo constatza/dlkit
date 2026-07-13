@@ -217,6 +217,7 @@ depends_on = [
     { path = "dlkit.interfaces.inference" },
     { path = "dlkit.engine.workflows.entrypoints" },
     { path = "dlkit.engine.workflows.factories" },
+    { path = "dlkit.engine.inference" },
 ]
 
 [[modules]]
@@ -292,6 +293,30 @@ depends_on = [
 
 [[modules]]
 path = "dlkit.io"
+depends_on = [
+    { path = "dlkit.infrastructure" },
+]
+
+[[modules]]
+path = "dlkit.config"
+depends_on = [
+    { path = "dlkit.infrastructure" },
+]
+
+[[modules]]
+path = "dlkit.inference"
+depends_on = [
+    { path = "dlkit.interfaces.inference" },
+]
+
+[[modules]]
+path = "dlkit.mlflow"
+depends_on = [
+    { path = "dlkit.interfaces.api.functions" },
+]
+
+[[modules]]
+path = "dlkit.registry"
 depends_on = [
     { path = "dlkit.infrastructure" },
 ]

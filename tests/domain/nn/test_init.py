@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import cast
 from unittest.mock import patch
 
 import torch
@@ -52,9 +53,10 @@ def test_unsupported_activation_raises() -> None:
 def test_initialize_only_touches_linear_and_conv_weights() -> None:
     """initialize_ walks the module tree, initializing only Linear/Conv weights and zeroing bias."""
     model = nn.Sequential(nn.Linear(4, 4), nn.ReLU(), nn.LayerNorm(4))
-    before = model[0].weight.clone()
+    first_linear = cast(nn.Linear, model[0])
+    before = first_linear.weight.clone()
 
     initialize_(model, "relu")
 
-    assert not torch.equal(before, model[0].weight)
-    assert torch.equal(model[0].bias, torch.zeros_like(model[0].bias))
+    assert not torch.equal(before, first_linear.weight)
+    assert torch.equal(first_linear.bias, torch.zeros_like(first_linear.bias))

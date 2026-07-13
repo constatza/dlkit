@@ -7,6 +7,9 @@ from collections.abc import Sequence
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def _get_ds_dm_names(settings: JobConfig) -> str:
@@ -37,10 +40,10 @@ def resolve_family_from_dataset(dataset: Sequence[object]) -> DatasetFamily:
         try:
             if isinstance(dataset[0], pyg_data):
                 return DatasetFamily.GRAPH
-        except Exception:
-            pass
-    except Exception:
-        pass
+        except (IndexError, KeyError, TypeError) as exc:
+            logger.debug("Could not inspect dataset[0] for graph-family detection: {}", exc)
+    except ImportError as exc:
+        logger.debug("torch_geometric not available, skipping graph-family detection: {}", exc)
 
     return DatasetFamily.FLEXIBLE
 

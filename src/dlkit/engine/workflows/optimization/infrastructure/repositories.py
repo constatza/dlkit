@@ -19,6 +19,9 @@ from dlkit.engine.workflows.optimization.value_objects import (
     TrialState,
 )
 from dlkit.infrastructure.config.job_config import SearchJobConfig
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def _has_backend_config(settings: Any) -> bool:
@@ -292,8 +295,8 @@ class OptunaStudyRepository(IStudyRepository):
                 started_at = optuna_trial.datetime_start
             if hasattr(optuna_trial, "datetime_complete") and optuna_trial.datetime_complete:
                 completed_at = optuna_trial.datetime_complete
-        except Exception:
-            pass
+        except AttributeError as exc:
+            logger.debug("Could not read trial timing from Optuna trial: {}", exc)
 
         # Extract pruning information
         pruned_at_step = None
@@ -305,8 +308,8 @@ class OptunaStudyRepository(IStudyRepository):
                     and optuna_trial.intermediate_values
                 ):
                     pruned_at_step = max(optuna_trial.intermediate_values.keys())
-            except Exception:
-                pass
+            except (AttributeError, ValueError) as exc:
+                logger.debug("Could not read pruning step from Optuna trial: {}", exc)
 
         return Trial(
             trial_id=str(optuna_trial.number),  # Use trial number as ID

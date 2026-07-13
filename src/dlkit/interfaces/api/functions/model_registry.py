@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from mlflow.exceptions import MlflowException
+
 from dlkit.engine.tracking.artifact_logger import (
     CHECKPOINT_ARTIFACT_DIR,
     DEFAULT_MODEL_ARTIFACT_PATH,
@@ -65,8 +67,10 @@ def has_checkpoint_artifact(
     try:
         artifacts = client.list_artifacts(run_id, path=CHECKPOINT_ARTIFACT_DIR)
         return bool(artifacts)
-    except Exception:
-        return False
+    except MlflowException as e:
+        if e.error_code == "RESOURCE_DOES_NOT_EXIST":
+            return False
+        raise
 
 
 def register_logged_model(
@@ -186,6 +190,7 @@ def load_registered_model(
             case "pyfunc":
                 return mlflow.pyfunc.load_model(model_uri)
             case "auto":
+                errors: dict[str, Exception] = {}
                 for loader in (
                     mlflow.pytorch.load_model,
                     mlflow.sklearn.load_model,
@@ -193,10 +198,12 @@ def load_registered_model(
                 ):
                     try:
                         return loader(model_uri)
-                    except Exception:
-                        continue
+                    except Exception as e:  # noqa: BLE001 - collected below, not swallowed
+                        errors[loader.__module__] = e
+                last_exc = next(reversed(errors.values()))
+                summary = "; ".join(f"{module}: {exc}" for module, exc in errors.items())
                 raise RuntimeError(
-                    f"Failed to load model URI '{model_uri}' with all supported loaders"
-                )
+                    f"Failed to load model URI '{model_uri}' with all supported loaders ({summary})"
+                ) from last_exc
             case _:
                 raise ValueError(f"Unsupported flavor strategy '{flavor}'")

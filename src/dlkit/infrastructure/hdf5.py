@@ -18,6 +18,10 @@ from typing import Any
 import numpy as np
 import torch
 
+from dlkit.infrastructure.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class Hdf5LazyReader:
     """Lazy indexed reader for a single HDF5 dataset.
@@ -60,8 +64,8 @@ class Hdf5LazyReader:
         if self._file is not None:
             try:
                 self._file.close()
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001 - finalizers must not raise
+                logger.debug("Error closing HDF5 file handle during garbage collection: {}", exc)
 
     def __getitem__(self, idx: int | list[int] | slice) -> torch.Tensor:
         """Read sample(s) by index.

@@ -25,7 +25,6 @@ from typing import TYPE_CHECKING
 
 from .data_entries import PathBasedEntry, ValueBasedEntry
 from .entry_base import DataEntry
-from .enums import DatasetFamily
 
 if TYPE_CHECKING:
     from .job_config import InferenceJobConfig, JobConfig, SearchJobConfig, TrainingJobConfig
@@ -44,9 +43,6 @@ def _validate_entry_paths(entries: Iterable[DataEntry], role_label: str) -> None
     for entry in entries:
         if isinstance(entry, PathBasedEntry) and entry.path is not None and not entry.path.exists():
             raise ValueError(f"{role_label} path does not exist: {entry.path}")
-
-
-_NON_FLEXIBLE_DATASET_NAMES: frozenset[str] = frozenset({"GraphDataset", "TimeSeriesDataset"})
 
 
 class ConfigValidationError(ValueError):
@@ -100,23 +96,6 @@ def _validate_entry_has_data(entry: object, index: int, role: str) -> None:
     if isinstance(entry, ValueBasedEntry) and not entry.has_value():
         raise ConfigValidationError(
             f"{role} #{index + 1} is missing in-memory data: {getattr(entry, 'name', 'unknown')}"
-        )
-
-
-def _validate_flexible_dataset_entries(dataset: object) -> None:
-    """Raise ConfigValidationError if a FlexibleDataset has no features or targets."""
-    from .dataset_settings import DatasetSettings
-
-    if not isinstance(dataset, DatasetSettings):
-        return
-    if dataset.family in (DatasetFamily.GRAPH,):
-        return
-    if getattr(dataset, "name", None) in _NON_FLEXIBLE_DATASET_NAMES:
-        return
-    if not (dataset.features or dataset.targets):
-        raise ConfigValidationError(
-            "DATASET must have at least one feature or target. "
-            "Add [[DATASET.features]] or [[DATASET.targets]] sections to your config."
         )
 
 

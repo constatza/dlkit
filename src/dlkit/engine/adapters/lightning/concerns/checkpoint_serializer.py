@@ -116,7 +116,7 @@ class DLKitCheckpointSerializer:
             Model family string (e.g., 'dlkit_nn', 'graph', 'external').
         """
         try:
-            from dlkit.domain.nn.detection import detect_model_type
+            from dlkit.engine.adapters.lightning.model_detection import detect_model_type
 
             if self._checkpoint_metadata is not None:
                 model_type = detect_model_type(self._checkpoint_metadata.model_settings)
