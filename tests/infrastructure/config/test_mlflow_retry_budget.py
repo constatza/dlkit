@@ -12,6 +12,7 @@ import contextlib
 import http.server
 import os
 import threading
+import time
 from collections.abc import Iterator
 from unittest.mock import Mock
 
@@ -23,6 +24,7 @@ import dlkit.infrastructure.config.environment  # noqa: F401  # ensures env defa
 from dlkit.engine.tracking.backend import LocalServerBackend
 from dlkit.engine.tracking.mlflow_client_factory import MLflowClientFactory
 from dlkit.engine.tracking.mlflow_resource_manager import MLflowResourceManager
+from dlkit.infrastructure.config.environment import best_effort_retry_budget
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 # Chosen so it sits strictly between the pre-fix attempt budget (1 initial +
@@ -55,6 +57,13 @@ def _flaky_server(fail_count: int) -> Iterator[str]:
     finally:
         server.shutdown()
         server.server_close()
+
+
+def _get_env_default(url: str) -> None:
+    """Issue a request with no explicit retry kwargs, so MLflow resolves
+    max_retries/backoff_factor/timeout from the current env vars — this is
+    what production best_effort-wrapped calls do."""
+    http_request(MlflowHostCreds(host=url), "/ping", "GET")
 
 
 def _get(url: str, max_retries: int) -> None:
@@ -134,3 +143,51 @@ def test_explicit_max_retries_override_survives_a_more_hostile_500_burst(
         assert max_retries == 9
         with _flaky_server(fail_count=7) as url:
             _get(url, max_retries=max_retries)  # must not raise
+
+
+def test_best_effort_retry_budget_fails_fast_against_persistent_500s(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A persistently-failing endpoint (not a recoverable burst) must be given
+    up on quickly under the scoped best-effort budget, not after the ~62s of
+    backoff sleep the raised process-wide budget would otherwise burn.
+    """
+    monkeypatch.setenv(
+        "MLFLOW_HTTP_REQUEST_MAX_RETRIES", os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"]
+    )
+    monkeypatch.setenv("MLFLOW_HTTP_REQUEST_TIMEOUT", os.environ["MLFLOW_HTTP_REQUEST_TIMEOUT"])
+    monkeypatch.setenv(
+        "MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", os.environ["MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR"]
+    )
+
+    with _flaky_server(fail_count=10_000) as url:
+        start = time.monotonic()
+        with pytest.raises(MlflowException, match="too many 500 error responses"):
+            with best_effort_retry_budget():
+                _get_env_default(url)
+        elapsed = time.monotonic() - start
+
+    assert elapsed < 15
+
+
+def test_best_effort_retry_budget_restores_configured_max_retries_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A TrackingSettings.max_retries override (not just the process default)
+    must survive being temporarily shadowed by a best-effort call.
+    """
+    monkeypatch.setenv(
+        "MLFLOW_HTTP_REQUEST_MAX_RETRIES", os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"]
+    )
+
+    settings = TrackingSettings(backend="mlflow", max_retries=9)
+    manager = MLflowResourceManager(settings, LocalServerBackend())
+
+    monkeypatch.setattr(MLflowClientFactory, "create_client", lambda **_kwargs: Mock())
+    monkeypatch.setattr(MLflowClientFactory, "validate_client_connectivity", lambda _client: True)
+
+    with manager:
+        assert os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"] == "9"
+        with best_effort_retry_budget():
+            assert os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"] == "2"
+        assert os.environ["MLFLOW_HTTP_REQUEST_MAX_RETRIES"] == "9"

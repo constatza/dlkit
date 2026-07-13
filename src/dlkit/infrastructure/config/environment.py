@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import threading
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import Field
@@ -61,6 +64,47 @@ def ensure_mlflow_defaults() -> None:
     _setenv_if_missing("MLFLOW_HTTP_REQUEST_TIMEOUT", 30)
     _setenv_if_missing("MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR", 2)
     _mlflow_defaults_configured = True
+
+
+_BEST_EFFORT_RETRY_BUDGET: dict[str, str] = {
+    "MLFLOW_HTTP_REQUEST_MAX_RETRIES": "2",
+    "MLFLOW_HTTP_REQUEST_TIMEOUT": "5",
+    "MLFLOW_HTTP_REQUEST_BACKOFF_FACTOR": "1",
+}
+_best_effort_retry_budget_lock = threading.RLock()
+
+
+@contextmanager
+def best_effort_retry_budget() -> Generator[None]:
+    """Temporarily tighten MLflow's HTTP retry env vars for one best-effort call.
+
+    ``ensure_mlflow_defaults``/``set_mlflow_max_retries`` size the retry budget
+    for MLflow calls that must not silently fail (e.g. ``log_model`` for the
+    best-retrain run). Calls wrapped in ``best_effort`` are allowed to fail —
+    there's no reason for them to burn that same budget waiting out a server
+    that's already returning errors. This scopes them back down to the
+    proven-in-practice pre-``bf66c9b`` values (2 retries / 5s timeout /
+    backoff factor 1) for the duration of the call, then restores whatever
+    value (or absence) was present beforehand — so a
+    ``TrackingSettings.max_retries`` override survives around it.
+
+    Uses an ``RLock`` because ``best_effort``-wrapped calls invoke other
+    ``best_effort``-wrapped calls on the same thread (e.g.
+    ``log_best_trial_result`` -> ``log_trial_artifacts`` in
+    ``optimization/infrastructure/tracking.py``); a plain ``Lock`` would
+    deadlock on the first nested call.
+    """
+    with _best_effort_retry_budget_lock:
+        previous = {name: os.environ.get(name) for name in _BEST_EFFORT_RETRY_BUDGET}
+        os.environ.update(_BEST_EFFORT_RETRY_BUDGET)
+        try:
+            yield
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 class EnvironmentSettings(BaseSettings):

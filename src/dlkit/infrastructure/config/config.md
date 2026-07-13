@@ -45,6 +45,18 @@ logged to MLflow:
 Lightning `.ckpt` files remain checkpoint artifacts under `checkpoints/`; they
 are separate from the logged deployment model under `model/`.
 
+`tracking.max_retries` sets MLflow's process-wide HTTP retry budget
+(`environment.ensure_mlflow_defaults`/`set_mlflow_max_retries`, default 5
+retries / 30s timeout / backoff factor 2) for calls that must not silently
+fail, e.g. the logged deployment model artifact. Tracking calls that are
+allowed to fail (metrics, params, tags, non-critical artifacts — anything
+wrapped in `engine.tracking.best_effort`) run under a separate, tighter
+fail-fast budget scoped to just that call
+(`environment.best_effort_retry_budget`, 2 retries / 5s timeout / backoff
+factor 1) so a persistently-erroring tracking server can't turn every trial
+into a multi-second-to-multi-minute stall; `tracking.max_retries` is
+untouched by that scoping.
+
 ## Loading a Config
 
 ```python

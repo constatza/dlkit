@@ -76,6 +76,17 @@ training and optimization flows.
   serialized in-memory instead of being cached to local files.
 - Optimization settings/artifact manifests should prefer
   `log_artifact_content(...)` over temp-file round trips.
+- Every `ClientBasedRunContext` method except `log_model` is wrapped in
+  `@best_effort`, which catches all exceptions and logs a warning instead of
+  raising. `log_model` is the one exception — it raises, since callers must
+  not silently proceed without the saved model artifact. MLflow's HTTP
+  retry/timeout/backoff are process-global env vars
+  (`infrastructure.config.environment.ensure_mlflow_defaults`), so
+  `best_effort` scopes them down to a fail-fast budget
+  (`best_effort_retry_budget`) for the duration of each wrapped call — a call
+  that's allowed to fail shouldn't burn the wider budget sized for
+  `log_model`. `TrackingSettings.max_retries` still governs `log_model`'s
+  budget (and the process default) untouched.
 - Metric stage identifiers (`dlkit.common.metric_stages.MetricStage`) flow as
   the enum end-to-end, from the Lightning wrapper's step logger through
   `MLflowEpochLogger` and `MetricLogger` — there is no string-typed stage
