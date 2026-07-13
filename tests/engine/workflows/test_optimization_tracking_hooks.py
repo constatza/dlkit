@@ -18,7 +18,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from dlkit.common import TrainingResult
-from dlkit.common.hooks import LifecycleHooks, ParamValue
+from dlkit.common.hooks import LifecycleHooks, ParamValue, RunCreatedEvent
 from dlkit.engine.tracking.lightweight_execution import fire_post_training_hooks
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training.components import RuntimeComponents
@@ -65,14 +65,14 @@ class _FakeTracker:
 
 
 @pytest.fixture
-def recorded_run_creations() -> list[tuple[str, str | None]]:
+def recorded_run_creations() -> list[RunCreatedEvent]:
     return []
 
 
 @pytest.fixture
-def hooks(recorded_run_creations: list[tuple[str, str | None]]) -> LifecycleHooks:
-    def _record(run_id: str, tracking_uri: str | None) -> None:
-        recorded_run_creations.append((run_id, tracking_uri))
+def hooks(recorded_run_creations: list[RunCreatedEvent]) -> LifecycleHooks:
+    def _record(event: RunCreatedEvent) -> None:
+        recorded_run_creations.append(event)
 
     return LifecycleHooks(on_run_created=_record)
 
@@ -96,7 +96,7 @@ def study_with_best_trial() -> Study:
 
 def test_create_study_run_fires_on_run_created(
     hooks: LifecycleHooks,
-    recorded_run_creations: list[tuple[str, str | None]],
+    recorded_run_creations: list[RunCreatedEvent],
     study_with_best_trial: Study,
 ) -> None:
     adapter = MLflowTrackingAdapter(
@@ -106,12 +106,19 @@ def test_create_study_run_fires_on_run_created(
     with adapter.create_study_run(study_with_best_trial):
         pass
 
-    assert recorded_run_creations == [("study-run", "file:///tmp/mlruns")]
+    assert recorded_run_creations == [
+        RunCreatedEvent(
+            run_id="study-run",
+            tracking_uri="file:///tmp/mlruns",
+            kind="study",
+            is_outermost=True,
+        )
+    ]
 
 
 def test_create_trial_and_best_retrain_run_fire_on_run_created(
     hooks: LifecycleHooks,
-    recorded_run_creations: list[tuple[str, str | None]],
+    recorded_run_creations: list[RunCreatedEvent],
     study_with_best_trial: Study,
 ) -> None:
     adapter = MLflowTrackingAdapter(
@@ -126,10 +133,22 @@ def test_create_trial_and_best_retrain_run_fire_on_run_created(
             pass
 
     assert recorded_run_creations == [
-        ("study-run", "file:///tmp/mlruns"),
-        ("trial-run", "file:///tmp/mlruns"),
-        ("retrain-run", "file:///tmp/mlruns"),
+        RunCreatedEvent(
+            run_id="study-run", tracking_uri="file:///tmp/mlruns", kind="study", is_outermost=True
+        ),
+        RunCreatedEvent(
+            run_id="trial-run", tracking_uri="file:///tmp/mlruns", kind="trial", is_outermost=False
+        ),
+        RunCreatedEvent(
+            run_id="retrain-run",
+            tracking_uri="file:///tmp/mlruns",
+            kind="best_retrain",
+            is_outermost=False,
+        ),
     ]
+
+    # Only the study run should ever be tagged to an external parent run.
+    assert [e.is_outermost for e in recorded_run_creations] == [True, False, False]
 
 
 def test_no_hooks_means_no_op(study_with_best_trial: Study) -> None:
@@ -170,14 +189,14 @@ def extra_artifact_path(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def full_hooks(
-    recorded_run_creations: list[tuple[str, str | None]],
+    recorded_run_creations: list[RunCreatedEvent],
     post_training_calls: list[TrainingResult],
     extra_artifact_path: Path,
 ) -> LifecycleHooks:
     """LifecycleHooks with all 5 extension points wired to recording fixtures."""
 
-    def _on_run_created(run_id: str, tracking_uri: str | None) -> None:
-        recorded_run_creations.append((run_id, tracking_uri))
+    def _on_run_created(event: RunCreatedEvent) -> None:
+        recorded_run_creations.append(event)
 
     def _on_training_complete(result: TrainingResult) -> None:
         post_training_calls.append(result)

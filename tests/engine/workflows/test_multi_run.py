@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.common.results import TrainingResult
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.multi_run import (
@@ -166,6 +167,35 @@ def orchestrator(
         build_factory=mock_build_factory,
         executor=mock_executor,
         tracker=tracker,
+    )
+
+
+@pytest.fixture
+def recorded_run_creations() -> list[RunCreatedEvent]:
+    """Events recorded by the ``hooks`` fixture's ``on_run_created`` callable."""
+    return []
+
+
+@pytest.fixture
+def hooks(recorded_run_creations: list[RunCreatedEvent]) -> LifecycleHooks:
+    """LifecycleHooks recording every on_run_created firing."""
+    return LifecycleHooks(on_run_created=recorded_run_creations.append)
+
+
+@pytest.fixture
+def orchestrator_with_hooks(
+    mock_build_factory: MagicMock,
+    mock_executor: MagicMock,
+    mock_tracker: tuple[MagicMock, MagicMock],
+    hooks: LifecycleHooks,
+) -> MultiRunOrchestrator:
+    """MultiRunOrchestrator wired with mock collaborators and recording hooks."""
+    tracker, _ = mock_tracker
+    return MultiRunOrchestrator(
+        build_factory=mock_build_factory,
+        executor=mock_executor,
+        tracker=tracker,
+        hooks=hooks,
     )
 
 
@@ -389,3 +419,22 @@ def test_run_sweep_single_variant_execute_called_once(
         parent_run_name="parent",
     )
     mock_executor.execute.assert_called_once()
+
+
+def test_run_sweep_fires_on_run_created_for_parent_and_variants(
+    orchestrator_with_hooks: MultiRunOrchestrator,
+    recorded_run_creations: list[RunCreatedEvent],
+    variant_a: RunVariant,
+    variant_b: RunVariant,
+) -> None:
+    """run_sweep() fires on_run_created once for its own parent run
+    (kind='sweep', is_outermost=True) and once per variant child run
+    (kind='train', is_outermost=False)."""
+    orchestrator_with_hooks.run_sweep(
+        variants=[variant_a, variant_b],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    assert [event.kind for event in recorded_run_creations] == ["sweep", "train", "train"]
+    assert [event.is_outermost for event in recorded_run_creations] == [True, False, False]

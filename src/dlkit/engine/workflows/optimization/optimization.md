@@ -38,12 +38,17 @@ Adapters for external systems:
 
 `optimize()` accepts the same `dlkit.common.hooks.LifecycleHooks` used by `train()`,
 and all five hooks fire, not just `on_run_created`. `MLflowTrackingAdapter` fires
-`on_run_created(run_id, tracking_uri)` for the study run, each trial run, and the
-best-retrain run, so external callers can link any of them to a parent run the same
-way they already do for training. `on_training_complete`/`extra_params`/`extra_tags`/
-`extra_artifacts` fire for every trial (via `fire_post_training_hooks`, cheap
-callables only) and for the best retrain (via `TrackingDecorator.execute_within_run`,
-which fires them as part of full parity — see below).
+`on_run_created` with a `dlkit.common.hooks.RunCreatedEvent(run_id, tracking_uri,
+kind, is_outermost)` for the study run (`kind="study"`), each trial run
+(`kind="trial"`), and the best-retrain run (`kind="best_retrain"`). Only
+`is_outermost=True` events (the study run) should be tagged to an externally-owned
+parent run — `kind="trial"`/`"best_retrain"` runs are already correctly nested via
+MLflow's own active-run stack and must not be re-tagged. Callers must read
+`RunCreatedEvent.kind`/`.is_outermost` explicitly rather than relying on firing
+order. `on_training_complete`/`extra_params`/`extra_tags`/`extra_artifacts` fire for
+every trial (via `fire_post_training_hooks`, cheap callables only) and for the best
+retrain (via `TrackingDecorator.execute_within_run`, which fires them as part of full
+parity — see below).
 
 Ordinary trials execute through `dlkit.engine.tracking.lightweight_execution.
 execute_lightweight`: checkpoints disabled, epoch metrics only. This is an

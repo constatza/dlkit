@@ -14,6 +14,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "OptimizationResult": ("dlkit.common", "OptimizationResult"),
     "StrategyError": ("dlkit.common", "StrategyError"),
     "LifecycleHooks": ("dlkit.common", "LifecycleHooks"),
+    "RunCreatedEvent": ("dlkit.common", "RunCreatedEvent"),
+    "RunKind": ("dlkit.common", "RunKind"),
     "TrainingResult": ("dlkit.common", "TrainingResult"),
     "WorkflowError": ("dlkit.common", "WorkflowError"),
     "build_inference_datamodule": ("dlkit.interfaces.api.functions", "build_inference_datamodule"),

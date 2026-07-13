@@ -12,7 +12,7 @@ from unittest.mock import Mock
 import pytest
 
 from dlkit.common import TrainingResult, WorkflowError
-from dlkit.common.hooks import ParamValue
+from dlkit.common.hooks import LifecycleHooks, ParamValue, RunCreatedEvent
 from dlkit.engine.tracking.interfaces import IExperimentTracker, IRunContext
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training import VanillaExecutor
@@ -358,3 +358,51 @@ def test_tracking_decorator_result_enrichment(
 
     # Should not have added enrichment in our mock (that's handled by real MLflowTracker)
     assert isinstance(result, TrainingResult)
+
+
+def test_tracking_decorator_fires_on_run_created_outermost(
+    mock_executor, mock_tracker, mlflow_settings, build_components
+):
+    """A plain train() call (tracker without an active parent run) fires
+    on_run_created with kind='train', is_outermost=True."""
+    recorded: list[RunCreatedEvent] = []
+    hooks = LifecycleHooks(on_run_created=recorded.append)
+    decorator = TrackingDecorator(mock_executor, mock_tracker, hooks=hooks)
+
+    decorator.execute(build_components, mlflow_settings)
+
+    assert recorded == [
+        RunCreatedEvent(
+            run_id=mock_tracker.run_context.run_id,
+            tracking_uri=None,
+            kind="train",
+            is_outermost=True,
+        )
+    ]
+
+
+def test_tracking_decorator_fires_on_run_created_nested(
+    mock_executor, mlflow_settings, build_components
+):
+    """A train() call whose tracker reports an active parent run fires
+    on_run_created with kind='train', is_outermost=False."""
+
+    class NestedTracker(MockExperimentTracker):
+        def has_active_parent_run(self) -> bool:
+            return True
+
+    tracker = NestedTracker()
+    recorded: list[RunCreatedEvent] = []
+    hooks = LifecycleHooks(on_run_created=recorded.append)
+    decorator = TrackingDecorator(mock_executor, tracker, hooks=hooks)
+
+    decorator.execute(build_components, mlflow_settings)
+
+    assert recorded == [
+        RunCreatedEvent(
+            run_id=tracker.run_context.run_id,
+            tracking_uri=None,
+            kind="train",
+            is_outermost=False,
+        )
+    ]

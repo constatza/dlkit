@@ -224,13 +224,7 @@ class TrialExecutor:
             # Pruning integrates through the optimization backend/trial context path.
             training_result = execute_lightweight(components, trial_settings, trial_context)
 
-            logger.info(
-                "Completed optimization trial {} with objective {}",
-                trial.trial_number,
-                self.extract_objective_value(
-                    training_result, objective=trial_settings.search.objective
-                ),
-            )
+            logger.info("Completed optimization trial {}", trial.trial_number)
 
             return training_result
 
@@ -324,15 +318,30 @@ class TrialExecutor:
                 normally resolved from ``SearchSettings.objective``.
 
         Returns:
-            Objective value for optimization
+            Objective value for optimization.
+
+        Raises:
+            WorkflowError: If the objective metric key is missing from
+                ``training_result.metrics``, or its value can't be cast to
+                ``float``. A silent fallback would poison the whole study's
+                optimization direction with no signal anything went wrong.
         """
         if objective not in training_result.metrics:
-            return 0.0
+            raise WorkflowError(
+                f"Objective metric {objective!r} not found in training result metrics "
+                f"({sorted(training_result.metrics)}). Check trial_settings.search.objective "
+                "for a typo, or that the metric is actually logged for this dataset.",
+                {"stage": "objective_extraction", "objective": objective},
+            )
 
         try:
             return float(training_result.metrics[objective])
-        except ValueError, TypeError:
-            return 0.0
+        except (ValueError, TypeError) as e:
+            raise WorkflowError(
+                f"Objective metric {objective!r} has a non-numeric value "
+                f"({training_result.metrics[objective]!r})",
+                {"stage": "objective_extraction", "objective": objective},
+            ) from e
 
 
 class OptimizationOrchestrator:
@@ -509,6 +518,12 @@ class OptimizationOrchestrator:
             )
             objective_value = self._trial_executor.extract_objective_value(
                 training_result, objective=trial_settings.search.objective
+            )
+            logger.info(
+                "Trial {} completed with objective {}={}",
+                trial.trial_number,
+                trial_settings.search.objective,
+                objective_value,
             )
             trial = complete_trial(
                 trial,

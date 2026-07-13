@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.common import TrainingResult
-from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.engine.artifacts import ArtifactPolicy, NestedRunCapability
 from dlkit.engine.tracking.artifact_logger import ArtifactLogger
 from dlkit.engine.tracking.config_accessor import ConfigAccessor
@@ -188,7 +188,14 @@ class TrackingDecorator(ITrainingExecutor):
             # Fire on_run_created hook (only fired here: this method is the
             # one that just created the run)
             if self._hooks and self._hooks.on_run_created:
-                self._hooks.on_run_created(run_context.run_id, tracking_uri)
+                self._hooks.on_run_created(
+                    RunCreatedEvent(
+                        run_id=run_context.run_id,
+                        tracking_uri=tracking_uri,
+                        kind="train",
+                        is_outermost=not run_config["nested"],
+                    )
+                )
 
             return self._run_within_context(
                 execution_components,

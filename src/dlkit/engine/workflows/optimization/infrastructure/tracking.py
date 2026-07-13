@@ -15,7 +15,7 @@ from typing import Any
 import mlflow
 
 from dlkit.common.errors import WorkflowError
-from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent, RunKind
 from dlkit.engine.tracking.artifact_logger import TAG_MODEL_CLASS
 from dlkit.engine.tracking.best_effort import best_effort
 from dlkit.engine.tracking.config_accessor import ConfigAccessor
@@ -135,14 +135,21 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 self._exit_stack = None
         return False
 
-    def _notify_run_created(self, run_context: Any) -> None:
+    def _notify_run_created(self, run_context: Any, *, kind: RunKind, is_outermost: bool) -> None:
         """Fire ``on_run_created`` hook for a newly created run, if configured."""
         if not self._hooks or not self._hooks.on_run_created:
             return
         tracking_uri = (
             self._tracker.get_tracking_uri() if hasattr(self._tracker, "get_tracking_uri") else None
         )
-        self._hooks.on_run_created(run_context.run_id, tracking_uri)
+        self._hooks.on_run_created(
+            RunCreatedEvent(
+                run_id=run_context.run_id,
+                tracking_uri=tracking_uri,
+                kind=kind,
+                is_outermost=is_outermost,
+            )
+        )
 
     @contextmanager
     def create_study_run(self, study: Study):
@@ -159,7 +166,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=run_name,
                 nested=False,  # Parent run
             ) as run_context:
-                self._notify_run_created(run_context)
+                self._notify_run_created(run_context, kind="study", is_outermost=True)
                 yield run_context
 
         except Exception as e:
@@ -183,7 +190,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=f"trial_{trial.trial_number}",
                 nested=True,  # Nested under study run
             ) as run_context:
-                self._notify_run_created(run_context)
+                self._notify_run_created(run_context, kind="trial", is_outermost=False)
                 yield run_context
 
         except Exception as e:
@@ -214,7 +221,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
                 run_name=f"best_retrain_trial_{best_trial.trial_number}",
                 nested=True,  # Nested under study run
             ) as run_context:
-                self._notify_run_created(run_context)
+                self._notify_run_created(run_context, kind="best_retrain", is_outermost=False)
                 yield run_context
 
         except Exception as e:

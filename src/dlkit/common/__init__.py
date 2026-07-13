@@ -10,7 +10,7 @@ from .errors import (
     StrategyError,
     WorkflowError,
 )
-from .hooks import LifecycleHooks
+from .hooks import LifecycleHooks, RunCreatedEvent, RunKind
 from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
 from .results import (
     ConvergencePoint,
@@ -41,6 +41,8 @@ __all__ = [
     "OptimizationOverrides",
     "OutputShapes",
     "PluginError",
+    "RunCreatedEvent",
+    "RunKind",
     "Shape",
     "ShapeContext",
     "ShapeProvider",

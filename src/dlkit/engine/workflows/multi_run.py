@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from dlkit.common import TrainingResult
-from dlkit.common.hooks import LifecycleHooks
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
 from dlkit.engine.training.interfaces import ITrainingExecutor
@@ -118,6 +118,15 @@ class MultiRunOrchestrator:
                 run_name=parent_run_name,
                 tags=parent_tags or {},
             ) as parent_run:
+                if self._hooks and self._hooks.on_run_created:
+                    self._hooks.on_run_created(
+                        RunCreatedEvent(
+                            run_id=parent_run.run_id,
+                            tracking_uri=self._tracker.get_tracking_uri(),
+                            kind="sweep",
+                            is_outermost=True,
+                        )
+                    )
                 results = tuple(self._run_one(v) for v in variants)
                 if on_sweep_complete is not None:
                     on_sweep_complete(parent_run, results)
@@ -146,7 +155,14 @@ class MultiRunOrchestrator:
         ) as child_run:
             tracking_uri = self._tracker.get_tracking_uri()
             if self._hooks and self._hooks.on_run_created:
-                self._hooks.on_run_created(child_run.run_id, tracking_uri)
+                self._hooks.on_run_created(
+                    RunCreatedEvent(
+                        run_id=child_run.run_id,
+                        tracking_uri=tracking_uri,
+                        kind="train",
+                        is_outermost=False,
+                    )
+                )
 
             components = self._build_factory.build_components(variant.settings)
             return self._tracking_decorator.execute_within_run(
