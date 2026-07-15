@@ -283,6 +283,8 @@ class CheckpointPredictor(IPredictor):
 
         with ctx:
             args, kwargs = self._move_inputs_to_device(args, kwargs)
+            if precision_to_use is not None:
+                args, kwargs = self._cast_inputs_to_precision(args, kwargs, precision_to_use)
             if self._config.apply_transforms:
                 args, kwargs = self._apply_input_transforms(args, kwargs)
 
@@ -349,6 +351,28 @@ class CheckpointPredictor(IPredictor):
         return (
             tuple(_move_tensor_to_device(arg, device) for arg in args),
             {key: _move_tensor_to_device(value, device) for key, value in kwargs.items()},
+        )
+
+    def _cast_inputs_to_precision(
+        self,
+        args: tuple[torch.Tensor, ...],
+        kwargs: dict[str, torch.Tensor],
+        precision: PrecisionStrategy,
+    ) -> tuple[tuple[torch.Tensor, ...], dict[str, torch.Tensor]]:
+        """Cast caller-provided tensor inputs to the resolved precision dtype.
+
+        Dataloader/raw-array tensors commonly arrive as float64 while
+        checkpointed model parameters are float32 (or another inferred
+        precision) — without this, the first matmul inside the model raises
+        a dtype mismatch. Mirrors ``_move_inputs_to_device``'s device
+        handling, but for dtype.
+        """
+        return (
+            tuple(self._precision_service.cast_tensor(arg, default=precision) for arg in args),
+            {
+                key: self._precision_service.cast_tensor(value, default=precision)
+                for key, value in kwargs.items()
+            },
         )
 
     def _apply_input_transforms(

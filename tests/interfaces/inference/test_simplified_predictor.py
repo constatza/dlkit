@@ -327,6 +327,28 @@ class TestCheckpointPredictor:
 
         assert result.predictions.device.type == "meta"
 
+    def test_predict_casts_inputs_to_model_precision_before_model_call(
+        self, simple_checkpoint: Path
+    ):
+        """Regression: float64 dataloader tensors must not crash a float32 predictor."""
+
+        class DtypeAssertingModule(torch.nn.Module):
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                assert x.dtype == torch.float32
+                return torch.empty((x.shape[0], 1), dtype=x.dtype)
+
+        config = PredictorConfig(
+            checkpoint_path=simple_checkpoint, auto_load=False, apply_transforms=False
+        )
+        predictor = CheckpointPredictor(config)
+        predictor._model_state = ModelState(model=DtypeAssertingModule(), device="cpu")
+        predictor._inferred_precision = PrecisionStrategy.FULL_32
+        predictor._loaded = True
+
+        result = predictor.predict(x=torch.ones(2, 3, dtype=torch.float64))
+
+        assert result.predictions.dtype == torch.float32
+
     def test_predictor_context_manager(self, simple_checkpoint: Path):
         """Test predictor as context manager."""
         config = PredictorConfig(checkpoint_path=simple_checkpoint, auto_load=False)
