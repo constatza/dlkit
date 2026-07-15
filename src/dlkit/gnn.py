@@ -8,6 +8,12 @@ from dlkit.domain.nn.graph import (
     SimpleGATv2Message,
     SimpleGATv2Projection,
 )
+from dlkit.domain.nn.primitives import (
+    GraphHyperConnection,
+    GraphHyperSequential,
+    SparseMoE,
+    TopKRouter,
+)
 
 __all__ = [
     "GATv2Message",
@@ -16,4 +22,8 @@ __all__ = [
     "SimpleGATv2Projection",
     "ScaledGATv2Projection",
     "ScaledSimpleGATv2Projection",
+    "GraphHyperConnection",
+    "GraphHyperSequential",
+    "SparseMoE",
+    "TopKRouter",
 ]

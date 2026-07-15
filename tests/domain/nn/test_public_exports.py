@@ -18,6 +18,12 @@ def test_scale_equivariant_ffnn_exported():
         assert hasattr(ns, "ScaleEquivariantFFNN")
 
 
+def test_linear_baseline_models_exported():
+    for ns in (domain_nn, public_nn):
+        assert hasattr(ns, "LinearNetwork")
+        assert hasattr(ns, "FactorizedLinearNetwork")
+
+
 def test_film_family_exported():
     names = (
         "FiLMBlock",
@@ -77,18 +83,69 @@ def test_named_parametric_bases_exported():
 
 def test_public_namespaces_export_factorized_pairs():
     pairs = [
-        ("FactorizedFFNN", "SimpleFactorizedFFNN"),
         ("ConstantWidthFactorizedFFNN", "ConstantWidthSimpleFactorizedFFNN"),
-        ("ScaleEquivariantFactorizedFFNN", "ScaleEquivariantSimpleFactorizedFFNN"),
         (
             "ScaleEquivariantConstantWidthFactorizedFFNN",
             "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
+        ),
+        ("EmbeddedFactorizedFFNN", "EmbeddedSimpleFactorizedFFNN"),
+        (
+            "ScaleEquivariantEmbeddedFactorizedFFNN",
+            "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
         ),
     ]
     for residual_name, plain_name in pairs:
         for ns in (domain_nn, public_nn):
             assert hasattr(ns, residual_name), f"{residual_name!r} missing from {ns.__name__}"
             assert hasattr(ns, plain_name), f"{plain_name!r} missing from {ns.__name__}"
+
+
+def test_public_namespaces_export_hyper_and_moe_factorized_models():
+    names = (
+        "ConstantWidthHyper",
+        "ConstantWidthHyperFactorized",
+        "EmbeddedHyper",
+        "EmbeddedHyperFactorized",
+        "ConstantWidthMoE",
+        "ConstantWidthMoEFactorized",
+        "EmbeddedMoE",
+        "EmbeddedMoEFactorized",
+    )
+    for name in names:
+        assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
+        assert hasattr(public_nn, name), f"{name!r} missing from dlkit.nn"
+
+
+def test_public_namespaces_export_hyper_and_moe_primitives():
+    names = (
+        "TopKRouter",
+        "SparseMoE",
+        "RoutingDecision",
+        "RoutingStats",
+        "LaneExpand",
+        "LaneReduce",
+        "HyperSequential",
+        "GraphHyperSequential",
+        "HyperConnection",
+        "GraphHyperConnection",
+        "LaneMixingStats",
+        "MoESequential",
+    )
+    for name in names:
+        assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
+        assert hasattr(public_nn, name), f"{name!r} missing from dlkit.nn"
+
+
+def test_public_namespaces_do_not_export_internal_nonembedded_factorized_models():
+    removed_names = (
+        "FactorizedFFNN",
+        "SimpleFactorizedFFNN",
+        "ScaleEquivariantFactorizedFFNN",
+        "ScaleEquivariantSimpleFactorizedFFNN",
+    )
+    for name in removed_names:
+        assert not hasattr(domain_nn, name), f"{name!r} should not be exported from dlkit.domain.nn"
+        assert not hasattr(public_nn, name), f"{name!r} should not be exported from dlkit.nn"
 
 
 # --- FFNN and VarWidthFFNN accept skip kwarg ---
@@ -126,6 +183,11 @@ def test_graph_variants_are_reexported_from_graph_namespaces():
     for name in names:
         assert not hasattr(domain_nn, name), f"{name!r} should not be exported from dlkit.domain.nn"
         assert not hasattr(public_nn, name), f"{name!r} should not be exported from dlkit.nn"
+        assert hasattr(public_gnn, name), f"{name!r} missing from dlkit.gnn"
+
+
+def test_graph_namespace_exports_graph_compatible_hyper_and_moe_primitives():
+    for name in ("GraphHyperConnection", "GraphHyperSequential", "SparseMoE", "TopKRouter"):
         assert hasattr(public_gnn, name), f"{name!r} missing from dlkit.gnn"
 
 

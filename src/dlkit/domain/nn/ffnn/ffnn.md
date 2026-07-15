@@ -3,14 +3,15 @@
 `dlkit.domain.nn.ffnn` groups flat-input neural networks by architecture.
 The package distinguishes:
 - residual vs plain
-- dense vs constrained linear bodies (SPD, SPDFactorized, Factorized)
+- dense vs factorized linear bodies
 - standard vs scale-equivariant wrappers
 - embedded vs non-embedded structured variants
 
 The plain-`nn.Linear` embedding/regression layers in `residual.py`, `film.py`,
 and `constrained.py` initialize their weights via `domain.nn.init.initialize_`,
-matched to the network's `activation` — see `nn.md`. `FactorizedLinear`-backed
-branches keep their own init untouched.
+matched to the network's `activation` — see `nn.md`. Public factorized
+composites resolve `FactorizedLinear` base-weight gain from the same activation
+through `primitives.factorized_init`.
 
 ## Module layout
 
@@ -45,44 +46,54 @@ All classes are keyword-only, expose `in_features` and `out_features`, and imple
 
 ### Constrained — Factorized layer types
 
-Factorized layers can be rectangular. These networks expose `in_features`, `hidden_size`, and `out_features` as independent parameters.
+Public factorized FFNNs use the exponential `FactorizedLinear` primitive only.
+If a model family name contains `Factorized`, every linear kernel owned by that
+model is a `FactorizedLinear`. Names without `Factorized` use ordinary
+`nn.Linear` kernels for their owned projections.
 
-Each factorized layer uses an explicit positive scaling factor on top of a base
+Each factorized layer uses an explicit positive row scale on top of a base
 weight matrix. In `FactorizedLinear`, the effective weight is
 `exp(log_scale).unsqueeze(1) * base_weight`, matching the paper-style random
-weight factorization `diag(exp(s)) @ V`. The public rectangular `Factorized*`
-family uses this exponential parameterization by default with literal RWF
-initialization semantics (`mean=mu`, `std=sigma`, default `mu=0.0`,
-`sigma=0.1` (unit scale at init: `exp(0) = 1.0`)). A softplus-based alternative remains an advanced low-level
-primitive, not the public FFNN default.
+weight factorization `diag(exp(s)) @ V`. Public factorized architecture
+constructors do not expose `mean`, `std`, or `kaiming_a`; they resolve that
+policy from the selected activation.
 
-**Embedded**: `Linear(in→h)` → `[FactorizedLinear(h→h) × num_layers]` with act → `Linear(h→out)`.
+Public factorized model rules:
+- **Constant-width (square)**: `[FactorizedLinear(n→n) × num_layers]`; no
+  embedding or regression projection; requires `in_features == out_features`.
+- **Embedded factorized (rectangular-safe)**:
+  `FactorizedLinear(in→h)` → `[FactorizedLinear(h→h) × num_layers]` →
+  `FactorizedLinear(h→out)`; no plain `nn.Linear` projections.
+- **Hyper/MoE composites**: follow the same square or embedded rule. MoE
+  routers own their gating projection. MoE experts are shape-preserving
+  `ParametricDenseBlock` FFN sublayers, not complete embedded FFNN models.
+  Linear MoE variants use `ParametricDenseBlock` with `nn.Linear`; factorized
+  variants substitute `FactorizedLinear` kernels in the same FFN sublayer shape.
+  Model embedding/readout projections follow the model name: factorized for
+  `Factorized` model names and ordinary `nn.Linear` otherwise.
 
-**Non-embedded**: `FactorizedLinear(in→h)` (no skip) → `[FactorizedLinear(h→h) × (num_layers-1)]` with act → `Linear(h→out)`.
+This matches Shazeer-style sparsely gated MoE, GShard, and Switch Transformer
+semantics: top-k routers select FFN experts, and Transformer-style residual
+placement wraps the routed FFN sublayer/block rather than making each expert a
+full embedded FFNN.
 
-**Constant-width (square)**: `[FactorizedLinear(n→n) × num_layers]` all-residual — **no** embedding or regression `nn.Linear`. Every layer including the last is `FactorizedLinear`. Requires `in==out`. For asymmetric inputs use the Embedded variants instead.
-
-| Variant | Plain | Residual | Notes |
+| Variant | Plain | Residual/stacked | Notes |
 |---|---|---|---|
-| Non-embedded (rectangular) | `SimpleFactorizedFFNN` | `FactorizedFFNN` | `first_block(in→h, no skip)` + body + `Linear(h→out)` |
-| Embedded (rectangular) | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` | `Linear(in→h)` + body + `Linear(h→out)` |
-| Embedded softplus (rectangular) | `EmbeddedSimpleSoftplusFactorizedFFNN` | `EmbeddedSoftplusFactorizedFFNN` | same as Embedded but body uses `SoftplusFactorizedLinear` |
-| **FactorizedEnd exp (rectangular)** | `EmbeddedSimpleFactorizedEndFFNN` | `EmbeddedFactorizedEndFFNN` | `Linear(in→h)` + body + `FactorizedLinear(h→out)` |
-| **FactorizedEnd softplus (rectangular)** | `EmbeddedSimpleSoftplusFactorizedEndFFNN` | `EmbeddedSoftplusFactorizedEndFFNN` | `Linear(in→h)` + softplus body + `SoftplusFactorizedLinear(h→out)` |
-| **FullyFactorized exp (rectangular)** | `EmbeddedSimpleFullyFactorizedFFNN` | `EmbeddedFullyFactorizedFFNN` | `FactorizedLinear(in→h)` + body + `FactorizedLinear(h→out)`; no plain `nn.Linear` |
-| **FullyFactorized softplus (rectangular)** | `EmbeddedSimpleFullySoftplusFactorizedFFNN` | `EmbeddedFullySoftplusFactorizedFFNN` | `SoftplusFactorizedLinear(in→h)` + softplus body + `SoftplusFactorizedLinear(h→out)`; no plain `nn.Linear` |
-| **Constant-width exp (square)** | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | pure body; `in==out`; `exp` scale fn; GELU default |
-| **Constant-width softplus (square)** | — | `ConstantWidthSoftplusFactorizedFFNN` | pure body; `in==out`; `softplus` scale fn; unit-scale correction at init |
+| **Embedded factorized exp (rectangular)** | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` | factorized embedding, body, and head |
+| **Constant-width exp (square)** | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | pure square factorized body; `in==out` |
+| **Hyper factorized (square)** | — | `ConstantWidthHyperFactorized` | Hyper-Connection stack over factorized blocks |
+| **Hyper embedded factorized** | — | `EmbeddedHyperFactorized` | factorized embedding, Hyper body, factorized head |
+| **MoE factorized (square)** | — | `ConstantWidthMoEFactorized` | residual sparse MoE stack with factorized FFN sublayer experts |
+| **MoE embedded factorized** | — | `EmbeddedMoEFactorized` | factorized embedding, residual MoE body, factorized head |
+| **Hyper linear (square)** | — | `ConstantWidthHyper` | Hyper-Connection stack over `nn.Linear` blocks |
+| **Hyper embedded linear** | — | `EmbeddedHyper` | `nn.Linear` embedding, Hyper body, and head |
+| **MoE linear (square)** | — | `ConstantWidthMoE` | residual sparse MoE stack with `nn.Linear` FFN sublayer experts |
+| **MoE embedded linear** | — | `EmbeddedMoE` | `nn.Linear` embedding, residual MoE body, and head |
 
-Scale-equivariant wrappers:
-- Rectangular exp: `ScaleEquivariantFactorizedFFNN`, `ScaleEquivariantSimpleFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
-- Rectangular softplus: `ScaleEquivariantEmbeddedSoftplusFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleSoftplusFactorizedFFNN`
-- FactorizedEnd exp: `ScaleEquivariantEmbeddedFactorizedEndFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedEndFFNN`
-- FactorizedEnd softplus: `ScaleEquivariantEmbeddedSoftplusFactorizedEndFFNN`, `ScaleEquivariantEmbeddedSimpleSoftplusFactorizedEndFFNN`
-- FullyFactorized exp: `ScaleEquivariantEmbeddedFullyFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFullyFactorizedFFNN`
-- FullyFactorized softplus: `ScaleEquivariantEmbeddedFullySoftplusFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFullySoftplusFactorizedFFNN`
+Scale-equivariant public wrappers are kept for the pure factorized
+families:
+- Embedded factorized exp: `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
 - Square exp: `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
-- Square softplus: `ScaleEquivariantConstantWidthSoftplusFactorizedFFNN`
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
 
@@ -158,8 +169,8 @@ Unless stated otherwise, `num_layers` counts learned hidden blocks on the model'
 All constrained FFNNs implement `from_entries(input_shapes, output_shapes, **kwargs)` where
 `input_shapes` and `output_shapes` are `Mapping[str, tuple[int, ...]]`.
 
-- **Square-type classes** (`SPDFFNN`, `EmbeddedSPDFFNN`, etc.): require the first input and output shapes to be equal; extract `in_features` from the input shape's leading dim.
-- **Rectangular-type classes** (`FactorizedFFNN`, `EmbeddedFactorizedFFNN`, etc.): extract `in_features` from the first input shape and `out_features` from the first output shape.
+- **Square-type classes** (`ConstantWidthFactorizedFFNN`, `ConstantWidthHyperFactorized`, etc.): require the first input and output shapes to be equal; extract `in_features` from the input shape's leading dim.
+- **Rectangular-safe embedded classes** (`EmbeddedFactorizedFFNN`, `EmbeddedHyperFactorized`, etc.): extract `in_features` from the first input shape and `out_features` from the first output shape.
 
 `from_entries` does **not** filter kwargs — passing duplicate `in_features` or `out_features` raises a `TypeError`.
 
@@ -167,34 +178,29 @@ All constrained FFNNs implement `from_entries(input_shapes, output_shapes, **kwa
 
 ```toml
 [model]
-name = "SPDFFNN"
+name = "ConstantWidthFactorizedFFNN"
 module_path = "dlkit.domain.nn"
-in_features = 8
+in_features = 64
 num_layers = 3
 ```
 
 ```toml
 [model]
-name = "EmbeddedSPDFFNN"
-module_path = "dlkit.domain.nn"
-in_features = 8
-num_layers = 2
-```
-
-```toml
-[model]
-name = "FactorizedFFNN"
+name = "EmbeddedHyperFactorized"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 3
+num_lanes = 4
 ```
 
 ```toml
 [model]
-name = "EmbeddedFactorizedFFNN"
+name = "EmbeddedMoEFactorized"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 3
+num_experts = 8
+top_k = 2
 ```
 
 ---

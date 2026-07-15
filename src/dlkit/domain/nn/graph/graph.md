@@ -21,7 +21,17 @@ Same as the FFNN family:
 
 All built-ins are concrete classes. No public `residual: bool` on any constructor.
 
-Graph models implement `from_entries(input_shapes, output_shapes, **kwargs)` for dataset-driven construction. `in_channels` and `out_channels` are read from the last dimension of the first input and output shapes; `edge_dim` may be passed via `kwargs`.
+Graph models implement `from_context(context, **kwargs)` for dataset-driven construction. `in_channels` and `out_channels` are read from the last dimension of the first input and output shapes; `edge_dim` may be passed via `kwargs`.
+
+## MoE and Hyper-Connection primitives
+
+`dlkit.gnn` re-exports graph-compatible primitives:
+- `GraphHyperConnection` wraps a graph module with multi-lane residual mixing and forwards `edge_index`/`edge_attr` per lane.
+- `SparseMoE` and `TopKRouter` can be used on graph node features before or after message passing.
+
+V1 does not include concrete graph model classes such as `MoEGATv2Projection`
+or `HyperGATv2Projection`. Compose these primitives with existing graph
+projection/message modules when that behavior is needed.
 
 ## Config example
 

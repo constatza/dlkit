@@ -109,6 +109,7 @@ class FactorizedLinear(_FactorizedLinearBase):
         *,
         mean: float = 0.0,
         std: float = 0.1,
+        kaiming_a: float = 0.0,
         device: torch.device | str | None = None,
         dtype: torch.dtype | None = None,
     ) -> None:
@@ -121,6 +122,8 @@ class FactorizedLinear(_FactorizedLinearBase):
             mean: Gaussian mean for ``log_scale`` initialisation
                 (``0.0`` -> ``exp(0) = 1.0``, unit scale at init).
             std: Standard deviation for log-scale initialisation.
+            kaiming_a: Negative-slope ``a`` passed to ``kaiming_uniform_`` for
+                ``base_weight``.
             device: Optional device for parameter initialisation.
             dtype: Optional dtype for parameter initialisation.
         """
@@ -131,47 +134,6 @@ class FactorizedLinear(_FactorizedLinearBase):
             mean=mean,
             std=std,
             pos_fn=torch.exp,
-            device=device,
-            dtype=dtype,
-        )
-
-
-class SoftplusFactorizedLinear(_FactorizedLinearBase):
-    """Advanced rectangular factorized linear layer with softplus row scales."""
-
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        bias: bool = True,
-        *,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        device: torch.device | str | None = None,
-        dtype: torch.dtype | None = None,
-    ) -> None:
-        """Initialize the softplus-factorized linear layer.
-
-        Args:
-            in_features: Input feature size.
-            out_features: Output feature size.
-            bias: Whether to include a bias term.
-            mean: Offset from the softplus unit-scale point.
-            std: Standard deviation for log-scale initialisation.
-            kaiming_a: Negative-slope ``a`` passed to ``kaiming_uniform_`` for
-                ``base_weight``. Defaults to ``0.0``, the textbook He/Kaiming
-                gain for ReLU/GELU-family activations.
-            device: Optional device for parameter initialisation.
-            dtype: Optional dtype for parameter initialisation.
-        """
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            bias=bias,
-            mean=mean,
-            std=std,
-            pos_fn=F.softplus,
             kaiming_a=kaiming_a,
             device=device,
             dtype=dtype,

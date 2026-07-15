@@ -15,7 +15,7 @@ semantic parameter contracts. No engine orchestration belongs here.
 | `generative/` | VAE and generative samplers |
 | `spectral/` | Spectral convolution, Fourier-enhanced models, and coordinate spectral-bias networks |
 | `operators/` | Physics-informed operator networks |
-| `primitives/` | Reusable low-level blocks, constrained linear layers, gating mechanisms, and conditioning primitives |
+| `primitives/` | Reusable low-level blocks, constrained linear layers, gating mechanisms, conditioning primitives, sparse MoE, and multi-lane residual wrappers |
 
 ## Conditioned network primitives
 
@@ -33,6 +33,34 @@ semantic parameter contracts. No engine orchestration belongs here.
 
 `primitives/scale_equivariant.py` contains `ConditionedScaleEquivariantWrapper`, which extends the norm-scaling pattern to conditioned modules: `base_model(x / ||x||, condition) * ||x||`. Scale equivariance applies to the features input only; the condition passes through unchanged.
 
+## MoE and multi-lane primitives
+
+`primitives/moe.py` owns sparse mixture-of-experts building blocks:
+- `TopKRouter` performs feature-last top-k token routing and emits load-balancing diagnostics.
+- `SparseMoE` dispatches selected tokens to ordinary `nn.Module` experts and supports always-on shared experts.
+- `RoutingStats` carries `aux_loss`, `expert_counts`, `router_probs`, and selected expert ids for callers that request stats.
+
+MoE expert semantics follow the Shazeer, GShard, and Switch Transformer line:
+the router selects top-k FFN experts for a token/sample. In DLKit FFNN models,
+those experts are `ParametricDenseBlock` FFN sublayers, not full embedded FFNNs.
+Linear MoE models use `ParametricDenseBlock` with `nn.Linear`; factorized MoE
+models keep the same sublayer shape and substitute `FactorizedLinear` kernels.
+`MoESequential` is the residual stack wrapper for those shape-preserving routed
+FFN sublayers, matching Transformer residual placement around the FFN block.
+
+`primitives/hyper.py` owns Hyper-Connection-style multi-lane residual wrappers:
+- `LaneExpand` and `LaneReduce` convert between normal feature tensors and `(..., lanes, features)` tensors.
+- `HyperConnection` wraps feature-last modules with identity-biased pre/post lane mixing.
+- `GraphHyperConnection` applies the same lane behavior to graph modules with `forward(x, edge_index, edge_attr=None)`.
+- `LaneMixingStats` exposes lane utilization diagnostics.
+
+`primitives/stacks.py` owns stack-level composition helpers: `HyperSequential`,
+`GraphHyperSequential`, `MoESequential`, and `residual_branch_scale`.
+
+These are v1 primitives, not concrete model families. Dense FFNNs, graph
+projections, attention blocks, and custom user models can compose them without
+adding new inheritance requirements.
+
 ## FFNN surface
 
 The FFNN family is organized symmetrically around architecture and naming:
@@ -41,23 +69,23 @@ The FFNN family is organized symmetrically around architecture and naming:
 - `FFNN` and `VarWidthFFNN` both accept `skip: bool = True` — use `skip=False` instead of a separate `Simple*` class
 - `Embedded...` means the network has a dedicated initial projection layer before the body; `EmbeddedFFNN` is the dense constant-width version
 - `ScaleEquivariant...` means norm-scaled wrapper behavior
-- Square layer types (SPD, SPDFactorized) expose only `in_features`; rectangular types (Factorized) expose `in_features`, `hidden_size`, and `out_features`
+- Square factorized types expose only `in_features`/`out_features` and require them to match; embedded factorized types expose `in_features`, `hidden_size`, and `out_features`
 - `num_layers` counts learned hidden blocks on the model's main path; pure embedding and readout projections are not included
 
 Representative exports from `dlkit.domain.nn` include:
 - dense: `VarWidthFFNN`, `FFNN`, `EmbeddedFFNN`
 - FiLM-conditioned: `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantVarWidthFiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN`
-- constrained Factorized (rectangular, exp): `FactorizedFFNN`, `SimpleFactorizedFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`
-- constrained Factorized (rectangular, softplus): `EmbeddedSoftplusFactorizedFFNN`, `EmbeddedSimpleSoftplusFactorizedFFNN`
-- constrained FactorizedEnd (plain Linear embedding, FactorizedLinear regression, exp): `EmbeddedFactorizedEndFFNN`, `EmbeddedSimpleFactorizedEndFFNN`
-- constrained FactorizedEnd (plain Linear embedding, SoftplusFactorizedLinear regression): `EmbeddedSoftplusFactorizedEndFFNN`, `EmbeddedSimpleSoftplusFactorizedEndFFNN`
-- constrained FullyFactorized (FactorizedLinear embedding, body, and regression, exp): `EmbeddedFullyFactorizedFFNN`, `EmbeddedSimpleFullyFactorizedFFNN`
-- constrained FullyFactorized (SoftplusFactorizedLinear embedding, body, and regression): `EmbeddedFullySoftplusFactorizedFFNN`, `EmbeddedSimpleFullySoftplusFactorizedFFNN`
-- constrained Factorized (square constant-width, exp): `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
-- constrained Factorized (square constant-width, softplus): `ConstantWidthSoftplusFactorizedFFNN`, `ScaleEquivariantConstantWidthSoftplusFactorizedFFNN`
+- constrained embedded factorized (rectangular-safe, exp): `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
+- constrained factorized (square constant-width, exp): `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
+- Hyper-Connection linear: `ConstantWidthHyper`, `EmbeddedHyper`
+- Hyper-Connection factorized: `ConstantWidthHyperFactorized`, `EmbeddedHyperFactorized`
+- sparse MoE linear: `ConstantWidthMoE`, `EmbeddedMoE`
+- sparse MoE factorized: `ConstantWidthMoEFactorized`, `EmbeddedMoEFactorized`
 - coordinate spectral-bias: `FourierFeatureNetwork`, `FactorizedFourierFeatureNetwork`, `Siren`, `ModifiedMLP`, `ScaleEquivariantFourierFeatureNetwork`, `ScaleEquivariantFactorizedFourierFeatureNetwork`
-- scale-equivariant: `ScaleEquivariantFFNN`, `ScaleEquivariantFactorizedFFNN`, `ScaleEquivariantSimpleFactorizedFFNN`
+- scale-equivariant: `ScaleEquivariantFFNN`
 - gated: `GatedMLP`
+- sparse/routed primitives: `TopKRouter`, `SparseMoE`, `MoESequential`
+- multi-lane residual primitives: `HyperConnection`, `GraphHyperConnection`, `HyperSequential`, `GraphHyperSequential`, `LaneExpand`, `LaneReduce`
 
 `dlkit.nn` is the user-facing shim for this non-graph NN surface and re-exports the same
 families, including the FiLM-conditioned variants above.
@@ -83,8 +111,12 @@ Representative exports from `dlkit.gnn` and `dlkit.domain.nn.graph` include:
 - residual: `GATv2Projection`, `ScaledGATv2Projection`
 - plain: `SimpleGATv2Projection`, `ScaledSimpleGATv2Projection`
 
-`dlkit.domain.nn` and `dlkit.nn` intentionally do not re-export graph classes.
-That keeps broad non-graph imports free of optional PyG side effects.
+`dlkit.gnn` also re-exports graph-compatible primitives `GraphHyperConnection`,
+`GraphHyperSequential`, `SparseMoE`, and `TopKRouter` for node-feature composition. It does not add
+concrete MoE or Hyper-Connection graph model classes in v1.
+
+`dlkit.domain.nn` and `dlkit.nn` intentionally do not re-export concrete graph
+classes. That keeps broad non-graph imports free of optional PyG side effects.
 
 For the full matrix, see `graph/graph.md`.
 
@@ -92,9 +124,8 @@ For the full matrix, see `graph/graph.md`.
 
 `dlkit.domain.nn.factory.build_model` constructs any `nn.Module`:
 
-- If both `input_shapes` and `output_shapes` are provided and the model implements
-  `from_entries` (i.e. inherits `StandardEntryConsumer`), it calls
-  `model_cls.from_entries(input_shapes, output_shapes, **kwargs)`.
+- If a `ShapeContext` is provided and the model implements `from_context`, it
+  calls `model_cls.from_context(context, **kwargs)`.
 - Otherwise it calls `model_cls(**kwargs)` directly.
 
 ## Shape-providing protocol
@@ -107,57 +138,54 @@ All built-in model families implement the **entry-consumer pattern** defined in
 | Component | Where | Role |
 |-----------|-------|------|
 | `InputSpec` | per-model inner class | Declares expected entry names (field names = `forward` arg names) |
-| `_constructor_dims` | classmethod hook | Maps `(InputShapes, OutputShapes)` → `{constructor_kwarg: int}` |
-| `_SHAPE_KWARG_NAMES` | class attribute | Names the kwargs that `_constructor_dims` supplies (for checkpoint stripping) |
+| `resolve_shape_kwargs` | classmethod hook | Maps `ShapeContext` to `{constructor_kwarg: int}` |
+| `_SHAPE_KWARG_NAMES` | class attribute | Names the kwargs that `resolve_shape_kwargs` supplies for checkpoint stripping |
 
 ### `StandardEntryConsumer` — the base mixin
 
-Provides a sealed `from_entries` classmethod (Template Method pattern).
+Provides a sealed `from_context` classmethod (Template Method pattern).
 
 ```python
 class StandardEntryConsumer:
     _SHAPE_KWARG_NAMES: frozenset[str] = frozenset({"in_features", "out_features"})
 
     @classmethod
-    def _constructor_dims(cls, input_shapes, output_shapes) -> dict[str, int]:
+    def resolve_shape_kwargs(cls, context: ShapeContext) -> dict[str, int]:
         # Default: take the first feature dim and first output dim.
         return {
-            "in_features": next(iter(input_shapes.values()))[0],
-            "out_features": next(iter(output_shapes.values()))[0],
+            "in_features": next(iter(context.input_shapes.values()))[0],
+            "out_features": next(iter(context.output_shapes.values()))[0],
         }
 
     @classmethod
-    def from_entries(cls, input_shapes, output_shapes, **kwargs) -> Self:
+    def from_context(cls, context: ShapeContext, **kwargs) -> Self:
         # 1. Validate that all entries declared in InputSpec are present.
-        # 2. Extract constructor dims via the hook.
+        # 2. Extract constructor dims via resolve_shape_kwargs.
         # 3. Construct cls(**dims, **kwargs).
         ...
 ```
 
-`SquareEntryConsumer` is a subclass whose `_constructor_dims` validates that
-`in_shape == out_shape` (used for SPD-family models).
-
 ### Entry name validation (early error before PyTorch runs)
 
-`from_entries` checks `InputSpec.model_fields` against the available
-`input_shapes` keys **before** calling `_constructor_dims`. If a required entry
+`from_context` checks `InputSpec.model_fields` against the available
+`context.input_shapes` keys **before** calling `resolve_shape_kwargs`. If a required entry
 is missing, it raises immediately:
 
 ```
 ValueError: MySPDModel requires entries ['x'] but only ['y'] are available
 ```
 
-### Shape dimensionality validation in `_constructor_dims`
+### Shape dimensionality validation in `resolve_shape_kwargs`
 
-`_constructor_dims` is also the right place to validate the **rank** of an input
+`resolve_shape_kwargs` is also the right place to validate the **rank** of an input
 shape — e.g. a spectral model that requires at least a 2-D sample `(C, L)` would
 fail with a cryptic PyTorch error deep in the forward pass if fed a 1-D sample.
 Catch it here instead:
 
 ```python
 @classmethod
-def _constructor_dims(cls, input_shapes, output_shapes):
-    in_shape = next(iter(input_shapes.values()))
+def resolve_shape_kwargs(cls, context):
+    in_shape = next(iter(context.input_shapes.values()))
     if len(in_shape) < 2:
         raise ValueError(
             f"{cls.__name__} requires at least 2-D input shape (C, L) "
@@ -167,7 +195,7 @@ def _constructor_dims(cls, input_shapes, output_shapes):
 ```
 
 Any shape invariant a model needs (minimum rank, minimum size, parity, square
-constraint) should be validated in `_constructor_dims`, not in `__init__`. That
+constraint) should be validated in `resolve_shape_kwargs`, not in `__init__`. That
 way the engine catches the problem at model-build time, before any tensor ever
 flows through the network.
 
@@ -185,11 +213,11 @@ class MyModel(StandardEntryConsumer, nn.Module):
         "in_features", "context_dim", "out_features"
     })
 
-    # 3. Override _constructor_dims to extract and VALIDATE dims.
+    # 3. Override resolve_shape_kwargs to extract and VALIDATE dims.
     @classmethod
-    def _constructor_dims(cls, input_shapes, output_shapes):
-        x_shape = input_shapes["x"]
-        ctx_shape = input_shapes["context"]
+    def resolve_shape_kwargs(cls, context):
+        x_shape = context.input_shapes["x"]
+        ctx_shape = context.input_shapes["context"]
         if len(x_shape) != 1:
             raise ValueError(
                 f"{cls.__name__} requires 1-D 'x' shape but got {x_shape}"
@@ -197,7 +225,7 @@ class MyModel(StandardEntryConsumer, nn.Module):
         return {
             "in_features": x_shape[0],
             "context_dim": ctx_shape[0],
-            "out_features": next(iter(output_shapes.values()))[0],
+            "out_features": next(iter(context.output_shapes.values()))[0],
         }
 
     def __init__(self, *, in_features, context_dim, out_features, ...): ...
@@ -205,16 +233,16 @@ class MyModel(StandardEntryConsumer, nn.Module):
 
 Rules:
 - `InputSpec` field names must match `forward` parameter names exactly.
-- `_SHAPE_KWARG_NAMES` must list every key that `_constructor_dims` returns.
-- Shape rank/size validation belongs in `_constructor_dims`.
+- `_SHAPE_KWARG_NAMES` must list every key that `resolve_shape_kwargs` returns.
+- Shape rank/size validation belongs in `resolve_shape_kwargs`.
 - `__init__` may repeat simple range checks (`if n < 0: raise`) but should not
-  re-validate shape contracts — that's `_constructor_dims`' job.
+  re-validate shape contracts — that's `resolve_shape_kwargs`'s job.
 
 ### Checkpoint round-trip
 
 `engine/inference/model_builder.py` strips `_SHAPE_KWARG_NAMES` from the
-checkpoint hyperparams before calling `from_entries`, preventing "got multiple
-values for keyword argument" errors when both the checkpoint and `_constructor_dims`
+checkpoint hyperparams before calling `from_context`, preventing "got multiple
+values for keyword argument" errors when both the checkpoint and `resolve_shape_kwargs`
 supply the same key. If you add a new kwarg that comes from shapes, add it to
 `_SHAPE_KWARG_NAMES` or the round-trip will break.
 

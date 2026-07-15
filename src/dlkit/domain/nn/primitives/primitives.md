@@ -14,6 +14,10 @@ Blocks that take an `activation` kwarg (`DenseBlock`, `ConvolutionBlock1d`,
 |-----------|------|---------|
 | `DenseBlock` | `dense.py` | Pre-activation dense layer with normalization |
 | `SkipConnection` | `skip.py` | Residual connection wrapper with flexible aggregation |
+| `SparseMoE`, `TopKRouter` | `moe.py` | Feature-last sparse mixture-of-experts primitives |
+| `HyperConnection`, `GraphHyperConnection` | `hyper.py` | Multi-lane residual wrappers with identity-biased lane mixing |
+| `HyperSequential`, `GraphHyperSequential`, `MoESequential` | `stacks.py` | Sequential composition helpers for Hyper-Connection and residual sparse MoE stacks |
+| `FactorizedInit`, `resolve_factorized_init` | `factorized_init.py` | Architecture-level factorized initialization policy helper |
 | `ConvolutionBlock1d` | `convolutional.py` | 1D convolution with normalization and dropout |
 | `DeconvolutionBlock1d` | `convolutional.py` | 1D transposed convolution for upsampling |
 | `ScaleEquivariantWrapper` | `scale_equivariant.py` | Shared norm-scaled wrapper for positive scale equivariance |
@@ -170,6 +174,118 @@ models reuse the same implementation rather than duplicating norm-scaling logic.
 
 ---
 
+## SparseMoE
+
+`moe.py` provides a composable sparse mixture-of-experts layer for feature-last
+tensors. It is deliberately independent of FFNN and graph model families:
+experts are plain `nn.Module` instances and the router only sees the final
+feature dimension.
+
+In the FFNN composites, those experts are FFN sublayers/blocks rather than full
+embedded FFNN models. This follows Shazeer et al.'s sparsely gated MoE and the
+GShard/Switch Transformer convention: top-k routing selects FFN experts, and the
+Transformer residual path wraps the routed FFN sublayer/block. DLKit's linear
+MoE FFNNs provide `ParametricDenseBlock` experts backed by `nn.Linear`;
+factorized MoE FFNNs keep the same sublayer shape and replace only those
+kernels with `FactorizedLinear`.
+
+Key pieces:
+- `TopKRouter`: maps each flattened token/sample to top-k expert ids and
+  normalized route weights.
+- `SparseMoE`: dispatches selected tokens to selected experts and combines
+  expert outputs with route weights.
+- `RoutingStats`: exposes `aux_loss`, `expert_counts`, `router_probs`, and
+  `selected_experts` when callers request diagnostics.
+
+Defaults follow a practical sparse MoE v1: `top_k=2`, softmax token routing,
+no capacity drop, no shared experts, and tensor-only forward output unless
+`return_stats=True`.
+
+Example:
+
+```python
+from torch import nn
+from dlkit.domain.nn.primitives import SparseMoE
+
+experts = [nn.Linear(64, 64) for _ in range(4)]
+moe = SparseMoE(in_features=64, experts=experts, top_k=2)
+out, stats = moe(x, return_stats=True)
+```
+
+Shared experts can be supplied with `shared_experts=[...]`; they run for every
+token and are added to the routed expert mixture.
+
+---
+
+## Sequential Hyper/MoE Stacks
+
+`stacks.py` owns stack-level lifecycle concerns without defining expert
+routing or factorized initialization:
+- `HyperSequential`: expands a normal feature tensor into lanes once, applies a
+  sequence of `HyperConnection` layers, then reduces lanes unless requested
+  otherwise.
+- `GraphHyperSequential`: same lane lifecycle for graph modules with
+  `forward(x, edge_index, edge_attr=None)`.
+- `MoESequential`: applies shape-preserving `SparseMoE` layers as a scaled
+  residual stack and aggregates per-layer `RoutingStats` when requested.
+- `residual_branch_scale`: returns the default branch scaling used by stack
+  wrappers.
+
+These helpers are the preferred way to build sequential Hyper-Connection or
+MoE bodies because they keep lane/routing lifecycle outside concrete model
+classes.
+
+---
+
+## HyperConnection
+
+`hyper.py` provides multi-lane residual primitives inspired by Hyper-Connections.
+The wrappers keep the residual mechanism modular: any feature-last module can be
+wrapped without becoming a new concrete model family.
+
+Key pieces:
+- `LaneExpand`: expands `Tensor[..., features]` into
+  `Tensor[..., lanes, features]`.
+- `LaneReduce`: collapses lanes with identity-biased learned weights.
+- `HyperConnection`: applies a wrapped module per lane with learnable pre/post
+  lane mixing, initialized to identity.
+- `GraphHyperConnection`: forwards `edge_index` and `edge_attr` to a graph
+  module per lane while sharing graph structure.
+- `LaneMixingStats`: exposes lane entropy, dominant-lane fraction, and
+  off-diagonal mixing norm.
+
+Example:
+
+```python
+from torch import nn
+from dlkit.domain.nn.primitives import HyperConnection
+
+block = HyperConnection(nn.Linear(64, 64), num_lanes=4, branch_scale=0.5)
+out = block(x)
+lanes = block(x, return_lanes=True)
+```
+
+`GraphHyperConnection` is intended for node-feature graph modules with the
+signature `forward(x, edge_index, edge_attr=None)`.
+
+---
+
+## Factorized Initialization Policy
+
+`factorized_init.py` centralizes architecture-level defaults for
+`FactorizedLinear` construction:
+- `log_scale_mean = 0.0`, giving unit scale at init because `exp(0) = 1`.
+- `log_scale_std = 0.1`, fixed internally rather than exposed by public model
+  constructors.
+- `kaiming_a` is resolved from the selected activation for the factorized base
+  weight initializer.
+
+Low-level `FactorizedLinear` remains an expert primitive and still accepts its
+literal initialization knobs. Public composite FFNN constructors pass only an
+activation and let this helper resolve the factorized init policy.
+
+---
+
 ## ConvolutionBlock1d
 
 1D convolutional block with pre-activation design.
@@ -295,65 +411,16 @@ class MyModel(TransformMixin, LightningModule):
 
 ## Parametrized Linear Layers
 
-All layers live in `parametrized_layers.py`. Constrained layers use PyTorch's
-`torch.nn.utils.parametrize` machinery unless noted.
+`parametrized_layers.py` currently exposes the rectangular
+`FactorizedLinear` primitive. Positive-scale parametrization modules live in
+`parametrizations.py` for direct composition with PyTorch modules when a caller
+wants to register parametrizations manually.
 
 ### Layer Reference
 
 | Layer | Constraint | Mathematical Form | Square required |
 |---|---|---|---|
-| `SymmetricLinear` | Hard (parametrize) | $W = W^\top$ | Yes |
-| `SPDLinear` | Hard (parametrize) | SPD via Gershgorin | Yes |
-| `SPDFactorizedLinear` | Hard (parametrize) | $W = D\,\text{SPD}(A)\,D$ | Yes |
 | `FactorizedLinear` | Modelling choice (plain Module) | $W = \text{diag}(e^{\mathbf{s}})\,A$ | No |
-| `SoftplusFactorizedLinear` | Modelling choice (plain Module) | $W = \text{diag}(\text{softplus}(\mathbf{s}))\,A$ | No |
-| `SymmetricFactorizedLinear` | Hard (parametrize) | $W = D\,\text{Sym}(A)\,D$ | Yes |
-
-### `SPDLinear`
-
-Uses `register_spd`, which chains **two** parametrizations applied in order to the raw learnable parameter $X$:
-
-$$X \;\xrightarrow{\;\texttt{Symmetric}\;}\; A \;\xrightarrow{\;\texttt{SPD}\;}\; W$$
-
-**Step 1 — Symmetrisation** (`Symmetric`):
-
-$$A = \text{triu}(X) + \text{triu}(X,\,1)^\top$$
-
-The unconstrained parameter $X \in \mathbb{R}^{n \times n}$ is folded into a symmetric matrix $A = A^\top$ by mirroring the upper triangle. Only the $\tfrac{n(n+1)}{2}$ upper-triangular entries are free; the lower triangle is not independently learned.
-
-**Step 2 — Positive-definiteness** (`SPD`):
-
-The `SPD` module expects a symmetric input (it validates this at runtime) and rewrites only the diagonal:
-
-$$W_{ij} = A_{ij}, \quad i \neq j$$
-
-$$W_{ii} = \phi(A_{ii}) + \sum_{j \neq i} |A_{ij}| + \epsilon_{\min}$$
-
-where $\phi$ is `pos_fn` (default: softplus) and $\epsilon_{\min}$ is `min_diag`.
-
-**Gershgorin guarantee**: $W_{ii} > \sum_{j \neq i} |W_{ij}|$ for all $i$, so all eigenvalues are positive and $W \succ 0$.
-
-**Full pipeline:**
-
-$$W_{ii} = \phi\!\Bigl(\text{triu}(X)_{ii}\Bigr) + \sum_{j \neq i} \bigl|\text{triu}(X)_{\min(i,j),\max(i,j)}\bigr| + \epsilon_{\min}, \qquad W_{ij} = X_{\min(i,j),\,\max(i,j)} \text{ for } i \neq j$$
-
-**Key parameters**:
-- `min_diag` (float, default `1e-4`): positive floor $\epsilon_{\min}$ on each diagonal entry.
-- `pos_fn` (callable, default `F.softplus`): element-wise map $\phi : \mathbb{R} \to \mathbb{R}_{>0}$.
-
-### `SPDFactorizedLinear`
-
-Chained parametrizations: `Symmetric → SPD → PositiveSandwichScale`.
-
-**Mathematical form:**
-
-$$W = D\,\text{SPD}(A)\,D, \qquad D = \text{diag}\!\left(e^{\mathbf{s}}\right)$$
-
-The sandwich scale $D$ preserves both symmetry and positive definiteness: if $M \succ 0$ then $D M D \succ 0$ for any invertible diagonal $D$.
-
-**Additional parameters**:
-- `mean`, `std`: initialisation of the log-scale $\mathbf{s}$ ($\text{mean}=0 \Rightarrow D \approx I$).
-- `pos_fn`: forwarded to the `SPD` stage.
 
 ### `FactorizedLinear`
 
@@ -374,94 +441,19 @@ Equivalently: row $i$ of $W$ is $e^{s_i}$ times row $i$ of $A$.
 - `mean`, `std`: literal Gaussian parameters used to sample `log_scale`
   $\mathbf{s}$ (shipped default: `mean=0.0`, `std=0.1` — unit scale at init,
   since $e^0 = 1$).
-- Kaiming gain on `base_weight` is fixed internally at `a=0.0` (He/Kaiming
-  gain for ReLU/GELU-family activations) and is not a public constructor
-  parameter on this class.
-
-### `SoftplusFactorizedLinear`
-
-Advanced rectangular factorized primitive using
-$$W = \text{diag}(\text{softplus}(\mathbf{s})) A.$$
-
-This keeps the softplus path available for custom compositions without making
-it the default public factorized architecture.
-
-**Key parameters**: same `mean`/`std` as `FactorizedLinear`, plus:
 - `kaiming_a` (`float`, default `0.0`): the `a` gain passed to
-  `nn.init.kaiming_uniform_` for `base_weight`. `0.0` is the textbook
-  He/Kaiming gain for ReLU/GELU-family activations; expose a different value
-  explicitly if the surrounding network uses a different activation family.
-
-### Configuring `pos_fn`
-
-`SPDLinear` (and all SPD variants) require a square weight matrix, so `in_features`
-must equal `out_features`. Both arguments are kept to match `nn.Linear`'s signature,
-but passing different values raises a `ValueError` at construction time.
+  `nn.init.kaiming_uniform_` for `base_weight`.
 
 ```python
-import torch
-import torch.nn.functional as F
-from dlkit.domain.nn.primitives import SPDLinear, FactorizedLinear
-
-n = 16  # in_features == out_features (square weight matrix)
-
-# Default: softplus (smooth, non-saturating)
-SPDLinear(n, n)
-
-# Exponential (sharper gradient near zero)
-SPDLinear(n, n, pos_fn=torch.exp)
-
-# Bounded alternative
-SPDLinear(n, n, pos_fn=lambda x: F.relu(x) + 1e-4)
+from dlkit.domain.nn.primitives import FactorizedLinear
 
 # FactorizedLinear: paper-style exponential RWF
 FactorizedLinear(16, 32)
-
-# Advanced softplus variant
-SoftplusFactorizedLinear(16, 32)
 ```
 
 ### Parametrization Modules
 
 Each module is a composable building block applied via `torch.nn.utils.parametrize`.
-
----
-
-#### `Symmetric`
-
-Folds the upper triangle onto the lower triangle so that $W = W^\top$.
-
-$$W_{ij} = X_{\min(i,j),\;\max(i,j)}$$
-
-Equivalently, using PyTorch indexing:
-
-$$W = \underbrace{\text{triu}(X)}_{\text{upper + diagonal}} + \underbrace{\text{triu}(X,\,1)^\top}_{\text{strict upper, mirrored}}$$
-
-- **Input**: any unconstrained square matrix $X \in \mathbb{R}^{n \times n}$
-- **Output**: symmetric matrix using only the upper-triangular values of $X$
-- **Preserved**: $W^\top = W$
-
----
-
-#### `SPD`
-
-Expects a **symmetric** input and rewrites the diagonal to enforce strict diagonal dominance. By the **Gershgorin circle theorem**, this guarantees all eigenvalues are positive.
-
-**Off-diagonal entries** (unchanged):
-
-$$W_{ij} = X_{ij}, \quad i \neq j$$
-
-**Diagonal rewrite:**
-
-$$W_{ii} = \phi(X_{ii}) + \underbrace{\sum_{j \neq i} |X_{ij}|}_{\text{row off-diag. }L^1\text{ norm}} + \epsilon_{\min}$$
-
-where $\phi : \mathbb{R} \to \mathbb{R}_{>0}$ is `pos_fn` (default: softplus) and $\epsilon_{\min}$ is `min_diag`.
-
-**Gershgorin guarantee**: since $W_{ii} > \sum_{j \neq i} |W_{ij}|$ for all $i$, every eigenvalue $\lambda_i > 0$, therefore $W \succ 0$.
-
-- **Input**: symmetric matrix $X$
-- **Output**: symmetric positive-definite matrix $W \succ 0$
-- **Preserved**: $W^\top = W$, $\lambda_{\min}(W) \geq \epsilon_{\min}$
 
 ---
 
@@ -529,21 +521,10 @@ $$W = e^{s}\, A, \qquad s \in \mathbb{R} \text{ (learnable scalar)}$$
 
 | Class | Element-wise formula | Matrix form | Constraint preserved |
 |---|---|---|---|
-| `Symmetric` | $W_{ij} = X_{\min(i,j),\max(i,j)}$ | $\text{triu}(X) + \text{triu}(X,1)^\top$ | $W = W^\top$ |
-| `SPD` | $W_{ii} = \phi(X_{ii}) + \sum_{j\neq i}\lvert X_{ij}\rvert + \epsilon$ | diagonal rewrite | $W \succ 0$ |
 | `PositiveRowScale` | $W_{ij} = e^{s_i} A_{ij}$ | $\text{diag}(e^{\mathbf{s}})\,A$ | positive row norms |
 | `PositiveColumnScale` | $W_{ij} = A_{ij}\,e^{s_j}$ | $A\,\text{diag}(e^{\mathbf{s}})$ | positive column norms |
 | `PositiveSandwichScale` | $W_{ij} = e^{s_i} A_{ij} e^{s_j}$ | $D A D,\ D{=}\text{diag}(e^{\mathbf{s}})$ | symmetry + PD |
 | `PositiveScalarScale` | $W_{ij} = e^s\, A_{ij}$ | $e^s\, A$ | sign pattern |
-
-### Registration Helpers
-
-```python
-register_symmetric(module, tensor_name="weight")
-register_spd(module, tensor_name="weight", *, min_diag=1e-4, pos_fn=F.softplus)
-register_symmetric_factorized(module, size, *, mean=0.0, std=0.1)
-register_spd_factorized(module, size, *, min_diag=1e-4, mean=0.0, std=0.1, pos_fn=F.softplus)
-```
 
 ---
 

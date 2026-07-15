@@ -16,7 +16,6 @@ from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
     FactorizedLinear,
     SkipConnection,
-    SoftplusFactorizedLinear,
     build_linear_skip_layer,
 )
 from dlkit.domain.nn.types import ActivationName
@@ -187,32 +186,6 @@ def _factorized_layer_factory(
     return lambda n: FactorizedLinear(n, n, bias=bias, mean=mean, std=std)
 
 
-def _softplus_factorized_layer_factory(
-    *,
-    bias: bool,
-    mean: float,
-    std: float,
-) -> Callable[[int], nn.Module]:
-    return lambda n: SoftplusFactorizedLinear(n, n, bias=bias, mean=mean, std=std)
-
-
-# softplus(log(e-1)) == 1.0 exactly; user-facing mean=0.0 maps to unit scale at init
-_SOFTPLUS_UNIT_MEAN = math.log(math.e - 1)
-
-
-def _softplus_unit_layer_factory(
-    *,
-    bias: bool,
-    mean: float,
-    std: float,
-    kaiming_a: float = 0.0,
-) -> Callable[[int], nn.Module]:
-    """Like _softplus_factorized_layer_factory but mean=0.0 → unit scale at init."""
-    return lambda n: SoftplusFactorizedLinear(
-        n, n, bias=bias, mean=_SOFTPLUS_UNIT_MEAN + mean, std=std, kaiming_a=kaiming_a
-    )
-
-
 def _factorized_rect_factory(
     *,
     bias: bool,
@@ -221,23 +194,6 @@ def _factorized_rect_factory(
 ) -> Callable[[int, int], nn.Module]:
     """Return a rectangular ``(in_dim, out_dim) -> FactorizedLinear`` factory."""
     return lambda i, o: FactorizedLinear(i, o, bias=bias, mean=mean, std=std)
-
-
-def _softplus_unit_rect_factory(
-    *,
-    bias: bool,
-    mean: float,
-    std: float,
-    kaiming_a: float = 0.0,
-) -> Callable[[int, int], nn.Module]:
-    """Return a rectangular ``(in_dim, out_dim) -> SoftplusFactorizedLinear`` factory.
-
-    The mean is shifted by ``log(e-1)`` so that ``softplus(mean) = 1.0`` at
-    init when the user-facing ``mean=0.0`` is passed.
-    """
-    return lambda i, o: SoftplusFactorizedLinear(
-        i, o, bias=bias, mean=_SOFTPLUS_UNIT_MEAN + mean, std=std, kaiming_a=kaiming_a
-    )
 
 
 # ── Public generic builders ──────────────────────────────────────────────────
@@ -313,435 +269,10 @@ class EmbeddedSimpleParametricFFNN(StandardEntryConsumer, _EmbeddedParametricBod
         )
 
 
-# ── Embedded Factorized variants (plain Linear projections) ─────────────────
+# ── Embedded factorized variants (FactorizedLinear embedding and regression) ──
 
 
 class EmbeddedFactorizedFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with factorized body layers."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_factorized_layer_factory(
-                bias=bias,
-                mean=mean,
-                std=std,
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain embedded FFNN with factorized body layers."""
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_factorized_layer_factory(
-                bias=bias,
-                mean=mean,
-                std=std,
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-# ── Embedded Softplus-Factorized variants (plain Linear projections) ─────────
-
-
-class EmbeddedSoftplusFactorizedFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with softplus-factorized body layers.
-
-    The embedding (first) and regression (last) layers are plain ``nn.Linear``
-    projections.  Only the constant-width body layers use
-    :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear`, so that
-    ``mean=0.0`` initialises each body layer with unit per-neuron scale
-    (``softplus(log_scale) ≈ 1``).
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of residual softplus-factorized body blocks.
-        bias: Whether body layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias,
-                mean=mean,
-                std=std,
-                kaiming_a=kaiming_a,
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleSoftplusFactorizedFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain (non-residual) embedded FFNN with softplus-factorized body layers.
-
-    The embedding (first) and regression (last) layers are plain ``nn.Linear``
-    projections.  Only the constant-width body layers use
-    :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear`, so that
-    ``mean=0.0`` initialises each body layer with unit per-neuron scale
-    (``softplus(log_scale) ≈ 1``).
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of softplus-factorized body blocks (no skip connections).
-        bias: Whether body layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias,
-                mean=mean,
-                std=std,
-                kaiming_a=kaiming_a,
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-# ── FactorizedEnd variants (plain Linear embedding, FactorizedLinear regression) ─
-
-
-class EmbeddedFactorizedEndFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with factorized body and regression layers.
-
-    The embedding (first) layer is a plain ``nn.Linear`` projection. Both the
-    constant-width body and the regression (last) layer use
-    :class:`~dlkit.domain.nn.primitives.FactorizedLinear` (exp-based scale).
-
-    Default activation is GELU. Default ``mean=0.0`` → ``exp(0) = 1`` (unit
-    scale at init).
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of residual factorized body blocks.
-        bias: Whether factorized layers include a bias term.
-        mean: Gaussian mean for ``log_scale`` initialisation
-            (``0.0`` → ``exp(0) = 1.0``, unit scale at init).
-        std: Standard deviation for ``log_scale`` initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std),
-            regression_factory=_factorized_rect_factory(bias=bias, mean=mean, std=std),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleFactorizedEndFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain (non-residual) embedded FFNN with factorized body and regression layers.
-
-    The embedding (first) layer is a plain ``nn.Linear`` projection. Both the
-    constant-width body (no skip connections) and the regression (last) layer
-    use :class:`~dlkit.domain.nn.primitives.FactorizedLinear` (exp-based scale).
-
-    Default activation is GELU. Default ``mean=0.0`` → ``exp(0) = 1`` (unit
-    scale at init).
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of factorized body blocks (no skip connections).
-        bias: Whether factorized layers include a bias term.
-        mean: Gaussian mean for ``log_scale`` initialisation
-            (``0.0`` → ``exp(0) = 1.0``, unit scale at init).
-        std: Standard deviation for ``log_scale`` initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_factorized_layer_factory(bias=bias, mean=mean, std=std),
-            regression_factory=_factorized_rect_factory(bias=bias, mean=mean, std=std),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSoftplusFactorizedEndFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with softplus-factorized body and regression layers.
-
-    The embedding (first) layer is a plain ``nn.Linear`` projection. Both the
-    constant-width body and the regression (last) layer use
-    :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear`, so that
-    ``mean=0.0`` initialises each factorized layer with unit per-neuron scale
-    (``softplus(log_scale) ≈ 1``).
-
-    Default activation is GELU.
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of residual softplus-factorized body blocks.
-        bias: Whether factorized layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            regression_factory=_softplus_unit_rect_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleSoftplusFactorizedEndFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain (non-residual) embedded FFNN with softplus-factorized body and regression layers.
-
-    The embedding (first) layer is a plain ``nn.Linear`` projection. Both the
-    constant-width body (no skip connections) and the regression (last) layer
-    use :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear`, so that
-    ``mean=0.0`` initialises each factorized layer with unit per-neuron scale
-    (``softplus(log_scale) ≈ 1``).
-
-    Default activation is GELU.
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of softplus-factorized body blocks (no skip connections).
-        bias: Whether factorized layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            regression_factory=_softplus_unit_rect_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-# ── FullyFactorized variants (FactorizedLinear embedding and regression) ──────
-
-
-class EmbeddedFullyFactorizedFFNN(EmbeddedParametricFFNN):
     """Residual embedded FFNN with factorized embedding, body, and regression layers.
 
     All three layer groups — embedding (first), constant-width body, and
@@ -797,7 +328,7 @@ class EmbeddedFullyFactorizedFFNN(EmbeddedParametricFFNN):
         )
 
 
-class EmbeddedSimpleFullyFactorizedFFNN(EmbeddedSimpleParametricFFNN):
+class EmbeddedSimpleFactorizedFFNN(EmbeddedSimpleParametricFFNN):
     """Plain (non-residual) embedded FFNN with factorized embedding, body, and regression layers.
 
     All three layer groups — embedding (first), constant-width body (no skip
@@ -854,136 +385,6 @@ class EmbeddedSimpleFullyFactorizedFFNN(EmbeddedSimpleParametricFFNN):
         )
 
 
-class EmbeddedFullySoftplusFactorizedFFNN(EmbeddedParametricFFNN):
-    """Residual embedded FFNN with softplus-factorized embedding, body, and regression layers.
-
-    All three layer groups — embedding (first), constant-width body, and
-    regression (last) — use
-    :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear`. No plain
-    ``nn.Linear`` projection is used anywhere. With ``mean=0.0``, every
-    factorized layer initialises with unit per-neuron scale
-    (``softplus(log_scale) ≈ 1``).
-
-    Default activation is GELU.
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of residual softplus-factorized body blocks.
-        bias: Whether factorized layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            embedding_factory=_softplus_unit_rect_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            regression_factory=_softplus_unit_rect_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
-class EmbeddedSimpleFullySoftplusFactorizedFFNN(EmbeddedSimpleParametricFFNN):
-    """Plain (non-residual) embedded FFNN with softplus-factorized embedding, body, and regression.
-
-    All three layer groups — embedding (first), constant-width body (no skip
-    connections), and regression (last) — use
-    :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear`. No plain
-    ``nn.Linear`` projection is used anywhere. With ``mean=0.0``, every
-    factorized layer initialises with unit per-neuron scale
-    (``softplus(log_scale) ≈ 1``).
-
-    Default activation is GELU.
-
-    Args:
-        in_features: Input dimension for the embedding layer.
-        out_features: Output dimension of the regression layer.
-        hidden_size: Width of all body layers. Required when
-            ``in_features != out_features``; defaults to ``in_features``
-            when both dimensions are equal.
-        num_layers: Number of softplus-factorized body blocks (no skip connections).
-        bias: Whether factorized layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation applied before each body layer.
-            ``None`` defaults to GELU.
-        normalize: Optional normalisation applied before activation
-            (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability applied after each body layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int | None = None,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            in_features=in_features,
-            out_features=out_features,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            embedding_factory=_softplus_unit_rect_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            regression_factory=_softplus_unit_rect_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            activation=resolve_activation(activation, default="gelu"),
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-
 # ── Non-embedded Factorized variants ────────────────────────────────────────
 
 
@@ -992,8 +393,8 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
 
     First block maps ``in_features → hidden_size`` using a structured Factorized
     layer (no skip — dimensions may differ). Remaining body blocks are square
-    ``hidden_size → hidden_size`` with residual connections. Final plain
-    ``nn.Linear(hidden_size → out_features)`` regression layer.
+    ``hidden_size → hidden_size`` with residual connections. Final
+    ``FactorizedLinear(hidden_size → out_features)`` regression layer.
     """
 
     class InputSpec(_InputSpec):
@@ -1035,8 +436,9 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
             normalize=normalize,
             dropout=dropout,
         )
-        self.regression_layer = nn.Linear(hidden_size, out_features)
-        initialize_(self.regression_layer, resolved_activation)
+        self.regression_layer = _factorized_rect_factory(bias=bias, mean=mean, std=std)(
+            hidden_size, out_features
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.first_block(x)
@@ -1049,7 +451,7 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
 
     First block maps ``in_features → hidden_size`` (no skip). Remaining body
     blocks are square ``hidden_size → hidden_size`` without residual. Final
-    plain ``nn.Linear(hidden_size → out_features)`` regression layer.
+    ``FactorizedLinear(hidden_size → out_features)`` regression layer.
     """
 
     class InputSpec(_InputSpec):
@@ -1091,8 +493,9 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
             normalize=normalize,
             dropout=dropout,
         )
-        self.regression_layer = nn.Linear(hidden_size, out_features)
-        initialize_(self.regression_layer, resolved_activation)
+        self.regression_layer = _factorized_rect_factory(bias=bias, mean=mean, std=std)(
+            hidden_size, out_features
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.first_block(x)
@@ -1253,103 +656,13 @@ class ConstantWidthSimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         return self.body(x)
 
 
-# ── Constant-width Softplus-Factorized variants ──────────────────────────────
-
-
-class ConstantWidthSoftplusFactorizedFFNN(StandardEntryConsumer, nn.Module):
-    """Residual constant-width FFNN with softplus-factorized layers.
-
-    Uses :class:`~dlkit.domain.nn.primitives.SoftplusFactorizedLinear` so that
-    ``mean=0.0`` → ``softplus(log_scale) ≈ 1`` at initialisation (unit scale).
-    No embedding or regression projection — every layer uses
-    ``SoftplusFactorizedLinear``. Requires ``in_features == out_features``;
-    for asymmetric inputs use :class:`EmbeddedSoftplusFactorizedFFNN`.
-
-    Per-block forward: ``GELU(x) → SoftplusFactorizedLinear → x_out + x`` (residual).
-
-    Args:
-        in_features: Input and output dimension. Must equal ``out_features``.
-        out_features: Output dimension. Must equal ``in_features``.
-        num_layers: Number of residual softplus-factorized blocks.
-        bias: Whether body layers include a bias term.
-        mean: Offset from the softplus unit-scale point
-            (``0.0`` → ``log_scale ~ N(log(e-1), std)`` → scale ≈ 1 at init).
-        std: Standard deviation for log-scale initialisation.
-        activation: Element-wise activation. ``None`` defaults to GELU.
-        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability.
-
-    Raises:
-        ValueError: If ``in_features != out_features``.
-    """
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        num_layers: int,
-        bias: bool = True,
-        mean: float = 0.0,
-        std: float = 0.1,
-        kaiming_a: float = 0.0,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        if in_features != out_features:
-            raise ValueError(
-                f"ConstantWidthSoftplusFactorizedFFNN requires in_features == out_features "
-                f"(got {in_features} != {out_features}). "
-                "For asymmetric inputs use EmbeddedSoftplusFactorizedFFNN."
-            )
-        resolved_activation = resolve_activation(activation, default="gelu")
-        super().__init__()
-        self.body = _ConstantWidthParametricBody(
-            size=in_features,
-            num_layers=num_layers,
-            layer_factory=_softplus_unit_layer_factory(
-                bias=bias, mean=mean, std=std, kaiming_a=kaiming_a
-            ),
-            _residual=True,
-            activation=resolved_activation,
-            normalize=normalize,
-            dropout=dropout,
-        )
-
-    def forward(self, x: Tensor) -> Tensor:
-        """Pass input through all residual softplus-factorized blocks.
-
-        Args:
-            x: Input tensor of shape ``(*, in_features)``.
-
-        Returns:
-            Output tensor of shape ``(*, in_features)``.
-        """
-        return self.body(x)
-
-
 __all__ = [
     "ConstantWidthFactorizedFFNN",
     "ConstantWidthSimpleFactorizedFFNN",
-    "ConstantWidthSoftplusFactorizedFFNN",
-    "EmbeddedFactorizedEndFFNN",
     "EmbeddedFactorizedFFNN",
-    "EmbeddedFullyFactorizedFFNN",
-    "EmbeddedFullySoftplusFactorizedFFNN",
     "EmbeddedParametricFFNN",
-    "EmbeddedSimpleFactorizedEndFFNN",
     "EmbeddedSimpleFactorizedFFNN",
-    "EmbeddedSimpleFullyFactorizedFFNN",
-    "EmbeddedSimpleFullySoftplusFactorizedFFNN",
     "EmbeddedSimpleParametricFFNN",
-    "EmbeddedSimpleSoftplusFactorizedEndFFNN",
-    "EmbeddedSimpleSoftplusFactorizedFFNN",
-    "EmbeddedSoftplusFactorizedEndFFNN",
-    "EmbeddedSoftplusFactorizedFFNN",
     "FactorizedFFNN",
     "ParametricDenseBlock",
     "SimpleFactorizedFFNN",
