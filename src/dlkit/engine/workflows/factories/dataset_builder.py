@@ -170,7 +170,9 @@ class DatasetBuilder:
         data = settings.data
         if isinstance(data, DataSettings):
             # New-style: DataSettings unifies dataset + datamodule.
-            return build_datamodule_from_selector(data, dataset, split_resolution, family=family)
+            return build_datamodule_from_selector(
+                data, dataset, split_resolution, context, family=family
+            )
 
         raise ValueError(
             "DataModule configuration requires a DataSettings (data section). "

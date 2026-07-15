@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
 from pydantic.types import NonNegativeInt, PositiveInt
 
-from dlkit.infrastructure.config.core.base_settings import BasicSettings
+from dlkit.infrastructure.config.core.base_settings import BasicSettings, ComponentSettings
 from dlkit.infrastructure.config.data_entries import AnyEntry
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.enums import DatasetFamily
@@ -89,17 +91,25 @@ def _infer_entry_format(entry: RawEntryItem) -> RawEntryItem:
     )
 
 
-class DataModuleSelector(BasicSettings):
+class DataModuleSelector(ComponentSettings):
     """Lightning DataModule class selector (replaces DATAMODULE.name/module_path).
 
+    A ``ComponentSettings`` so it can be resolved via
+    ``FactoryProvider.create_component()`` like every other component —
+    ``dataset``/``split``/``dataloader`` flow in through
+    ``BuildContext.overrides``, the same mechanism dataset construction
+    already uses.
+
     Args:
-        name: DataModule class name (alias: class).
+        name: DataModule class name (alias: class). May also hold a resolved
+            class object when a dataset-family default is substituted before
+            construction.
         module_path: Python module path where the class is defined.
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    name: str = Field(default="ArrayDataModule", alias="class")
+    name: str | Callable[..., Any] | None = Field(default="ArrayDataModule", alias="class")
     module_path: str | None = None
 
 

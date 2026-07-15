@@ -16,6 +16,7 @@ import pytest
 import torch
 from tensordict import TensorDict
 
+from dlkit.engine.inference.config import ModelState
 from dlkit.engine.inference.loading import (
     build_model_from_checkpoint,
     detect_checkpoint_dtype,
@@ -306,6 +307,25 @@ class TestCheckpointPredictor:
 
         assert isinstance(result, PredictionOutput)
         assert result.predictions.shape == (32, 5)
+
+    def test_predict_moves_inputs_to_loaded_device_before_model_call(self, simple_checkpoint: Path):
+        """Regression: CPU dataloader tensors must work with a non-CPU predictor."""
+
+        class DeviceAssertingModule(torch.nn.Module):
+            def forward(self, x: torch.Tensor) -> torch.Tensor:
+                assert x.device.type == "meta"
+                return torch.empty((x.shape[0], 1), device=x.device)
+
+        config = PredictorConfig(
+            checkpoint_path=simple_checkpoint, auto_load=False, apply_transforms=False
+        )
+        predictor = CheckpointPredictor(config)
+        predictor._model_state = ModelState(model=DeviceAssertingModule(), device="meta")
+        predictor._loaded = True
+
+        result = predictor.predict(x=torch.ones(2, 3))
+
+        assert result.predictions.device.type == "meta"
 
     def test_predictor_context_manager(self, simple_checkpoint: Path):
         """Test predictor as context manager."""

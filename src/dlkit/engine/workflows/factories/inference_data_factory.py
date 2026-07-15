@@ -47,4 +47,4 @@ def build_inference_datamodule(
     overrides = flexible_dataset_overrides(tuple(data.features or ()), tuple(data.targets or ()))
     dataset = dataset_builder.build_dataset(settings, context, overrides)
     split_resolution = dataset_builder.build_split(settings, dataset)
-    return build_datamodule_from_selector(data, dataset, split_resolution)
+    return build_datamodule_from_selector(data, dataset, split_resolution, context)

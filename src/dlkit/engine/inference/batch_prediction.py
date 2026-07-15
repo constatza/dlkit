@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING, Literal
 
 import torch
 
+from .predictor import _move_tensor_to_device
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -132,7 +134,8 @@ def run_batched_evaluation(
                 "includes the entry matching predict_target_key."
             )
         all_predictions.append(prediction)
-        all_targets.append(targets_td[target_key])
+        target = targets_td[target_key]
+        all_targets.append(_move_tensor_to_device(target, prediction.device))
 
     if not all_predictions:
         raise ValueError(

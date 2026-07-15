@@ -42,10 +42,14 @@
   trainer construction should not create local output directories.
 - MLflow tracking is enabled only by explicit `tracking.backend = "mlflow"` configuration.
 - When MLflow is enabled, durable artifacts belong to MLflow.
-- `DataModuleSelector` is a plain settings selector, not a `ComponentSettings`
-  (no `get_init_kwargs()`) — it must never be routed through
-  `FactoryProvider.create_component()`. Both training and inference resolve it
-  via the shared `datamodule_resolution.build_datamodule_from_selector()`.
+- `DataModuleSelector` is a `ComponentSettings`, resolved via
+  `FactoryProvider.create_component()` like every other component —
+  `dataset`/`split`/`dataloader` flow in through `BuildContext.overrides`.
+  Both training and inference call the shared
+  `datamodule_resolution.build_datamodule_from_selector()`, which also
+  substitutes a dataset-family default class (e.g. `GraphDataModule`) into
+  the selector before construction when the family implies one and the user
+  hasn't picked an explicit class.
 - Inference-only datamodule construction stays flexible/array-only: it always
   builds a `FlexibleDataset` via `DatasetBuilder`/`flexible_dataset_overrides`,
   with no graph-family dataset path (`graph_dataset_overrides` is

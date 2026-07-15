@@ -16,6 +16,7 @@ from tensordict import TensorDict
 
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.adapters.lightning.base import _unpack_model_output
+from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.infrastructure.precision import (
     PrecisionService,
     get_precision_service,
@@ -29,6 +30,11 @@ from .loading import build_model_from_checkpoint, load_checkpoint
 from .transforms import load_transforms_from_checkpoint
 
 logger = get_logger(__name__)
+
+
+def _move_tensor_to_device(tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+    """Return a tensor placed on the requested device."""
+    return tensor.to(device)
 
 
 def _load_entry_shapes_from_checkpoint(
@@ -276,6 +282,7 @@ class CheckpointPredictor(IPredictor):
             ctx = nullcontext()
 
         with ctx:
+            args, kwargs = self._move_inputs_to_device(args, kwargs)
             if self._config.apply_transforms:
                 args, kwargs = self._apply_input_transforms(args, kwargs)
 
@@ -328,6 +335,21 @@ class CheckpointPredictor(IPredictor):
         if self._model_state is None:
             return ""
         return self._model_state.predict_target_key
+
+    def _move_inputs_to_device(
+        self,
+        args: tuple[torch.Tensor, ...],
+        kwargs: dict[str, torch.Tensor],
+    ) -> tuple[tuple[torch.Tensor, ...], dict[str, torch.Tensor]]:
+        """Move caller-provided tensor inputs to the loaded predictor device."""
+        if self._model_state is None:
+            return args, kwargs
+
+        device = torch.device(self._model_state.device)
+        return (
+            tuple(_move_tensor_to_device(arg, device) for arg in args),
+            {key: _move_tensor_to_device(value, device) for key, value in kwargs.items()},
+        )
 
     def _apply_input_transforms(
         self,
@@ -385,14 +407,10 @@ class CheckpointPredictor(IPredictor):
         if not tt or not target_key or target_key not in tt:
             return predictions
 
-        from dlkit.domain.transforms.base import InvertibleTransform
-
         chain = tt[target_key]
-        if not isinstance(chain, InvertibleTransform):
-            return predictions
 
         if isinstance(predictions, torch.Tensor):
-            return chain.inverse_transform(predictions)
+            return apply_inverse_chain(predictions, chain)
 
         # TensorDict: apply inverse to its "predictions" leaf if present
         if isinstance(predictions, TensorDict) and "predictions" in predictions.keys():
@@ -401,7 +419,7 @@ class CheckpointPredictor(IPredictor):
             return _cast(
                 TensorDict,
                 predictions.apply(
-                    lambda t: chain.inverse_transform(t), batch_size=predictions.batch_size
+                    lambda t: apply_inverse_chain(t, chain), batch_size=predictions.batch_size
                 ),
             )
 

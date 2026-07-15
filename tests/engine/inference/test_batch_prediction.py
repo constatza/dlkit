@@ -164,3 +164,17 @@ def test_run_batched_evaluation_concatenates_across_batches(
     assert torch.equal(
         targets, torch.cat([torch.full((2, 1), 10.0), torch.full((3, 1), 20.0)], dim=0)
     )
+
+
+def test_run_batched_evaluation_moves_targets_to_prediction_device(
+    make_predictor: Callable[..., MagicMock],
+    make_eval_datamodule: Callable[..., MagicMock],
+) -> None:
+    """Regression: CUDA predictions and CPU targets must not fail at concatenation."""
+    predictor = make_predictor(predictions=[torch.empty((2, 1), device="meta")])
+    datamodule = make_eval_datamodule(batches=[({"x": torch.zeros(2, 1)}, {"y": torch.ones(2, 1)})])
+
+    predictions, targets = run_batched_evaluation(predictor, datamodule)
+
+    assert predictions.device.type == "meta"
+    assert targets.device.type == "meta"

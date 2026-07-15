@@ -11,7 +11,9 @@ be the only consumer outside `engine`.
   `CheckpointPredictor` factory functions.
 - `predictor.py` — `CheckpointPredictor`: loads a checkpoint once (model,
   fitted transforms, precision), then serves `.predict()` calls without
-  reloading.
+  reloading. Incoming tensor inputs are moved to the loaded predictor device
+  before transform/model execution, so CPU dataloader batches can be evaluated
+  by CUDA predictors.
 - `loading.py`, `checkpoint_reader.py`, `model_builder.py`, `transforms.py` —
   checkpoint parsing, model reconstruction, and transform restoration.
 - `batch_prediction.py` — dataset-level orchestration over a
@@ -65,3 +67,6 @@ No upward imports; `engine.inference` never imports `interfaces.*` or
 - Metric/figure computation always runs with transformed predictions on the
   same scale as raw dataset targets (`apply_transforms=True` is not a
   caller-facing knob anywhere in this module).
+- `run_batched_evaluation` aligns target tensors to the prediction device
+  before concatenation; `evaluate_checkpoint` detaches results back to CPU for
+  public `EvaluationResult` payloads.
