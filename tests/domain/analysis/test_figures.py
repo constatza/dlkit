@@ -57,6 +57,18 @@ def _line_count(fig: Figure) -> int:
     return sum(len(ax.lines) for ax in fig.axes)
 
 
+def _axis_labels(fig: Figure) -> list[str]:
+    """Collect line labels from every axes in *fig*.
+
+    Args:
+        fig: The matplotlib Figure to inspect.
+
+    Returns:
+        Flat list of line labels.
+    """
+    return [str(line.get_label()) for ax in fig.axes for line in ax.lines]
+
+
 # ---------------------------------------------------------------------------
 # Fixtures — data
 # ---------------------------------------------------------------------------
@@ -365,6 +377,18 @@ class TestResidualFigure:
         finally:
             plt.close("all")
 
+    def test_residuals_are_raw_signed_target_minus_prediction(self) -> None:
+        """A residual of 1 means target is one raw unit above prediction."""
+        preds = np.array([1.0, 2.0], dtype=np.float32)
+        targets = np.array([2.0, 0.5], dtype=np.float32)
+        fig = residual_figure(preds, targets)
+        try:
+            offsets = np.asarray(fig.axes[0].collections[0].get_offsets())
+            assert np.allclose(offsets[:, 0], preds)
+            assert np.allclose(offsets[:, 1], targets - preds)
+        finally:
+            plt.close("all")
+
     def test_shape_mismatch_raises(
         self, shape_mismatched_arrays: tuple[np.ndarray, np.ndarray]
     ) -> None:
@@ -422,6 +446,80 @@ class TestErrorHistogramFigure:
         fig = error_histogram_figure(preds, targets)
         try:
             assert isinstance(fig, Figure)
+        finally:
+            plt.close("all")
+
+    def test_default_bins_are_adaptive(self) -> None:
+        """Default histogram uses adaptive binning instead of fixed 50 bins."""
+        errors = np.concatenate(
+            [
+                np.linspace(-0.2, 0.2, 100, dtype=np.float32),
+                np.array([-10.0, 10.0], dtype=np.float32),
+            ]
+        )
+        preds = np.zeros_like(errors)
+        targets = errors
+        fig = error_histogram_figure(preds, targets)
+        try:
+            x_lo, x_hi = fig.axes[0].get_xlim()
+            displayed_errors = errors[(errors >= x_lo) & (errors <= x_hi)]
+            expected_bin_count = len(np.histogram_bin_edges(displayed_errors, bins="auto")) - 1
+            assert len(fig.axes[0].patches) == expected_bin_count
+        finally:
+            plt.close("all")
+
+    def test_kde_overlay_is_plotted(self, small_arrays: tuple[np.ndarray, np.ndarray]) -> None:
+        """Histogram includes a KDE line in addition to the normal fit."""
+        preds, targets = small_arrays
+        fig = error_histogram_figure(preds, targets)
+        try:
+            assert "KDE" in _axis_labels(fig)
+        finally:
+            plt.close("all")
+
+    def test_outlier_dominated_errors_use_robust_display_range(self) -> None:
+        """A few extreme errors do not force the x-axis across the full min/max."""
+        central_errors = np.linspace(-0.1, 0.1, 200, dtype=np.float32)
+        errors = np.concatenate(
+            [
+                central_errors,
+                np.array([-100.0, 100.0], dtype=np.float32),
+            ]
+        )
+        preds = np.zeros_like(errors)
+        targets = errors
+        fig = error_histogram_figure(preds, targets, display_percentiles=(0.5, 99.5))
+        try:
+            x_lo, x_hi = fig.axes[0].get_xlim()
+            assert x_hi - x_lo < 10.0
+            title = fig.axes[0].get_title()
+            assert "full:" in title
+            assert "view:" in title
+            assert "-100" in title
+            assert "100" in title
+            annotation = fig.axes[0].texts[0].get_text()
+            assert "tail values outside view" in annotation
+            assert "view:" in annotation
+            assert "full:" in annotation
+            assert "-100" in annotation
+            assert "100" in annotation
+        finally:
+            plt.close("all")
+
+    def test_default_display_range_uses_full_min_max(self) -> None:
+        """Direct histogram calls use the full raw range unless percentiles are set."""
+        errors = np.array([-100.0, -0.1, 0.0, 0.1, 100.0], dtype=np.float32)
+        preds = np.zeros_like(errors)
+        targets = errors
+        fig = error_histogram_figure(preds, targets)
+        try:
+            x_lo, x_hi = fig.axes[0].get_xlim()
+            assert x_lo <= -100.0
+            assert x_hi >= 100.0
+            title = fig.axes[0].get_title()
+            assert "range:" in title
+            assert "-100" in title
+            assert "100" in title
         finally:
             plt.close("all")
 

@@ -21,9 +21,11 @@ import pytest
 import torch
 from lightning import Trainer
 
+from dlkit.domain.analysis.generators import ErrorHistogramGenerator
 from dlkit.engine.adapters.lightning.plot_callbacks import (
     LossCurvePlotCallback,
     PredictionPlotCallback,
+    build_plot_callbacks,
 )
 from dlkit.engine.artifacts import IArtifactLogger
 from dlkit.infrastructure.config.plot_settings import PlotSettings
@@ -85,6 +87,24 @@ def pl_module() -> MagicMock:
         MagicMock with no spec constraints.
     """
     return MagicMock()
+
+
+def test_build_plot_callbacks_passes_histogram_settings(mock_run_context: MagicMock) -> None:
+    """Histogram-specific PlotSettings reach the built-in generator."""
+    settings = PlotSettings(
+        enabled=True,
+        error_histogram=True,
+        error_histogram_bins=20,
+        error_histogram_display_percentiles=(1.0, 99.0),
+    )
+
+    callbacks = build_plot_callbacks(mock_run_context, settings)
+
+    prediction_callback = next(cb for cb in callbacks if isinstance(cb, PredictionPlotCallback))
+    generator = prediction_callback._generators[0]  # noqa: SLF001
+    assert isinstance(generator, ErrorHistogramGenerator)
+    assert generator.bins == 20
+    assert generator.display_percentiles == (1.0, 99.0)
 
 
 # ---------------------------------------------------------------------------

@@ -26,12 +26,17 @@ residual_vs_index = false
 |------|------|---------------|
 | `loss_curve` | end of `fit` | Training and validation loss per epoch, with learning-rate overlay |
 | `parity` | end of `predict` | Predicted vs actual scatter — how close points are to the diagonal |
-| `residual` | end of `predict` | Residuals vs predicted — bias and heteroscedasticity |
-| `error_histogram` | end of `predict` | Error distribution with normal overlay |
-| `residual_vs_index` | end of `predict` | Residuals vs sample index — trends or autocorrelation |
+| `residual` | end of `predict` | Raw signed residuals (`target - prediction`) vs predicted — bias and heteroscedasticity |
+| `error_histogram` | end of `predict` | Raw signed error distribution with adaptive bins, normal fit, and KDE fit |
+| `residual_vs_index` | end of `predict` | Raw signed residuals (`target - prediction`) vs sample index — trends or autocorrelation |
 
 Prediction plots require a `predict` pass (e.g. via `dlkit.api.predict` or the
 `predict` CLI command). They do not run automatically during training.
+
+Residual and error plots use the returned prediction/target values directly.
+They are not standardized or normalized by the plotting layer. A residual or
+error value of `1` means `target - prediction == 1` in the plotted output
+space.
 
 ## Format and quality options
 
@@ -48,6 +53,18 @@ max_scatter_points = 5000  # scatter plots subsample above this threshold
 `svg` and `pdf` produce vector output — prefer them when you need to zoom in or
 include plots in a paper. `max_scatter_points` keeps rendering fast on large
 datasets; set it higher if you need the full density.
+
+Error histogram display is configurable:
+
+```toml
+[plots]
+error_histogram_bins = "auto"
+error_histogram_display_percentiles = [0.5, 99.5]  # set to "full" for full min/max
+```
+
+The histogram title reports the raw full error range and displayed x-axis range.
+When percentile focusing excludes tail values, the plot also annotates how many
+values are outside the displayed view.
 
 ## Where plots appear
 

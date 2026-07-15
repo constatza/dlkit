@@ -7,6 +7,9 @@ from matplotlib.figure import Figure
 
 from dlkit.domain.analysis.figures._backend import plt  # noqa: F401
 
+_KDE_POINTS = 300
+_KDE_MAX_POINTS = 10_000
+
 
 def _flatten_and_validate(
     predictions: np.ndarray,
@@ -55,6 +58,82 @@ def _subsample(
     rng = np.random.default_rng(0)
     idx = rng.choice(n, size=max_points, replace=False)
     return preds[idx], targets[idx]
+
+
+def _finite_values(values: np.ndarray) -> np.ndarray:
+    """Return finite values only, preserving the raw numerical scale."""
+    finite = values[np.isfinite(values)]
+    if len(finite) == 0:
+        raise ValueError("plot values must contain at least one finite value")
+    return finite
+
+
+def _padded_range(lo: float, hi: float) -> tuple[float, float]:
+    """Return a non-zero plotting range around lo/hi."""
+    if lo != hi:
+        return lo, hi
+    pad = max(abs(lo) * 0.05, 1.0)
+    return lo - pad, hi + pad
+
+
+def _error_display_range(
+    errors: np.ndarray,
+    display_percentiles: tuple[float, float] | None,
+) -> tuple[float, float]:
+    """Use an explicit percentile display window when configured."""
+    full_lo = float(errors.min())
+    full_hi = float(errors.max())
+    if display_percentiles is not None:
+        lower_percentile, upper_percentile = display_percentiles
+        if not 0 <= lower_percentile < upper_percentile <= 100:
+            raise ValueError(
+                "display_percentiles must satisfy "
+                "0 <= lower < upper <= 100; "
+                f"got {display_percentiles!r}"
+            )
+        display_lo, display_hi = np.percentile(
+            errors,
+            [lower_percentile, upper_percentile],
+        )
+        if full_lo < display_lo or display_hi < full_hi:
+            return _padded_range(float(display_lo), float(display_hi))
+    return _padded_range(full_lo, full_hi)
+
+
+def _displayed_values(values: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    """Return values inside the displayed x-axis window."""
+    displayed = values[(values >= lo) & (values <= hi)]
+    if len(displayed) == 0:
+        return values
+    return displayed
+
+
+def _format_range(lo: float, hi: float) -> str:
+    """Format a compact numeric range for plot annotations."""
+    return f"[{lo:.3g}, {hi:.3g}]"
+
+
+def _kde_density(values: np.ndarray, x: np.ndarray) -> np.ndarray | None:
+    """Gaussian KDE using Silverman's bandwidth rule, without scipy."""
+    if len(values) > _KDE_MAX_POINTS:
+        rng = np.random.default_rng(0)
+        values = values[rng.choice(len(values), size=_KDE_MAX_POINTS, replace=False)]
+
+    n = len(values)
+    if n < 2:
+        return None
+    std = float(values.std(ddof=1))
+    iqr = float(np.subtract(*np.percentile(values, [75, 25])))
+    scale = min(std, iqr / 1.349) if iqr > 0 else std
+    if scale <= 0:
+        return None
+    bandwidth = 0.9 * scale * n ** (-1 / 5)
+    if bandwidth <= 0:
+        return None
+
+    z = (x[:, np.newaxis] - values[np.newaxis, :]) / bandwidth
+    kernel = np.exp(-0.5 * z**2) / np.sqrt(2 * np.pi)
+    return kernel.mean(axis=1) / bandwidth
 
 
 def parity_figure(
@@ -150,18 +229,23 @@ def error_histogram_figure(
     targets: np.ndarray,
     *,
     title: str = "Error Histogram",
-    bins: int = 50,
+    bins: int | str = "auto",
+    display_percentiles: tuple[float, float] | None = None,
 ) -> Figure:
-    """Histogram of prediction errors (targets − predictions) with normal overlay.
+    """Histogram of raw prediction errors with adaptive bins and density overlays.
 
-    Flattens all dimensions to 1-D. Normal distribution overlay uses
-    the sample mean and std of the errors.
+    Flattens all dimensions to 1-D. Errors are raw ``targets - predictions``
+    values in target units; they are not scaled or normalized. Normal and KDE
+    overlays use the displayed error distribution.
 
     Args:
         predictions: Model predictions, any shape; flattened to 1-D.
         targets: Ground-truth targets, any shape; must have same total elements.
         title: Figure title.
-        bins: Number of histogram bins.
+        bins: Histogram bin strategy. ``"auto"`` delegates adaptive bin selection
+            to NumPy; an integer fixes the bin count.
+        display_percentiles: Optional ``(lower, upper)`` percentile window for
+            the displayed x-axis. ``None`` uses the full raw min/max range.
 
     Returns:
         matplotlib Figure. Caller must close it.
@@ -171,21 +255,50 @@ def error_histogram_figure(
     """
     preds_flat, tgts_flat = _flatten_and_validate(predictions, targets)
 
-    errors = tgts_flat - preds_flat
-    mu = float(errors.mean())
-    sigma = float(errors.std())
+    errors = _finite_values(tgts_flat - preds_flat)
+    full_lo = float(errors.min())
+    full_hi = float(errors.max())
+    x_lo, x_hi = _error_display_range(errors, display_percentiles)
+    displayed_errors = _displayed_values(errors, x_lo, x_hi)
+    mu = float(displayed_errors.mean())
+    sigma = float(displayed_errors.std())
 
     fig, ax = plt.subplots(1, 1)
-    ax.hist(errors, bins=bins, density=True)
+    ax.hist(displayed_errors, bins=bins, density=True, label="Errors")
 
-    x = np.linspace(errors.min(), errors.max(), 300)
+    x = np.linspace(x_lo, x_hi, _KDE_POINTS)
     if sigma > 0:
         normal_curve = np.exp(-0.5 * ((x - mu) / sigma) ** 2) / (sigma * np.sqrt(2 * np.pi))
-        ax.plot(x, normal_curve, "r-")
+        ax.plot(x, normal_curve, "r-", label="Normal fit")
+    kde_curve = _kde_density(displayed_errors, x)
+    if kde_curve is not None:
+        ax.plot(x, kde_curve, color="black", linestyle="-", label="KDE")
 
-    ax.set_title(title)
+    clipped_count = len(errors) - len(displayed_errors)
+    range_subtitle = (
+        f"full: {_format_range(full_lo, full_hi)}; view: {_format_range(x_lo, x_hi)}"
+        if clipped_count
+        else f"range: {_format_range(full_lo, full_hi)}"
+    )
+    if clipped_count:
+        ax.text(
+            0.99,
+            0.98,
+            (
+                f"{clipped_count} tail values outside view\n"
+                f"view: {_format_range(x_lo, x_hi)}\n"
+                f"full: {_format_range(full_lo, full_hi)}"
+            ),
+            ha="right",
+            va="top",
+            transform=ax.transAxes,
+        )
+
+    ax.set_title(f"{title}\n{range_subtitle}")
     ax.set_xlabel("Error")
     ax.set_ylabel("Density")
+    ax.set_xlim(x_lo, x_hi)
+    ax.legend()
     fig.tight_layout()
     return fig
 

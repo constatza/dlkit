@@ -7,6 +7,9 @@ from typing import Literal
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 
 ImageFormat = Literal["png", "svg", "pdf"]
+HistogramBins = int | str
+PercentileRange = tuple[float, float]
+HistogramDisplayPercentiles = PercentileRange | Literal["full"]
 
 
 class PlotSettings(BasicSettings):
@@ -29,6 +32,11 @@ class PlotSettings(BasicSettings):
         artifact_dir: MLflow artifact subdirectory for all plots.
         max_scatter_points: Random subsample cap for scatter-based plots.
             Prevents large datasets from stalling plot rendering.
+        error_histogram_bins: Histogram bin strategy. ``"auto"`` delegates to
+            NumPy adaptive bin selection; an integer fixes the bin count.
+        error_histogram_display_percentiles: ``(lower, upper)`` percentile
+            window for the error histogram x-axis, or ``"full"`` for the raw
+            min/max range.
     """
 
     enabled: bool = False
@@ -41,3 +49,5 @@ class PlotSettings(BasicSettings):
     dpi: int = 300
     artifact_dir: str = "plots"
     max_scatter_points: int = 5_000
+    error_histogram_bins: HistogramBins = "auto"
+    error_histogram_display_percentiles: HistogramDisplayPercentiles = (0.5, 99.5)

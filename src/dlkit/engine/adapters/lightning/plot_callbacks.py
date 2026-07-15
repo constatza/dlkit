@@ -309,7 +309,15 @@ def build_plot_callbacks(
     if settings.residual:
         generators.append(ResidualGenerator(max_points=settings.max_scatter_points))
     if settings.error_histogram:
-        generators.append(ErrorHistogramGenerator())
+        display_percentiles = settings.error_histogram_display_percentiles
+        generators.append(
+            ErrorHistogramGenerator(
+                bins=settings.error_histogram_bins,
+                display_percentiles=(
+                    None if display_percentiles == "full" else display_percentiles
+                ),
+            )
+        )
     if settings.residual_vs_index:
         generators.append(ResidualVsIndexGenerator(max_points=settings.max_scatter_points))
 

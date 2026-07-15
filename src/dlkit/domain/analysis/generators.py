@@ -67,15 +67,18 @@ class ResidualGenerator:
 
 @dataclass(frozen=True)
 class ErrorHistogramGenerator:
-    """Generates an error distribution histogram with normal overlay.
+    """Generates an error distribution histogram with normal and KDE overlays.
 
     Args:
         name: Artifact filename stem.
-        bins: Number of histogram bins.
+        bins: Histogram bin strategy. ``"auto"`` uses NumPy adaptive binning.
+        display_percentiles: Optional ``(lower, upper)`` percentile window for
+            the displayed x-axis. ``None`` uses the full raw min/max range.
     """
 
     name: str = "error_histogram"
-    bins: int = 50
+    bins: int | str = "auto"
+    display_percentiles: tuple[float, float] | None = None
 
     def generate(self, predictions: np.ndarray, targets: np.ndarray) -> Figure:
         """Generate error histogram figure.
@@ -87,7 +90,12 @@ class ErrorHistogramGenerator:
         Returns:
             matplotlib Figure.
         """
-        return error_histogram_figure(predictions, targets, bins=self.bins)
+        return error_histogram_figure(
+            predictions,
+            targets,
+            bins=self.bins,
+            display_percentiles=self.display_percentiles,
+        )
 
 
 @dataclass(frozen=True)

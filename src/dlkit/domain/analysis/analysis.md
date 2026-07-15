@@ -18,6 +18,13 @@ Lightning callbacks live in `engine/adapters/lightning/plot_callbacks.py`.
 The domain layer owns only pure figure generation (numpy in → matplotlib Figure
 out). Orchestration, accumulation, and upload are engine concerns.
 
+Regression residual and error plots use raw signed values computed as
+`targets - predictions`. The plotting layer does not scale or normalize them.
+`error_histogram_figure()` uses NumPy adaptive bins by default, can limit the
+display range to an explicit percentile window supplied by the caller or
+`PlotSettings`, reports full/view ranges in the title, and overlays both a
+normal fit and an in-module Gaussian KDE.
+
 ## IFigureGenerator protocol
 
 `IFigureGenerator` is the extension point for custom plot types:
