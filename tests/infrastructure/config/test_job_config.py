@@ -76,7 +76,7 @@ def test_data_settings_default_batch_size() -> None:
 
 def test_data_module_selector_default() -> None:
     d = DataSettings.model_validate({})
-    assert d.module.name == "InMemoryModule"
+    assert d.module.name == "ArrayDataModule"
 
 
 def test_data_settings_alias() -> None:

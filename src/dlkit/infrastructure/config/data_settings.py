@@ -99,7 +99,7 @@ class DataModuleSelector(BasicSettings):
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
-    name: str = Field(default="InMemoryModule", alias="class")
+    name: str = Field(default="ArrayDataModule", alias="class")
     module_path: str | None = None
 
 

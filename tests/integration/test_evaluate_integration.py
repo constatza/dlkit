@@ -8,58 +8,15 @@ metadata from the checkpoint serializer) rather than a hand-built one.
 
 from __future__ import annotations
 
-from importlib import import_module
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pytest
 
 from dlkit.common import EvaluationResult, TrainingResult
-from dlkit.engine.adapters.lightning.datamodules.array import ArrayDataModule
-from dlkit.engine.data.datasets.flexible import FlexibleDataset
-from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
-from dlkit.infrastructure.io.split_provider import get_or_create_split
 from dlkit.interfaces.api.functions import train as api_train
 from dlkit.interfaces.inference import evaluate as api_evaluate
-
-# `dlkit.interfaces.inference.__init__` rebinds the `evaluate` attribute from the
-# submodule to the re-exported function, so `import ...evaluate as x` would resolve
-# to the function too — go via sys.modules (import_module) to get the real submodule.
-evaluate_module = import_module("dlkit.interfaces.inference.evaluate")
-
-
-def _build_array_datamodule(settings: InferenceJobConfig) -> ArrayDataModule:
-    """Build the ArrayDataModule build_inference_datamodule() *should* produce.
-
-    Works around a pre-existing, unrelated bug: build_inference_datamodule()
-    passes the data.module selector straight into FactoryProvider.create_component,
-    but DataModuleSelector is a plain settings object (no get_init_kwargs()) —
-    training's dataset_builder.py instead hand-resolves the datamodule class and
-    constructs it directly. This mirrors that working code path so the eval-only
-    API itself (predictor loading, batched evaluation, metrics, figures) can be
-    exercised end-to-end against a real checkpoint and real array data.
-    """
-    data = settings.data
-    assert data is not None
-    dataset = FlexibleDataset(entries=(*data.features, *data.targets))
-    split_resolution = get_or_create_split(
-        num_samples=len(dataset),
-        test_ratio=data.splits.test_ratio,
-        val_ratio=data.splits.val_ratio,
-        session_name="evaluate_integration_test",
-    )
-    dataloader = DataloaderSettings(
-        batch_size=data.batch_size,
-        num_workers=0,
-        shuffle=False,
-        pin_memory=False,
-        persistent_workers=False,
-    )
-    return ArrayDataModule(
-        dataset=dataset, split=split_resolution.index_split, dataloader=dataloader
-    )
-
 
 # Same model/data shape as tests/integration/conftest.py's _make_training_job_config,
 # since InferenceJobConfig must describe the identical model + data the checkpoint was
@@ -92,14 +49,6 @@ def _build_inference_settings(
                 "shuffle": False,
                 "pin_memory": False,
                 "persistent_workers": False,
-                # build_inference_datamodule() does not apply the same
-                # "InMemoryModule" -> ArrayDataModule placeholder resolution
-                # that training's dataset_builder.py does, so an inference-only
-                # config must name the datamodule class explicitly.
-                "module": {
-                    "class": "ArrayDataModule",
-                    "module_path": "dlkit.engine.adapters.lightning.datamodules",
-                },
                 "features": [
                     {"name": "x", "path": str(minimal_dataset["features"]), "format": "npy"}
                 ],
@@ -162,15 +111,9 @@ def trained_checkpoint_path(trained_result: TrainingResult) -> Path:
     return fallback
 
 
-@pytest.fixture
-def patch_datamodule_factory(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(evaluate_module, "build_inference_datamodule", _build_array_datamodule)
-
-
 def test_evaluate_produces_metrics_and_figures_for_a_trained_checkpoint(
     minimal_dataset: dict[str, Path],
     trained_checkpoint_path: Path,
-    patch_datamodule_factory: None,
 ) -> None:
     inference_settings = _build_inference_settings(minimal_dataset, trained_checkpoint_path)
 

@@ -13,16 +13,14 @@ from dlkit.engine.artifacts import (
     FileArtifactPayload,
     ProducedArtifact,
 )
-from dlkit.engine.workflows.selectors.family_selector import DatasetFamilySelector
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.io.split_provider import SplitResolution, get_or_create_split
 
+from .datamodule_resolution import build_datamodule_from_selector
 from .module_defaults import with_runtime_module_defaults
-
-_DATAMODULE_MODULE = "dlkit.engine.adapters.lightning.datamodules"
 
 
 def _is_inference_mode(settings: JobConfig) -> bool:
@@ -168,38 +166,11 @@ class DatasetBuilder:
             ValueError: If datamodule settings are not configured.
         """
         from dlkit.infrastructure.config.data_settings import DataSettings
-        from dlkit.infrastructure.config.dataloader_settings import DataloaderSettings
-        from dlkit.infrastructure.utils.general import import_object
 
         data = settings.data
         if isinstance(data, DataSettings):
             # New-style: DataSettings unifies dataset + datamodule.
-            # Build the DataModule directly; DataModuleSelector is not a ComponentSettings.
-            dm_selector = data.module
-            module_path = dm_selector.module_path or _DATAMODULE_MODULE
-            dm_name = dm_selector.name or "ArrayDataModule"
-            # "InMemoryModule" is a placeholder default — map to the real class.
-            if dm_name == "InMemoryModule":
-                dm_name = "ArrayDataModule"
-            dataloader = DataloaderSettings(
-                batch_size=data.batch_size,
-                num_workers=data.num_workers,
-                shuffle=data.shuffle,
-                pin_memory=data.pin_memory,
-                persistent_workers=data.persistent_workers,
-                prefetch_factor=data.prefetch_factor,
-                follow_batch=data.follow_batch,
-            )
-            # Graph family needs a graph-aware datamodule.
-            if family is not None and dm_name in ("ArrayDataModule", "InMemoryModule"):
-                dm_cls = DatasetFamilySelector.default_datamodule_class_for_family(family)
-            else:
-                dm_cls = import_object(dm_name, fallback_module=module_path)
-            return dm_cls(
-                dataset=dataset,
-                split=split_resolution.index_split,
-                dataloader=dataloader,
-            )
+            return build_datamodule_from_selector(data, dataset, split_resolution, family=family)
 
         raise ValueError(
             "DataModule configuration requires a DataSettings (data section). "

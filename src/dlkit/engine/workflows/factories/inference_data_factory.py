@@ -2,19 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import cast
-
 from lightning.pytorch import LightningDataModule
 
-from dlkit.engine.data.datasets.flexible import FlexibleDataset
-from dlkit.infrastructure.config.core.base_settings import ComponentSettings
-from dlkit.infrastructure.config.core.context import BuildContext
-from dlkit.infrastructure.config.core.factories import FactoryProvider
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, JobConfig
-from dlkit.infrastructure.io.split_provider import get_or_create_split
 
-from .module_defaults import with_runtime_module_defaults
+from ._dataset_helpers import flexible_dataset_overrides
+from .datamodule_resolution import build_datamodule_from_selector
+from .dataset_builder import DatasetBuilder
 
 
 def build_inference_datamodule(
@@ -35,15 +29,6 @@ def build_inference_datamodule(
     Raises:
         ValueError: If data sections are not configured.
     """
-    try:
-        from dlkit.infrastructure.io.locations import root as _root
-
-        cfg_dir = _root()
-    except Exception:
-        cfg_dir = Path.cwd()
-
-    context = BuildContext(mode="inference", working_directory=cfg_dir)
-
     if not isinstance(settings, JobConfig):
         raise ValueError(
             "build_inference_datamodule() requires an InferenceJobConfig or JobConfig instance. "
@@ -56,27 +41,10 @@ def build_inference_datamodule(
             "Ensure settings.data is configured before calling "
             "build_inference_datamodule()."
         )
-    selected_features = tuple(data.features or ())
-    selected_targets = tuple(data.targets or ())
 
-    dataset = FlexibleDataset(
-        entries=(*selected_features, *selected_targets),
-    )
-
-    split_cfg = data.splits
-    session_name = settings.experiment.name if settings.experiment else "dlkit-experiment"
-    split_resolution = get_or_create_split(
-        num_samples=len(dataset),
-        test_ratio=split_cfg.test_ratio,
-        val_ratio=split_cfg.val_ratio,
-        session_name=session_name,
-        explicit_filepath=split_cfg.filepath,
-    )
-    dm_context = context.with_overrides(
-        dataset=dataset,
-        split=split_resolution.index_split,
-        dataloader=None,
-    )
-    # Build from data.module selector
-    module_settings = with_runtime_module_defaults(data.module)
-    return FactoryProvider.create_component(cast(ComponentSettings, module_settings), dm_context)
+    dataset_builder = DatasetBuilder()
+    context = dataset_builder.build_context(settings)
+    overrides = flexible_dataset_overrides(tuple(data.features or ()), tuple(data.targets or ()))
+    dataset = dataset_builder.build_dataset(settings, context, overrides)
+    split_resolution = dataset_builder.build_split(settings, dataset)
+    return build_datamodule_from_selector(data, dataset, split_resolution)

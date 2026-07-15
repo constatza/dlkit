@@ -12,7 +12,12 @@
 - `build_strategy.py`: shared strategy protocol and graph strategy
 - `flexible_build_strategy.py`: flexible-array strategy
 - `generative_build_strategies.py`: generative/flow-matching strategy
-- `dataset_builder.py`: runtime dataset and datamodule assembly
+- `dataset_builder.py`: runtime dataset, split, and datamodule assembly (training)
+- `datamodule_resolution.py`: shared `DataModuleSelector` -> `LightningDataModule`
+  resolution, used by both `dataset_builder.py` (training) and
+  `inference_data_factory.py` (inference)
+- `inference_data_factory.py`: inference-only datamodule assembly, reusing
+  `DatasetBuilder` and `datamodule_resolution.py` rather than duplicating them
 - `feature_pipeline.py`: feature/target transform assembly
 - `execution_strategy_factory.py`: training executor composition with tracking activation
 
@@ -37,3 +42,11 @@
   trainer construction should not create local output directories.
 - MLflow tracking is enabled only by explicit `tracking.backend = "mlflow"` configuration.
 - When MLflow is enabled, durable artifacts belong to MLflow.
+- `DataModuleSelector` is a plain settings selector, not a `ComponentSettings`
+  (no `get_init_kwargs()`) — it must never be routed through
+  `FactoryProvider.create_component()`. Both training and inference resolve it
+  via the shared `datamodule_resolution.build_datamodule_from_selector()`.
+- Inference-only datamodule construction stays flexible/array-only: it always
+  builds a `FlexibleDataset` via `DatasetBuilder`/`flexible_dataset_overrides`,
+  with no graph-family dataset path (`graph_dataset_overrides` is
+  training/`GraphBuildStrategy`-only).
