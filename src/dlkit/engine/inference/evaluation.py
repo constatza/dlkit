@@ -48,10 +48,11 @@ def compute_regression_metrics(predictions: Tensor, targets: Tensor) -> dict[str
 
     preds_flat = predictions.reshape(-1).float()
     targets_flat = targets.reshape(-1).float()
+    device = preds_flat.device
     return {
-        "mae": float(MeanAbsoluteError()(preds_flat, targets_flat)),
-        "rmse": float(MeanSquaredError(squared=False)(preds_flat, targets_flat)),
-        "r2": float(R2Score()(preds_flat, targets_flat)),
+        "mae": float(MeanAbsoluteError().to(device)(preds_flat, targets_flat)),
+        "rmse": float(MeanSquaredError(squared=False).to(device)(preds_flat, targets_flat)),
+        "r2": float(R2Score().to(device)(preds_flat, targets_flat)),
     }
 
 

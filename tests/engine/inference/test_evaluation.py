@@ -65,6 +65,40 @@ def test_compute_regression_metrics_perfect_predictions(
     assert metrics["r2"] == pytest.approx(1.0, abs=1e-6)
 
 
+def test_compute_regression_metrics_moves_metrics_to_input_device(
+    perfect_predictions: tuple[torch.Tensor, torch.Tensor],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Metrics must be moved to the input tensors' device before being called.
+
+    Regression test: torchmetrics raises when a metric (default device CPU)
+    is called with tensors on another device — reproduced here by asserting
+    ``.to(device)`` is invoked with the input tensors' device rather than by
+    requiring a real second accelerator.
+    """
+    predictions, targets = perfect_predictions
+    seen_devices: list[torch.device] = []
+
+    class _RecordingMetric(torch.nn.Module):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__()
+
+        def to(self, device: torch.device, *args: object, **kwargs: object) -> _RecordingMetric:
+            seen_devices.append(device)
+            return self
+
+        def forward(self, *_args: torch.Tensor) -> torch.Tensor:
+            return torch.tensor(0.0)
+
+    monkeypatch.setattr("torchmetrics.regression.MeanAbsoluteError", _RecordingMetric)
+    monkeypatch.setattr("torchmetrics.regression.MeanSquaredError", _RecordingMetric)
+    monkeypatch.setattr("torchmetrics.regression.R2Score", _RecordingMetric)
+
+    compute_regression_metrics(predictions, targets)
+
+    assert seen_devices == [predictions.device] * 3
+
+
 def test_compute_regression_metrics_constant_offset() -> None:
     targets = torch.zeros(N_SAMPLES)
     predictions = torch.ones(N_SAMPLES)
