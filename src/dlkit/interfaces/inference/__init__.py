@@ -7,11 +7,15 @@ from dlkit.engine.inference import (
     PredictorConfig,
     PredictorError,
     PredictorNotLoadedError,
+    evaluate_checkpoint,
     get_checkpoint_info,
     load_model,
     load_model_from_settings,
+    log_evaluation_result,
     validate_checkpoint,
 )
+
+from .evaluate import evaluate
 
 __all__ = [
     # Main API
@@ -24,6 +28,10 @@ __all__ = [
     "PredictionOutput",
     "PredictorConfig",
     "load_model_from_settings",
+    # Eval-only API
+    "evaluate",
+    "evaluate_checkpoint",
+    "log_evaluation_result",
     # Exceptions
     "PredictorError",
     "PredictorNotLoadedError",

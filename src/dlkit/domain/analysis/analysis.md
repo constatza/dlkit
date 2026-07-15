@@ -78,17 +78,30 @@ built-in and should be toggled by a `PlotSettings` flag.
 
 ```
 PlotSettings (TOML)
-    └─▶ build_plot_callbacks()          # engine/adapters/lightning/plot_callbacks.py
-            ├─▶ LossCurvePlotCallback   # on_train_epoch_end → on_fit_end
-            └─▶ PredictionPlotCallback  # on_predict_batch_end → on_predict_epoch_end
+    └─▶ select_enabled_generators()      # engine/adapters/lightning/plot_callbacks.py
+            │   (single source of truth: which generators are enabled)
+            │
+            ├─▶ build_plot_callbacks()               # training path (Lightning Trainer)
+            │       ├─▶ LossCurvePlotCallback         # on_train_epoch_end → on_fit_end
+            │       └─▶ PredictionPlotCallback         # on_predict_batch_end → on_predict_epoch_end
+            │               └─▶ IFigureGenerator.generate(preds, targets)
+            │                       └─▶ _plot_and_log() → IArtifactLogger.log_artifact_content()
+            │
+            └─▶ generate_regression_figures()        # eval-only path (no Trainer)
+                    # engine/inference/evaluation.py
                     └─▶ IFigureGenerator.generate(preds, targets)
-                            └─▶ _plot_and_log() → IArtifactLogger.log_artifact_content()
+                            └─▶ log_evaluation_result() → IRunContext.log_artifact_content()
 ```
 
-`build_plot_callbacks` defers the import of domain generators until call-time.
-This is intentional: `engine.tracking` cannot import `domain` directly (DAG
-rule), so it delegates callback construction to `engine.adapters.lightning`
-which is allowed to cross that boundary.
+`build_plot_callbacks` and `generate_regression_figures` both call
+`select_enabled_generators(plots)` rather than re-implementing the
+`PlotSettings` flag-gating separately — this is the DRY seam that keeps
+training-time and eval-only plots identical. `select_enabled_generators`
+defers the import of domain generators until call-time. This is intentional:
+`engine.tracking` cannot import `domain` directly (DAG rule), so it delegates
+generator/callback construction to `engine.adapters.lightning` which is
+allowed to cross that boundary; `engine.inference` reuses the same function
+rather than duplicating the flag-gating logic.
 
 ## Layer boundaries
 
@@ -109,6 +122,9 @@ exclusively in the engine layer.
 2. Add a generator in `generators.py`.
 3. Add a boolean flag to `PlotSettings` in
    `infrastructure/config/plot_settings.py`.
-4. Wire it in `build_plot_callbacks` in
-   `engine/adapters/lightning/plot_callbacks.py`.
+4. Wire it in `select_enabled_generators` in
+   `engine/adapters/lightning/plot_callbacks.py` — both the training-callback
+   path (`build_plot_callbacks`) and the eval-only path
+   (`engine/inference/evaluation.py::generate_regression_figures`) pick it up
+   automatically since both call `select_enabled_generators`.
 5. Update `README.md` in this directory with the new flag and what it shows.

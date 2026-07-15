@@ -274,22 +274,23 @@ class PredictionPlotCallback(Callback):
             )
 
 
-def build_plot_callbacks(
-    run_context: IArtifactLogger,
-    settings: PlotSettings,
-) -> list[Callback]:
-    """Construct plot callbacks based on PlotSettings flags.
+def select_enabled_generators(settings: PlotSettings) -> list[IFigureGenerator]:
+    """Select the regression figure generators enabled by PlotSettings flags.
+
+    Single source of truth for "which plots are active" — shared by the
+    training-time ``PredictionPlotCallback`` (via ``build_plot_callbacks``)
+    and by eval-only callers (``engine.inference.evaluation``) so both paths
+    render exactly the same plots without duplicating the flag-gating logic.
 
     Instantiates domain generators inside this function so that
     ``engine.tracking`` (which cannot import ``domain``) can delegate
-    callback construction here via a single import.
+    generator construction here via a single import.
 
     Args:
-        run_context: Active tracking run context for artifact upload.
-        settings: Plot configuration controlling which callbacks are built.
+        settings: Plot configuration controlling which generators are built.
 
     Returns:
-        List of Lightning Callbacks to append to the trainer. May be empty.
+        List of enabled figure generators, in a fixed order. May be empty.
     """
     from dlkit.domain.analysis.generators import (
         ErrorHistogramGenerator,
@@ -297,11 +298,6 @@ def build_plot_callbacks(
         ResidualGenerator,
         ResidualVsIndexGenerator,
     )
-
-    callbacks: list[Callback] = []
-
-    if settings.loss_curve:
-        callbacks.append(LossCurvePlotCallback(run_context, settings))
 
     generators: list[IFigureGenerator] = []
     if settings.parity:
@@ -321,6 +317,28 @@ def build_plot_callbacks(
     if settings.residual_vs_index:
         generators.append(ResidualVsIndexGenerator(max_points=settings.max_scatter_points))
 
+    return generators
+
+
+def build_plot_callbacks(
+    run_context: IArtifactLogger,
+    settings: PlotSettings,
+) -> list[Callback]:
+    """Construct plot callbacks based on PlotSettings flags.
+
+    Args:
+        run_context: Active tracking run context for artifact upload.
+        settings: Plot configuration controlling which callbacks are built.
+
+    Returns:
+        List of Lightning Callbacks to append to the trainer. May be empty.
+    """
+    callbacks: list[Callback] = []
+
+    if settings.loss_curve:
+        callbacks.append(LossCurvePlotCallback(run_context, settings))
+
+    generators = select_enabled_generators(settings)
     if generators:
         callbacks.append(PredictionPlotCallback(run_context, generators, settings))
 

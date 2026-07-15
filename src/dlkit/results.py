@@ -10,12 +10,18 @@ instead of the internal paths::
     from dlkit.common.state import ModelState
 """
 
-from dlkit.common.results import InferenceResult, OptimizationResult, TrainingResult
+from dlkit.common.results import (
+    EvaluationResult,
+    InferenceResult,
+    OptimizationResult,
+    TrainingResult,
+)
 from dlkit.common.state import ModelState
 
 __all__ = [
     "TrainingResult",
     "InferenceResult",
+    "EvaluationResult",
     "OptimizationResult",
     "ModelState",
 ]

@@ -15,6 +15,7 @@ from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverri
 from .results import (
     ConvergencePoint,
     ConvergenceResult,
+    EvaluationResult,
     InferenceResult,
     OptimizationResult,
     TrainingResult,
@@ -30,6 +31,7 @@ __all__ = [
     "ConvergencePoint",
     "ConvergenceResult",
     "DLKitError",
+    "EvaluationResult",
     "ExecutionOverrides",
     "InferenceResult",
     "InputShapes",

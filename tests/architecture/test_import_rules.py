@@ -130,9 +130,11 @@ class TestImportRules:
                     r"dlkit\.infer\s*\(",
                     r"dlkit\.optimize\s*\(",
                     r"dlkit\.execute\s*\(",
+                    r"dlkit\.evaluate\s*\(",  # eval-only checkpoint API
                     r"dlkit\.load_model\s*\(",  # stateful inference API
                     r"api_train\s*\(",  # train via interfaces.api
                     r"api_optimize\s*\(",  # optimize via interfaces.api
+                    r"api_evaluate\s*\(",  # evaluate via interfaces.inference
                 ]
 
                 has_api_usage = any(re.search(pattern, content) for pattern in high_level_apis)
@@ -145,7 +147,7 @@ class TestImportRules:
 
         assert not violations, (
             f"Integration tests must use high-level APIs "
-            f"(dlkit.train/infer/optimize/load_model). "
+            f"(dlkit.train/infer/optimize/evaluate/load_model). "
             f"Files without high-level API usage: {violations}"
         )
 

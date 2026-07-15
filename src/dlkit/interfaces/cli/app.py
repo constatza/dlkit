@@ -22,6 +22,7 @@ from dlkit.infrastructure.utils.logging_config import (
 
 from .commands import config, convert, optimize
 from .commands import converge as converge
+from .commands import evaluate as evaluate
 from .commands import predict as predict
 from .commands import train as train
 
@@ -55,6 +56,11 @@ app.add_typer(
     predict.app,
     name="predict",
     help="🔮 Prediction — Run predictions with trained models using training configs",
+)
+app.add_typer(
+    evaluate.app,
+    name="evaluate",
+    help="📊 Evaluation — Stats/plots for a trained checkpoint against labeled data",
 )
 
 # Keep other command groups

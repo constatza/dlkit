@@ -258,7 +258,10 @@ depends_on = [
 path = "dlkit.interfaces.inference"
 depends_on = [
     { path = "dlkit.common" },
+    { path = "dlkit.infrastructure" },
     { path = "dlkit.engine.inference" },
+    { path = "dlkit.engine.tracking" },
+    { path = "dlkit.engine.workflows.factories" },
 ]
 
 [[modules]]

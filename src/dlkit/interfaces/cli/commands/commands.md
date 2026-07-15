@@ -25,6 +25,7 @@ Key architectural decisions:
 |------|------|---------|---------|
 | `train.app` | Typer | Training workflow commands | N/A |
 | `predict.app` | Typer | Inference/prediction commands | N/A |
+| `evaluate.app` | Typer | Eval-only checkpoint stats/plots commands | N/A |
 | `optimize.app` | Typer | Hyperparameter optimization commands | N/A |
 | `converge.app` | Typer | Sample-size convergence study commands | N/A |
 | `server.app` | Typer | MLflow server management commands | N/A |
@@ -146,6 +147,51 @@ dlkit predict config.toml model.ckpt --no-save
 - `CheckpointPredictor.predict()` returns `PredictionOutput`; CLI collects `output.predictions`
 - Progress indicators during inference
 - Results presented via `present_inference_result()`
+
+---
+
+### Component 2.5: `evaluate.py` - Eval-Only Checkpoint Stats/Plots Commands
+
+**Purpose**: Evaluates a trained checkpoint against a labeled test/predict
+split — MAE/RMSE/R2 plus parity/residual/error-histogram/residual-vs-index
+plots — without training. Distinct from `predict.py`: `predict` returns raw
+predictions only; `evaluate` requires `data.targets` and produces the same
+stats/plots training produces.
+
+**Main Command**: `dlkit evaluate CONFIG.toml CHECKPOINT [options]`
+
+**Parameters**:
+- `config_path: Path` - Path to TOML configuration file (must define `data.targets`)
+- `checkpoint: Path` - Path to model checkpoint (.ckpt)
+- `split: str = "test"` - Labeled split to evaluate against: `"test"` or `"predict"`
+- `batch_size: int | None = None` - Batch size override
+- `output_dir: Path | None = None` - Save generated figures locally
+- `mlflow: bool = False` - Log metrics/figures to an MLflow run
+- `run_name: str | None = None` - MLflow run name override
+
+**Returns**: `None` (exits with status code)
+
+**Raises**:
+- `typer.Exit`: On validation failures or errors
+- `ConfigurationError`: `data.targets` not configured (handled by middleware)
+
+**Example**:
+```bash
+# Basic evaluation
+dlkit evaluate config.toml model.ckpt
+
+# Evaluate the predict split and save figures locally
+dlkit evaluate config.toml model.ckpt --split predict --output-dir out/
+
+# Log to MLflow
+dlkit evaluate config.toml model.ckpt --mlflow --run-name eval-baseline
+```
+
+**Implementation Notes**:
+- Delegates entirely to `dlkit.interfaces.inference.evaluate()` — the CLI
+  command is presentation-only (progress/console output, `--output-dir`
+  figure export), no orchestration logic lives here.
+- Results presented via `present_evaluation_result()`.
 
 ---
 
@@ -397,6 +443,18 @@ dlkit predict config.toml model.ckpt --save
 dlkit convert model.ckpt model.onnx --config config.toml
 
 # 3. Verify ONNX model externally
+```
+
+### Common Use Case 5: Evaluate a Trained Checkpoint
+```bash
+# 1. Train (or receive) a checkpoint
+dlkit train config.toml --mlflow
+
+# 2. Evaluate it against the labeled test split — no training
+dlkit evaluate config.toml outputs/model.ckpt --output-dir eval_out/
+
+# 3. Optionally log the same run to MLflow instead of/as well as local files
+dlkit evaluate config.toml outputs/model.ckpt --mlflow --run-name eval-v1
 ```
 
 ## Error Handling

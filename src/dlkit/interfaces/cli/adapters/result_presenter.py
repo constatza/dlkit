@@ -11,7 +11,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from dlkit.common import InferenceResult, OptimizationResult, TrainingResult
+from dlkit.common import EvaluationResult, InferenceResult, OptimizationResult, TrainingResult
 from dlkit.interfaces.cli.presenters import summarize
 
 
@@ -78,6 +78,39 @@ def present_inference_result(
     # Display prediction summary
     if result.predictions is not None:
         _display_prediction_summary(result.predictions, console)
+
+
+def present_evaluation_result(
+    result: EvaluationResult, console: Console, output_dir: Path | None = None
+) -> None:
+    """Present evaluation result in a formatted display.
+
+    Args:
+        result: Evaluation result to display.
+        console: Rich console for output.
+        output_dir: If provided, save each figure as a local PNG/SVG/PDF file
+            (named after its generator, e.g. ``parity_plot.png``) under this
+            directory.
+    """
+    results_text = Text()
+    results_text.append("📊 Evaluation Results\n\n", style="bold blue")
+    results_text.append(f"Duration: {result.duration_seconds:.2f} seconds\n", style="green")
+    results_text.append(f"Figures: {len(result.figures)} generated\n", style="cyan")
+    if result.mlflow_run_id:
+        results_text.append(f"MLflow run: {result.mlflow_run_id}\n", style="yellow")
+
+    results_panel = Panel.fit(results_text, title="Evaluation Summary", border_style="blue")
+    console.print(results_panel)
+
+    if result.metrics:
+        _display_metrics_table(result.metrics, console, "Evaluation Metrics")
+
+    if output_dir is not None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for name, fig in result.figures.items():
+            fig_path = output_dir / f"{name}.png"
+            fig.savefig(fig_path, dpi=300, bbox_inches="tight")
+        console.print(f"Figures saved to: {output_dir}", style="yellow")
 
 
 def present_optimization_result(result: OptimizationResult, console: Console) -> None:

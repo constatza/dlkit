@@ -48,7 +48,7 @@ For manual optimization programs, `training_step()` remains a thin coordinator:
 | `base.py` | `ProcessingLightningWrapper` — pure Lightning coordinator |
 | `datamodules/` | Lightning `DataModule` implementations for array and graph datasets |
 | `callbacks.py` | Lifecycle callbacks such as transform fitting, epoch metric logging, explicit checkpoint-dir routing, and prediction writers |
-| `plot_callbacks.py` | `LossCurvePlotCallback`/`PredictionPlotCallback` — automatic plot-artifact generation from training/predict data |
+| `plot_callbacks.py` | `LossCurvePlotCallback`/`PredictionPlotCallback` — automatic plot-artifact generation from training/predict data. `select_enabled_generators(plots)` is the shared `PlotSettings` → generator-list selection reused by `engine.inference.evaluation`'s eval-only (no-Trainer) plot path — see `domain/analysis/analysis.md`. |
 | `tensor_extraction.py` | `as_flat_tensor` — normalizes a Tensor or single-key TensorDict/Mapping (the real `predict_step` output shape) into a bare tensor for plotting |
 | `checkpoint_dto.py` | Checkpoint metadata normalization helpers |
 | `standard.py` | `StandardLightningWrapper` — tensor/TensorDict workflows |

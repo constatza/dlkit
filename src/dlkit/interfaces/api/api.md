@@ -14,7 +14,7 @@ Inference remains separate under `dlkit.interfaces.inference`.
 
 At the package root, `dlkit` keeps a curated flat surface:
 - workflows: `train`, `optimize`, `converge`, `execute`
-- inference: `load_model`
+- inference: `load_model`, `evaluate`
 - typed config loaders: `load_training_config`, `load_inference_config`, `load_optimization_config`
 - registration entrypoints: `register_model`, `register_dataset`
 

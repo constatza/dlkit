@@ -82,6 +82,24 @@ class InferenceResult:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class EvaluationResult:
+    """Result of evaluating a trained checkpoint against a labeled dataset split.
+
+    ``predictions``/``targets``/``figures`` are ``Any``-typed (numpy arrays /
+    matplotlib Figures) to keep numpy and matplotlib out of ``common``'s
+    import surface, matching ``TrainingResult.predictions``.
+    """
+
+    predictions: Any
+    targets: Any
+    metrics: dict[str, float]
+    figures: dict[str, Any]
+    duration_seconds: float
+    mlflow_run_id: str | None = field(default=None)
+    mlflow_tracking_uri: str | None = field(default=None)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OptimizationResult:
     """Result of hyperparameter optimization workflow."""
 

@@ -10,6 +10,7 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS: dict[str, tuple[str, str]] = {
+    "evaluate": ("dlkit.interfaces.api", "evaluate"),
     "execute": ("dlkit.interfaces.api", "execute"),
     "load_inference_config": ("dlkit.config", "load_inference_config"),
     "load_model": ("dlkit.inference", "load_model"),

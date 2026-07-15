@@ -13,7 +13,7 @@ the codebase.
 
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
-- Results: `TrainingResult`, `InferenceResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`
+- Results: `TrainingResult`, `InferenceResult`, `EvaluationResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`
 - Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
 - Hooks: `LifecycleHooks`
 - Hook param scalars: `ParamValue = str | int | float | bool`
@@ -22,6 +22,11 @@ the codebase.
 `TrainingResult` includes lazy derived accessors for prediction payloads through:
 - `stacked`
 - `to_numpy()`
+
+`EvaluationResult` (produced by `dlkit.interfaces.inference.evaluate()`) holds
+`predictions`/`targets`/`figures` as `Any`-typed fields — mirroring
+`TrainingResult.predictions` — to keep numpy and matplotlib out of this
+package's import surface. `metrics` is a plain `dict[str, float]`.
 
 ## Geometry: roles and spatial structure
 

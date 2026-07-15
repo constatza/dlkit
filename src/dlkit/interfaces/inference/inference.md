@@ -19,6 +19,9 @@ implementations.
 - `IPredictor`
 - `PredictionOutput`
 - `PredictorConfig`
+- `evaluate()` — eval-only checkpoint stats/plots (see below)
+- `evaluate_checkpoint()`, `log_evaluation_result()` — lower-level building
+  blocks `evaluate()` composes
 
 These symbols are re-exported from `dlkit.engine.inference`.
 
@@ -31,6 +34,32 @@ with load_model("model.ckpt", device="auto") as predictor:
     output = predictor.predict(x=batch)
     predictions = output.predictions
 ```
+
+### Eval-only stats/plots (`evaluate()`)
+
+`evaluate()` (defined in this package's `evaluate.py`, not `engine.inference`,
+because it also needs `engine.workflows.factories` for datamodule construction
+and `engine.tracking` for optional MLflow logging — a wider dependency set than
+`engine.inference` itself is allowed under the DAG) answers a different
+question than `load_model()`/`predict()`: given an *already-trained*
+checkpoint and a *labeled* dataset split, produce the same MAE/RMSE/R2 and
+parity/residual/error-histogram/residual-vs-index plots that training
+produces — without constructing a Lightning `Trainer` or updating weights.
+
+```python
+from dlkit.interfaces.inference import evaluate
+
+result = evaluate(inference_settings, checkpoint_path="model.ckpt")
+result.metrics      # {"mae": ..., "rmse": ..., "r2": ...}
+result.figures       # {"parity_plot": Figure, "residual_plot": Figure, ...}
+```
+
+Requires `settings.data.targets` to be configured (there is no plot without
+ground truth). `split="test"` (default) or `split="predict"` selects which
+labeled partition to evaluate against — `predict_dataloader()` is a genuinely
+different partition from `test_dataloader()` for `GraphDataModule`-backed
+configs, so this is a real choice, not cosmetic. Pass `log_to_mlflow=True` to
+also open an MLflow run and log the metrics/figures as artifacts.
 
 ## Dependency Direction
 
@@ -60,3 +89,12 @@ with load_model("model.ckpt", device="auto") as predictor:
   model lifecycle management.
 - Checkpoint transform reconstruction accepts the serialized `entry_configs[*].transforms`
   metadata written by DLKit and normalizes those specs before module construction.
+- `evaluate()` always runs with `apply_transforms=True` internally and does not
+  expose it as a caller-facing flag: predictions come back inverse-transformed
+  to raw scale, and dataset targets are already raw, so anything else would
+  silently compare predictions/targets on mismatched scales.
+- `evaluate()`'s default `PlotSettings` (all four regression plots enabled) is
+  intentionally different from training's `PlotSettings` default (opt-in,
+  every flag `False`) — plots are the entire point of calling `evaluate()`.
+  An explicit `plots=` argument, or `[plots] enabled = true` already set on
+  the settings object, overrides this default.

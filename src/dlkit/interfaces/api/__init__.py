@@ -9,6 +9,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "ConfigurationError": ("dlkit.common", "ConfigurationError"),
     "ConvergenceResult": ("dlkit.common", "ConvergenceResult"),
     "converge": ("dlkit.interfaces.api.functions", "converge"),
+    "evaluate": ("dlkit.interfaces.inference", "evaluate"),
+    "EvaluationResult": ("dlkit.common", "EvaluationResult"),
     "InferenceResult": ("dlkit.common", "InferenceResult"),
     "LoggedModelRecord": ("dlkit.interfaces.api.functions", "LoggedModelRecord"),
     "OptimizationResult": ("dlkit.common", "OptimizationResult"),
