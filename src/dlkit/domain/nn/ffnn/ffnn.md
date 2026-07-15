@@ -96,6 +96,13 @@ families:
 - Square exp: `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
+> Their hidden transition block is selected by `block_kind: DenseBlockKind`.
+> The default `"dense"` keeps the single-projection dense branch; `"mlp"`,
+> `"glu"`, `"geglu"`, and `"swiglu"` select bibliography-style FFN/gated FFN
+> blocks. `linear_kind` selects the projection kernel: `"linear"` by default,
+> or `"factorized"` for `FactorizedLinear` projections inside the selected
+> block topology. Python callers may pass `block_factory` for a custom module
+> factory with the same `in_features`/`out_features` constructor contract.
 
 Dense shape intuition:
 
@@ -122,7 +129,7 @@ EmbeddedFFNN
 ## Low-level constrained builders
 
 `constrained.py` also keeps reusable builder-oriented classes:
-- `ParametricDenseBlock` — a single norm → act → layer → dropout block; accepts `in_size` when the block's input and output dimensions differ
+- `ParametricDenseBlock` — a single norm → act → injected-layer → dropout block with the same `in_features`/`out_features` constructor contract as the other dense primitives
 - `EmbeddedParametricFFNN` — residual body with `Linear` embedding/regression projections (no `residual:` param)
 - `EmbeddedSimpleParametricFFNN` — plain body with `Linear` embedding/regression projections (no `residual:` param)
 
@@ -147,6 +154,15 @@ It exposes the same dense-network knobs as `FFNN`:
 - `hidden_size`
 - `num_layers`
 - optional `activation`, `normalize`, `dropout`, `bias`
+- optional `block_kind` / `block_factory`
+
+The non-factorized Hyper/MoE composites also expose `block_kind` for the
+wrapped hidden branch or expert block. Their default is `"parametric"` to keep
+the existing linear-kernel branch shape; pass `"mlp"`, `"geglu"`, or `"swiglu"`
+to use Transformer/MoE-style FFN experts. Use `linear_kind="factorized"` to
+make the selected expert topology use `FactorizedLinear` kernels. Factorized
+model variants do not expose this selector because their names guarantee
+`FactorizedLinear` kernels across the model-owned projections.
 
 ## Naming rules
 

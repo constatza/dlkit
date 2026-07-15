@@ -9,9 +9,50 @@ from torch import Tensor, nn
 from dlkit.domain.nn.contracts import HyperParam, StandardEntryConsumer
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
 from dlkit.domain.nn.init import initialize_
-from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
-from dlkit.domain.nn.types import ActivationName
+from dlkit.domain.nn.primitives import (
+    DenseBlockKind,
+    DenseLinearKind,
+    SkipConnection,
+    build_linear_skip_layer,
+    make_dense_block,
+)
+from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
+
+type DenseBlockFactory = Callable[..., nn.Module]
+
+
+def _make_hidden_block(
+    *,
+    in_features: int,
+    out_features: int,
+    activation: ActivationName | Callable[[Tensor], Tensor] | None,
+    normalize: NormalizerName | None,
+    dropout: float,
+    bias: bool,
+    block_kind: DenseBlockKind,
+    linear_kind: DenseLinearKind,
+    block_factory: DenseBlockFactory | None,
+) -> nn.Module:
+    if block_factory is not None:
+        return block_factory(
+            in_features=in_features,
+            out_features=out_features,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+    return make_dense_block(
+        block_kind,
+        in_features=in_features,
+        out_features=out_features,
+        activation=activation,
+        normalize=normalize,
+        dropout=dropout,
+        bias=bias,
+        linear_kind=linear_kind,
+    )
 
 
 class VarWidthFFNN(StandardEntryConsumer, nn.Module):
@@ -64,6 +105,9 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         dropout: float = 0.0,
         bias: bool = True,
         skip: bool = True,
+        block_kind: DenseBlockKind = "dense",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         super().__init__()
         if not layers:
@@ -78,6 +122,8 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
             "dropout": dropout,
             "bias": bias,
             "skip": skip,
+            "block_kind": block_kind if block_factory is None else "custom",
+            "linear_kind": linear_kind if block_factory is None else "custom",
         }
         # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
         # 1/sqrt(2*num_layers) to counteract geometric variance growth across depth.
@@ -88,13 +134,16 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         initialize_(self.embedding_layer, activation)
 
         for i in range(len(widths) - 1):
-            block = DenseBlock(
-                widths[i],
-                widths[i + 1],
+            block = _make_hidden_block(
+                in_features=widths[i],
+                out_features=widths[i + 1],
                 activation=self.activation,
                 normalize=normalize,
                 dropout=dropout,
                 bias=bias,
+                block_kind=block_kind,
+                linear_kind=linear_kind,
+                block_factory=block_factory,
             )
             layer = (
                 SkipConnection(
@@ -167,6 +216,9 @@ class FFNN(VarWidthFFNN):
         dropout: float = 0.0,
         bias: bool = True,
         skip: bool = True,
+        block_kind: DenseBlockKind = "dense",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         if num_layers < 0:
             raise ValueError("num_layers must be a non-negative integer")
@@ -179,6 +231,9 @@ class FFNN(VarWidthFFNN):
             dropout=dropout,
             bias=bias,
             skip=skip,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
         )
 
 
@@ -227,6 +282,9 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
         normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         bias: bool = True,
+        block_kind: DenseBlockKind = "dense",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         super().__init__()
         if num_layers <= 0:
@@ -239,6 +297,8 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
             "normalize": normalize,
             "dropout": dropout,
             "bias": bias,
+            "block_kind": block_kind if block_factory is None else "custom",
+            "linear_kind": linear_kind if block_factory is None else "custom",
         }
         hidden = hidden_size
         # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
@@ -249,13 +309,16 @@ class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
         self.layers = nn.ModuleList()
 
         for _ in range(num_layers):
-            block = DenseBlock(
-                hidden,
-                hidden,
+            block = _make_hidden_block(
+                in_features=hidden,
+                out_features=hidden,
                 activation=resolved_activation,
                 normalize=normalize,
                 dropout=dropout,
                 bias=bias,
+                block_kind=block_kind,
+                linear_kind=linear_kind,
+                block_factory=block_factory,
             )
             self.layers.append(
                 SkipConnection(

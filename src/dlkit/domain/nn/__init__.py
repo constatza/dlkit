@@ -18,7 +18,6 @@ from .ffnn import (
     EmbeddedParametricFFNN,
     EmbeddedSimpleFactorizedFFNN,
     EmbeddedSimpleParametricFFNN,
-    ParametricDenseBlock,
 )
 from .ffnn.film import FiLMBlock, FiLMEmbeddedFFNN, FiLMFFNN, FiLMResidualBlock, VarWidthFiLMFFNN
 from .ffnn.gated import GatedMLP
@@ -50,8 +49,14 @@ from .operators import (
 )
 from .parameter_roles import ParameterRole
 from .primitives import (
+    DenseBlock,
+    DenseBlockKind,
+    DenseLinearKind,
+    DenseMLPBlock,
+    GateActivationName,
     GatedConvolutionBlock1d,
     GatedDeconvolutionBlock1d,
+    GatedDenseMLPBlock,
     GLUGate,
     GraphHyperConnection,
     GraphHyperSequential,
@@ -63,12 +68,14 @@ from .primitives import (
     LaneMixingStats,
     LaneReduce,
     MoESequential,
+    ParametricDenseBlock,
     RoutingDecision,
     RoutingStats,
     SparseMoE,
     SwiGLUGate,
     TopKRouter,
     UVGate,
+    make_dense_block,
 )
 from .spectral import (
     DualPathFFNN,
@@ -117,6 +124,13 @@ __all__ = [
     "ScaleEquivariantFiLMEmbeddedFFNN",
     "ScaleEquivariantVarWidthFiLMFFNN",
     # Constrained low-level builders
+    "DenseBlock",
+    "DenseBlockKind",
+    "DenseLinearKind",
+    "DenseMLPBlock",
+    "GatedDenseMLPBlock",
+    "GateActivationName",
+    "make_dense_block",
     "ParametricDenseBlock",
     "EmbeddedParametricFFNN",
     "EmbeddedSimpleParametricFFNN",

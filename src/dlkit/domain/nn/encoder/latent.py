@@ -21,8 +21,8 @@ class VectorToTensorBlock(nn.Module):
         self.latent_dim = latent_dim
         self.target_shape = target_shape
         self.dense_block = DenseBlock(
-            latent_dim,
-            target_shape[0] * target_shape[1],
+            in_features=latent_dim,
+            out_features=target_shape[0] * target_shape[1],
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -46,7 +46,11 @@ class TensorToVectorBlock(nn.Module):
         super().__init__()
         self.activation = F.relu
         self.pooling = nn.AdaptiveAvgPool1d(1)
-        self.dense_block = DenseBlock(channels_in, latent_dim, activation=lambda x: x)
+        self.dense_block = DenseBlock(
+            in_features=channels_in,
+            out_features=latent_dim,
+            activation=lambda x: x,
+        )
         self.transpose = transpose
 
     def forward(self, x):

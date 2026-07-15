@@ -15,11 +15,12 @@ from dlkit.domain.nn.contracts import (
 from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
     FactorizedLinear,
+    ParametricDenseBlock,
     SkipConnection,
     build_linear_skip_layer,
 )
 from dlkit.domain.nn.types import ActivationName
-from dlkit.domain.nn.utils import make_norm_layer, resolve_activation
+from dlkit.domain.nn.utils import resolve_activation
 
 
 def _resolve_hidden_size(
@@ -36,45 +37,6 @@ def _resolve_hidden_size(
             f"!= out_features ({out_features})"
         )
     return in_features
-
-
-class ParametricDenseBlock(nn.Module):
-    """Dense block using a caller-supplied linear layer factory.
-
-    Args:
-        size: Output dimension (passed to ``layer_factory``).
-        in_size: Input dimension for the norm layer. Defaults to ``size`` when
-            the block is square; supply when the layer maps ``in_size → size``.
-        layer_factory: Callable ``(size) → nn.Module`` that builds the linear layer.
-        activation: Element-wise activation applied before the layer.
-        normalize: Optional normalisation before activation (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability after the layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        size: int,
-        in_size: int | None = None,
-        layer_factory: Callable[[int], nn.Module],
-        activation: Callable[[Tensor], Tensor] = nn.functional.relu,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__()
-        norm_size = in_size if in_size is not None else size
-        self.in_features = norm_size
-        self.out_features = size
-        self.norm = make_norm_layer(normalize, norm_size)
-        self.activation = activation
-        self.layer = layer_factory(size)
-        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.layer(x)
-        return self.dropout(x)
 
 
 class _ConstantWidthParametricBody(nn.Module):
@@ -108,7 +70,8 @@ class _ConstantWidthParametricBody(nn.Module):
         blocks: list[nn.Module] = []
         for _ in range(num_layers):
             block = ParametricDenseBlock(
-                size=size,
+                in_features=size,
+                out_features=size,
                 layer_factory=layer_factory,
                 activation=activation,
                 normalize=normalize,
@@ -420,8 +383,8 @@ class FactorizedFFNN(StandardEntryConsumer, nn.Module):
         resolved_activation = resolve_activation(activation, default="gelu")
         super().__init__()
         self.first_block = ParametricDenseBlock(
-            size=hidden_size,
-            in_size=in_features,
+            in_features=in_features,
+            out_features=hidden_size,
             layer_factory=lambda h: FactorizedLinear(in_features, h, bias=bias, mean=mean, std=std),
             activation=resolved_activation,
             normalize=normalize,
@@ -477,8 +440,8 @@ class SimpleFactorizedFFNN(StandardEntryConsumer, nn.Module):
         resolved_activation = resolve_activation(activation, default="gelu")
         super().__init__()
         self.first_block = ParametricDenseBlock(
-            size=hidden_size,
-            in_size=in_features,
+            in_features=in_features,
+            out_features=hidden_size,
             layer_factory=lambda h: FactorizedLinear(in_features, h, bias=bias, mean=mean, std=std),
             activation=resolved_activation,
             normalize=normalize,

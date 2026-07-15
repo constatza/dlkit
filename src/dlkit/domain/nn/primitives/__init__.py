@@ -6,7 +6,16 @@ from .conditioning import (
     IConditionedModule,
 )
 from .convolutional import ConvolutionBlock1d
-from .dense import DenseBlock
+from .dense import (
+    DenseBlock,
+    DenseBlockKind,
+    DenseLinearKind,
+    DenseMLPBlock,
+    GateActivationName,
+    GatedDenseMLPBlock,
+    ParametricDenseBlock,
+    make_dense_block,
+)
 from .factorized_init import FactorizedInit, resolve_factorized_init, resolve_kaiming_a
 from .gated import (
     GatedConvolutionBlock1d,
@@ -58,9 +67,13 @@ __all__ = [
     "ConditionedSequential",
     "ConvolutionBlock1d",
     "DenseBlock",
+    "DenseBlockKind",
+    "DenseLinearKind",
+    "DenseMLPBlock",
     "FactorizedLinear",
     "FactorizedInit",
     "FiLMLayer",
+    "GateActivationName",
     "GLUGate",
     "GRNGate",
     "GraphHyperConnection",
@@ -74,10 +87,12 @@ __all__ = [
     "LaneExpand",
     "LaneMixingStats",
     "LaneReduce",
+    "GatedDenseMLPBlock",
     "PositiveColumnScale",
     "PositiveRowScale",
     "PositiveSandwichScale",
     "PositiveScalarScale",
+    "ParametricDenseBlock",
     "ResidualSequential",
     "RoutingDecision",
     "RoutingStats",
@@ -91,6 +106,7 @@ __all__ = [
     "build_conv1d_skip_layer",
     "build_conv2d_skip_layer",
     "build_linear_skip_layer",
+    "make_dense_block",
     "MoESequential",
     "residual_branch_scale",
     "resolve_factorized_init",

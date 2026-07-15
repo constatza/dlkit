@@ -9,17 +9,21 @@ from dlkit.domain.nn.contracts import HyperParam, StandardEntryConsumer
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
 from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
+    DenseBlockKind,
+    DenseLinearKind,
     FactorizedLinear,
     HyperSequential,
     MoESequential,
+    ParametricDenseBlock,
     RoutingStats,
     SparseMoE,
+    make_dense_block,
     resolve_factorized_init,
 )
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
 
-from .constrained import ParametricDenseBlock
+type DenseBlockFactory = Callable[..., nn.Module]
 
 
 def _resolve_hidden_size(
@@ -103,11 +107,55 @@ def _linear_block(
     dropout: float,
 ) -> ParametricDenseBlock:
     return ParametricDenseBlock(
-        size=size,
+        in_features=size,
+        out_features=size,
         layer_factory=_linear_layer_factory(bias=bias, activation=activation_for_init),
         activation=activation,
         normalize=normalize,
         dropout=dropout,
+    )
+
+
+def _make_selected_block(
+    *,
+    size: int,
+    bias: bool,
+    activation: Callable[[Tensor], Tensor],
+    activation_for_init: ActivationName | Callable[[Tensor], Tensor] | None,
+    normalize: Literal["batch", "layer"] | None,
+    dropout: float,
+    block_kind: DenseBlockKind,
+    linear_kind: DenseLinearKind,
+    block_factory: DenseBlockFactory | None,
+) -> nn.Module:
+    if block_factory is not None:
+        return block_factory(
+            in_features=size,
+            out_features=size,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+    if block_kind == "parametric":
+        make_block = _factorized_block if linear_kind == "factorized" else _linear_block
+        return make_block(
+            size=size,
+            bias=bias,
+            activation=activation,
+            activation_for_init=activation_for_init,
+            normalize=normalize,
+            dropout=dropout,
+        )
+    return make_dense_block(
+        block_kind,
+        in_features=size,
+        out_features=size,
+        activation=activation,
+        normalize=normalize,
+        dropout=dropout,
+        bias=bias,
+        linear_kind=linear_kind,
     )
 
 
@@ -121,7 +169,8 @@ def _factorized_block(
     dropout: float,
 ) -> ParametricDenseBlock:
     return ParametricDenseBlock(
-        size=size,
+        in_features=size,
+        out_features=size,
         layer_factory=_factorized_layer_factory(bias=bias, activation=activation_for_init),
         activation=activation,
         normalize=normalize,
@@ -138,17 +187,23 @@ def _make_linear_experts(
     activation_for_init: ActivationName | Callable[[Tensor], Tensor] | None,
     normalize: Literal["batch", "layer"] | None,
     dropout: float,
+    block_kind: DenseBlockKind = "parametric",
+    linear_kind: DenseLinearKind = "linear",
+    block_factory: DenseBlockFactory | None = None,
 ) -> list[nn.Module]:
     if num_experts <= 0:
         raise ValueError("num_experts must be positive")
     return [
-        _linear_block(
+        _make_selected_block(
             size=size,
             bias=bias,
             activation=activation,
             activation_for_init=activation_for_init,
             normalize=normalize,
             dropout=dropout,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
         )
         for _ in range(num_experts)
     ]
@@ -194,6 +249,9 @@ def _moe_hyperparameters(
     jitter_noise: float,
     return_stats: bool,
     hidden_size: int | None = None,
+    block_kind: DenseBlockKind = "parametric",
+    linear_kind: DenseLinearKind = "linear",
+    block_factory: DenseBlockFactory | None = None,
 ) -> dict[str, HyperParam]:
     params: dict[str, HyperParam] = {
         "num_layers": num_layers,
@@ -208,6 +266,8 @@ def _moe_hyperparameters(
         "drop_policy": drop_policy,
         "jitter_noise": jitter_noise,
         "return_stats": return_stats,
+        "block_kind": block_kind if block_factory is None else "custom",
+        "linear_kind": linear_kind if block_factory is None else "custom",
     }
     if hidden_size is not None:
         params["hidden_size"] = hidden_size
@@ -249,6 +309,9 @@ def _make_linear_moe_layers(
     activation_for_init: ActivationName | Callable[[Tensor], Tensor] | None,
     normalize: Literal["batch", "layer"] | None,
     dropout: float,
+    block_kind: DenseBlockKind,
+    linear_kind: DenseLinearKind,
+    block_factory: DenseBlockFactory | None,
     top_k: int,
     router_activation: Literal["softmax", "normalized_sigmoid"],
     capacity_factor: float | None,
@@ -266,6 +329,9 @@ def _make_linear_moe_layers(
             activation_for_init=activation_for_init,
             normalize=normalize,
             dropout=dropout,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
         ),
         top_k=top_k,
         router_activation=router_activation,
@@ -328,6 +394,9 @@ class ConstantWidthHyper(StandardEntryConsumer, nn.Module):
         normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         bias: bool = True,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         super().__init__()
         _validate_square(in_features, out_features)
@@ -343,15 +412,20 @@ class ConstantWidthHyper(StandardEntryConsumer, nn.Module):
             "normalize": normalize,
             "dropout": dropout,
             "bias": bias,
+            "block_kind": block_kind if block_factory is None else "custom",
+            "linear_kind": linear_kind if block_factory is None else "custom",
         }
         modules = [
-            _linear_block(
+            _make_selected_block(
                 size=in_features,
                 bias=bias,
                 activation=resolved_activation,
                 activation_for_init=activation,
                 normalize=normalize,
                 dropout=dropout,
+                block_kind=block_kind,
+                linear_kind=linear_kind,
+                block_factory=block_factory,
             )
             for _ in range(num_layers)
         ]
@@ -379,6 +453,9 @@ class EmbeddedHyper(StandardEntryConsumer, nn.Module):
         normalize: Literal["batch", "layer"] | None = "layer",
         dropout: float = 0.0,
         bias: bool = True,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         super().__init__()
         hidden = _resolve_hidden_size(hidden_size, in_features, out_features)
@@ -395,16 +472,21 @@ class EmbeddedHyper(StandardEntryConsumer, nn.Module):
             "normalize": normalize,
             "dropout": dropout,
             "bias": bias,
+            "block_kind": block_kind if block_factory is None else "custom",
+            "linear_kind": linear_kind if block_factory is None else "custom",
         }
         self.embedding_layer = _linear(in_features, hidden, bias=bias, activation=activation)
         modules = [
-            _linear_block(
+            _make_selected_block(
                 size=hidden,
                 bias=bias,
                 activation=resolved_activation,
                 activation_for_init=activation,
                 normalize=normalize,
                 dropout=dropout,
+                block_kind=block_kind,
+                linear_kind=linear_kind,
+                block_factory=block_factory,
             )
             for _ in range(num_layers)
         ]
@@ -622,6 +704,9 @@ class ConstantWidthMoE(StandardEntryConsumer, nn.Module):
         drop_policy: Literal["none", "drop"] = "none",
         jitter_noise: float = 0.0,
         return_stats: bool = False,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         super().__init__()
         _validate_square(in_features, out_features)
@@ -643,6 +728,9 @@ class ConstantWidthMoE(StandardEntryConsumer, nn.Module):
             drop_policy=drop_policy,
             jitter_noise=jitter_noise,
             return_stats=return_stats,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
         )
         layers = _make_linear_moe_layers(
             size=in_features,
@@ -653,6 +741,9 @@ class ConstantWidthMoE(StandardEntryConsumer, nn.Module):
             activation_for_init=activation,
             normalize=normalize,
             dropout=dropout,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
             top_k=top_k,
             router_activation=router_activation,
             capacity_factor=capacity_factor,
@@ -783,6 +874,9 @@ class EmbeddedMoE(StandardEntryConsumer, nn.Module):
         drop_policy: Literal["none", "drop"] = "none",
         jitter_noise: float = 0.0,
         return_stats: bool = False,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        block_factory: DenseBlockFactory | None = None,
     ) -> None:
         super().__init__()
         hidden = _resolve_hidden_size(hidden_size, in_features, out_features)
@@ -805,6 +899,9 @@ class EmbeddedMoE(StandardEntryConsumer, nn.Module):
             drop_policy=drop_policy,
             jitter_noise=jitter_noise,
             return_stats=return_stats,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
         )
         self.embedding_layer = _linear(in_features, hidden, bias=bias, activation=activation)
         layers = _make_linear_moe_layers(
@@ -816,6 +913,9 @@ class EmbeddedMoE(StandardEntryConsumer, nn.Module):
             activation_for_init=activation,
             normalize=normalize,
             dropout=dropout,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            block_factory=block_factory,
             top_k=top_k,
             router_activation=router_activation,
             capacity_factor=capacity_factor,

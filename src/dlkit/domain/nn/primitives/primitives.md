@@ -12,7 +12,7 @@ Blocks that take an `activation` kwarg (`DenseBlock`, `ConvolutionBlock1d`,
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `DenseBlock` | `dense.py` | Pre-activation dense layer with normalization |
+| `DenseBlock`, `DenseMLPBlock`, `GatedDenseMLPBlock`, `ParametricDenseBlock` | `dense.py` | Feature-last dense/FFN block primitives |
 | `SkipConnection` | `skip.py` | Residual connection wrapper with flexible aggregation |
 | `SparseMoE`, `TopKRouter` | `moe.py` | Feature-last sparse mixture-of-experts primitives |
 | `HyperConnection`, `GraphHyperConnection` | `hyper.py` | Multi-lane residual wrappers with identity-biased lane mixing |
@@ -25,49 +25,60 @@ Blocks that take an `activation` kwarg (`DenseBlock`, `ConvolutionBlock1d`,
 
 ---
 
-## DenseBlock
+## Dense Blocks
 
-A pre-activation dense layer following the pattern from ResNet v2.
+Dense primitives are feature-last modules with a shared constructor shape:
+`in_features`, `out_features`, optional `activation`, optional `normalize`,
+`dropout`, and `bias`. They expose `in_features` and `out_features` so
+composition wrappers can build skip projections and validate shapes.
 
-### Architecture
+Available topology selector values for `make_dense_block(kind, ...)`:
 
-**Code notation:**
-```
-y = Dropout(Linear(σ(Norm(x))))
-```
+| Selector | Class | Pattern | Notes |
+|---|---|---|---|
+| `"dense"` | `DenseBlock` | `Norm -> activation -> Linear -> Dropout` | Single projection, useful as a pre-activation residual branch |
+| `"mlp"` | `DenseMLPBlock` | `Norm -> Linear -> activation -> Dropout -> Linear -> Dropout` | Transformer-style two-layer FFN block |
+| `"glu"` | `GatedDenseMLPBlock` | `value(x) * sigmoid(gate(x)) -> Linear` | GLU-style gated FFN |
+| `"geglu"` | `GatedDenseMLPBlock` | `value(x) * GELU(gate(x)) -> Linear` | GEGLU-style gated FFN |
+| `"swiglu"` | `GatedDenseMLPBlock` | `value(x) * SiLU(gate(x)) -> Linear` | SwiGLU-style gated FFN |
+| `"parametric"` | `ParametricDenseBlock` | `Norm -> activation -> layer_factory(out_features) -> Dropout` | For arbitrary injected kernels |
 
-**Mathematical form:**
+`linear_kind` selects the dense kernel used by built-in topologies:
 
-$$\mathbf{y} = \text{Dropout}\!\left(W\,\sigma\!\left(\text{Norm}(\mathbf{x})\right) + \mathbf{b}\right)$$
+| Selector | Kernel | Notes |
+|---|---|---|
+| `"linear"` | `nn.Linear` | Default |
+| `"factorized"` | `FactorizedLinear` | Uses activation-derived factorized initialization |
 
-Where:
-- $\text{Norm}$ — LayerNorm, BatchNorm, or Identity (configurable)
-- $\sigma$ — activation function (default: GELU)
-- $W \in \mathbb{R}^{d_{\text{out}} \times d_{\text{in}}}$, $\mathbf{b} \in \mathbb{R}^{d_{\text{out}}}$ — weight matrix and bias of the linear layer
-- $\text{Dropout}$ — dropout regularization (optional)
+For example, `block_kind="swiglu", linear_kind="factorized"` builds a SwiGLU
+FFN with factorized value, gate, and output projections.
 
-### Parameters
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `in_features` | `int` | required | Input dimension $d_{\text{in}}$ |
-| `out_features` | `int` | required | Output dimension $d_{\text{out}}$ |
-| `activation` | `Callable` | `F.gelu` | Activation function $\sigma$ |
-| `normalize` | `"layer" \| "batch" \| None` | `"layer"` | Normalization type |
-| `dropout` | `float` | `0.0` | Dropout probability $p$ |
-| `bias` | `bool` | `True` | Whether the linear layer has a bias term |
+`DenseMLPBlock`, `GatedDenseMLPBlock`, and `ParametricDenseBlock` default to
+`normalize=None`. This follows Transformer/MoE practice: the FFN expert/block
+is usually just the FFN transform, while layer normalization belongs to the
+surrounding residual layer or stack. Pass `normalize="layer"` or `"batch"` when
+the block itself should own normalization.
 
 ### Example
 
 ```python
-from dlkit.domain.nn.primitives import DenseBlock
+from dlkit.domain.nn.primitives import make_dense_block
 
-block = DenseBlock(
+expert = make_dense_block(
+    "swiglu",
     in_features=128,
-    out_features=64,
-    activation=F.relu,
-    normalize="layer",
+    out_features=128,
+    hidden_features=512,
     dropout=0.1,
+)
+
+factorized = make_dense_block(
+    "swiglu",
+    in_features=128,
+    out_features=128,
+    hidden_features=512,
+    activation="gelu",
+    linear_kind="factorized",
 )
 ```
 
@@ -75,7 +86,8 @@ block = DenseBlock(
 
 ## SkipConnection
 
-Residual connection wrapper that adds skip paths around any module.
+Residual connection wrapper that aggregates a wrapped module with an explicit
+skip projection module.
 
 ### Architecture
 
@@ -112,46 +124,39 @@ Where:
 
 ### Dimension Matching
 
-The skip projection $W_{\text{skip}}$ is selected automatically:
-
-| Condition | Projection Layer |
-|-----------|-----------------|
-| $C_{\text{in}} = C_{\text{out}}$ | $\text{Identity}()$ |
-| `layer_type == "conv1d"` | $\text{Conv1d}(C_{\text{in}}, C_{\text{out}}, k{=}1)$ |
-| `layer_type == "conv2d"` | $\text{Conv2d}(C_{\text{in}}, C_{\text{out}}, k{=}1)$ |
-| `layer_type == "linear"` | $\text{Linear}(C_{\text{in}}, C_{\text{out}},\; \text{bias=False})$ |
+Build the skip projection with the helper that matches the module family:
+`build_linear_skip_layer`, `build_conv1d_skip_layer`, or
+`build_conv2d_skip_layer`. Dense blocks expose `in_features` and `out_features`
+for `build_linear_skip_layer`.
 
 ### Parameters
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `module` | `nn.Module` | required | Module to wrap |
+| `skip_layer` | `nn.Module` | required | Projection or identity skip path |
 | `how` | `"sum" \| "concat"` | `"sum"` | Aggregation method |
-| `layer_type` | `"conv1d" \| "conv2d" \| "linear"` | `"conv1d"` | Projection layer type |
-| `in_channels` | `int \| None` | `None` | Input channels (auto-detected from module) |
-| `out_channels` | `int \| None` | `None` | Output channels (auto-detected from module) |
-| `stride` | `int` | `1` | Stride for projection layer |
-| `bias` | `bool` | `True` | Include bias in projection |
 | `branch_scale` | `float` | `1.0` | Multiplier on the wrapped module's output before aggregation. Set to `1/sqrt(2*num_layers)` (GPT-2 appendix) when stacking many of these to counteract residual variance growth across depth |
 
 ### Example
 
 ```python
-from dlkit.domain.nn.primitives import SkipConnection, DenseBlock
+from dlkit.domain.nn.primitives import DenseBlock, SkipConnection, build_linear_skip_layer
 
 # Wrap a DenseBlock with residual connection
+block = DenseBlock(in_features=128, out_features=128, normalize="layer")
 residual_block = SkipConnection(
-    DenseBlock(128, 128, normalize="layer"),
+    block,
+    build_linear_skip_layer(block),
     how="sum",
-    layer_type="linear",
 )
 
 # Concat mode: output channels = 2 × out_channels (skip ‖ main)
-# DenseBlock(128, 128) → SkipConnection output width is 256
+block = DenseBlock(in_features=128, out_features=128, normalize="layer")
 residual_block = SkipConnection(
-    DenseBlock(128, 128, normalize="layer"),
+    block,
+    build_linear_skip_layer(block),
     how="concat",
-    layer_type="linear",
 )
 ```
 

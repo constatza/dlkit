@@ -45,7 +45,11 @@ class FiLMBlock(IConditionedModule):
         super().__init__()
         activation = resolve_activation(activation)
         self.dense = DenseBlock(
-            in_features, out_features, activation=activation, normalize=normalize, dropout=dropout
+            in_features=in_features,
+            out_features=out_features,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
         )
         self.film = FiLMLayer(condition_dim, out_features)
 
@@ -89,10 +93,18 @@ class FiLMResidualBlock(IConditionedModule):
         super().__init__()
         activation = resolve_activation(activation)
         self.block1 = DenseBlock(
-            feature_dim, feature_dim, activation=activation, normalize=normalize, dropout=dropout
+            in_features=feature_dim,
+            out_features=feature_dim,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
         )
         self.block2 = DenseBlock(
-            feature_dim, feature_dim, activation=activation, normalize=normalize, dropout=dropout
+            in_features=feature_dim,
+            out_features=feature_dim,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
         )
         self.film = FiLMLayer(condition_dim, feature_dim)
 

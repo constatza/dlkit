@@ -118,6 +118,14 @@ def test_public_namespaces_export_hyper_and_moe_factorized_models():
 
 def test_public_namespaces_export_hyper_and_moe_primitives():
     names = (
+        "DenseBlock",
+        "DenseBlockKind",
+        "DenseLinearKind",
+        "DenseMLPBlock",
+        "GatedDenseMLPBlock",
+        "GateActivationName",
+        "ParametricDenseBlock",
+        "make_dense_block",
         "TopKRouter",
         "SparseMoE",
         "RoutingDecision",

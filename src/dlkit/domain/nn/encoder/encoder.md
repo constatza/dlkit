@@ -192,9 +192,9 @@ print(feature_map.shape)  # torch.Size([32, 64, 10])
 ```
 
 **Implementation Notes**:
-- Uses `DenseBlock` to project latent_dim → (channels * timesteps)
+- Uses `DenseBlock(in_features=latent_dim, out_features=channels * timesteps)` to project the latent vector
 - Reshapes using `.view(batch_size, channels, timesteps)`
-- No activation in dense block (identity) - activation handled by decoder
+- Dense projection uses the primitive's no-normalization default; activation is handled by the dense primitive and downstream decoder
 - Learned transformation from compact vector to structured feature map
 
 ---
@@ -235,7 +235,7 @@ latent_t = tensor_to_vector_t(feature_map)  # Shape: (32, 64)
 - Optional transpose: swaps channels and timesteps before pooling
 - `AdaptiveAvgPool1d(1)` reduces temporal dimension to single value
 - Flattens to (batch, channels_in)
-- `DenseBlock` projects to latent_dim with identity activation
+- `DenseBlock(in_features=channels_in, out_features=latent_dim, activation=identity)` projects to latent_dim without internal normalization
 - GELU activation applied before pooling (hardcoded)
 - Handles variable-length sequences via adaptive pooling
 
