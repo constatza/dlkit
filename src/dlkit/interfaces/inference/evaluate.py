@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Literal
 
 from dlkit.common import ConfigurationError, EvaluationResult
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.engine.inference import (
     evaluate_checkpoint,
     load_model_from_settings,
@@ -40,6 +41,7 @@ def evaluate(
     plots: PlotSettings | None = None,
     log_to_mlflow: bool = False,
     run_name: str | None = None,
+    hooks: LifecycleHooks | None = None,
     device: str = "auto",
     batch_size: int = 32,
 ) -> EvaluationResult:
@@ -68,6 +70,12 @@ def evaluate(
             where ``PlotSettings`` defaults to opt-in).
         log_to_mlflow: If True, open an MLflow run and log metrics + figures.
         run_name: Optional MLflow run name (only used when ``log_to_mlflow``).
+        hooks: Optional lifecycle hooks (only used when ``log_to_mlflow``).
+            ``on_run_created`` fires immediately after the run is created,
+            before any metrics/figures are logged — the same extension point
+            ``train()``/``execute()`` use to nest a run under an externally
+            created parent, here with ``kind="evaluate"`` and
+            ``is_outermost=True`` (evaluate never creates nested child runs).
         device: Inference device (``"auto"``, ``"cpu"``, ``"cuda"``, ...).
         batch_size: Dataloader batch size for evaluation.
 
@@ -105,6 +113,15 @@ def evaluate(
         tracker.configure(settings.tracking)
         exp_name = settings.experiment.name if settings.experiment else "dlkit-evaluate"
         with tracker, tracker.create_run(experiment_name=exp_name, run_name=run_name) as run:
+            if hooks is not None and hooks.on_run_created is not None:
+                hooks.on_run_created(
+                    RunCreatedEvent(
+                        run_id=run.run_id,
+                        tracking_uri=tracker.get_tracking_uri(),
+                        kind="evaluate",
+                        is_outermost=True,
+                    )
+                )
             log_evaluation_result(result, run, resolved_plots)
             result = replace(
                 result,

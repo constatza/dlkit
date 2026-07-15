@@ -14,7 +14,9 @@ import matplotlib.pyplot as plt
 import pytest
 
 from dlkit.common import EvaluationResult, TrainingResult
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
+from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.interfaces.api.functions import train as api_train
 from dlkit.interfaces.inference import evaluate as api_evaluate
 
@@ -131,6 +133,50 @@ def test_evaluate_produces_metrics_and_figures_for_a_trained_checkpoint(
             "residual_vs_index",
         }
         assert result.mlflow_run_id is None
+    finally:
+        for fig in result.figures.values():
+            plt.close(fig)
+
+
+def test_evaluate_fires_on_run_created_when_logging_to_mlflow(
+    minimal_dataset: dict[str, Path],
+    trained_checkpoint_path: Path,
+    tmp_path: Path,
+) -> None:
+    """evaluate(log_to_mlflow=True, hooks=...) fires on_run_created atomically
+    at run creation, mirroring TrackingDecorator's train()-time behavior —
+    the extension point neuralls' eval-only workflow needs to nest its child
+    run under a session parent without a post-hoc, close-then-tag patch.
+    """
+    mlruns_dir = tmp_path / "mlruns"
+    mlruns_dir.mkdir(parents=True, exist_ok=True)
+    mlflow_uri = f"sqlite:///{(mlruns_dir / 'mlflow.db').as_posix()}"
+
+    inference_settings = _build_inference_settings(minimal_dataset, trained_checkpoint_path)
+    inference_settings = inference_settings.model_copy(
+        update={"tracking": TrackingSettings(backend="mlflow", uri=mlflow_uri)}
+    )
+
+    recorded: list[RunCreatedEvent] = []
+    hooks = LifecycleHooks(on_run_created=recorded.append)
+
+    result = api_evaluate(
+        inference_settings,
+        log_to_mlflow=True,
+        run_name="eval-run",
+        hooks=hooks,
+    )
+
+    try:
+        assert result.mlflow_run_id is not None
+        assert recorded == [
+            RunCreatedEvent(
+                run_id=result.mlflow_run_id,
+                tracking_uri=result.mlflow_tracking_uri,
+                kind="evaluate",
+                is_outermost=True,
+            )
+        ]
     finally:
         for fig in result.figures.values():
             plt.close(fig)

@@ -13,10 +13,10 @@ from .results import TrainingResult
 # This is a sum type, not a renaming alias.
 type ParamValue = str | int | float | bool
 
-# Which MLflow run a RunCreatedEvent describes. "study"/"train"/"sweep" are the
-# outermost run of a dlkit call when not itself nested inside another active run;
-# "trial"/"best_retrain" are always nested children of a study run.
-RunKind = Literal["study", "trial", "best_retrain", "train", "sweep"]
+# Which MLflow run a RunCreatedEvent describes. "study"/"train"/"sweep"/"evaluate"
+# are the outermost run of a dlkit call when not itself nested inside another
+# active run; "trial"/"best_retrain" are always nested children of a study run.
+RunKind = Literal["study", "trial", "best_retrain", "train", "sweep", "evaluate"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
