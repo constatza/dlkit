@@ -8,6 +8,7 @@ from torch import Tensor, nn
 
 from dlkit.domain.nn.primitives import (
     GraphHyperConnection,
+    GraphHyperSequential,
     HyperConnection,
     HyperSequential,
     LaneExpand,
@@ -15,6 +16,8 @@ from dlkit.domain.nn.primitives import (
     LaneReduce,
     residual_branch_scale,
 )
+
+from .conftest import GraphSkewPairRotation, SkewPairRotation, assert_bounded_variance
 
 
 class ZeroModule(nn.Module):
@@ -37,15 +40,6 @@ class GraphScaleModule(nn.Module):
         self.edge_index_seen = edge_index
         self.edge_attr_seen = edge_attr
         return x * 2.0
-
-
-class SkewPairRotation(nn.Module):
-    """Feature-pair 90-degree rotation with preserved per-feature variance."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        pairs = x.reshape(*x.shape[:-1], x.shape[-1] // 2, 2)
-        rotated = torch.stack((-pairs[..., 1], pairs[..., 0]), dim=-1)
-        return rotated.reshape_as(x)
 
 
 def test_lane_expand_adds_lane_axis_before_features() -> None:
@@ -143,14 +137,10 @@ def test_deep_hyper_sequential_output_std_stays_bounded(num_layers: int) -> None
         num_lanes=1,
         lane_init="identity",
     )
-    stack.eval()
-    with torch.no_grad():
-        x = torch.randn(64, 16)
-        y = stack(x)
-    ratio = y.std().item() / x.std().item()
+    x = torch.randn(64, 16)
 
     assert stack.branch_scale == pytest.approx(1 / math.sqrt(num_layers))
-    assert 0.5 < ratio < 2.0, f"Output std diverged at {num_layers} layers: {ratio:.2f}x"
+    assert_bounded_variance(stack, x)
 
 
 def test_hyper_sequential_unscaled_skew_branch_variance_diverges() -> None:
@@ -165,6 +155,48 @@ def test_hyper_sequential_unscaled_skew_branch_variance_diverges() -> None:
     )
 
     out = stack(x)
+    std_ratio = out.std() / x.std()
+
+    assert std_ratio.item() > 100.0
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_deep_graph_hyper_sequential_output_std_stays_bounded(num_layers: int) -> None:
+    """Output std stays bounded across depth for GraphHyperSequential's default scale.
+
+    Mirrors test_deep_hyper_sequential_output_std_stays_bounded but through the
+    graph-shaped forward contract (edge_index/edge_attr are unused by the branch).
+    """
+    torch.manual_seed(0)
+    stack = GraphHyperSequential(
+        *(GraphSkewPairRotation() for _ in range(num_layers)),
+        num_lanes=1,
+        lane_init="identity",
+    )
+    x = torch.randn(64, 16)
+    edge_index = torch.zeros(2, 1, dtype=torch.long)
+
+    assert stack.branch_scale == pytest.approx(1 / math.sqrt(num_layers))
+    stack.eval()
+    with torch.no_grad():
+        out = stack(x, edge_index)
+    ratio = (out.std() / x.std()).item()
+    assert 0.5 < ratio < 2.0, f"Output std ratio {ratio:.2f} outside [0.5, 2.0]"
+
+
+def test_graph_hyper_sequential_unscaled_skew_branch_variance_diverges() -> None:
+    torch.manual_seed(0)
+    num_layers = 16
+    x = torch.randn(4096, 16)
+    edge_index = torch.zeros(2, 1, dtype=torch.long)
+    stack = GraphHyperSequential(
+        *(GraphSkewPairRotation() for _ in range(num_layers)),
+        num_lanes=1,
+        branch_scale=1.0,
+        lane_init="identity",
+    )
+
+    out = stack(x, edge_index)
     std_ratio = out.std() / x.std()
 
     assert std_ratio.item() > 100.0

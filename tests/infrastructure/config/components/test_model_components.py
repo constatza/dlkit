@@ -233,17 +233,20 @@ class TestModelComponentSettings:
             module_path="dlkit.domain.nn.ffnn",
             hidden_size=8,
             num_layers=2,
+            skip=True,
         )
         plain = ModelComponentSettings(
-            name="EmbeddedSimpleFactorizedFFNN",
+            name="EmbeddedFactorizedFFNN",
             module_path="dlkit.domain.nn.ffnn",
             hidden_size=8,
             num_layers=2,
+            skip=False,
         )
 
         assert getattr(module, str(residual.name)).__name__ == "EmbeddedFactorizedFFNN"
-        assert getattr(module, str(plain.name)).__name__ == "EmbeddedSimpleFactorizedFFNN"
-        assert residual.name != plain.name
+        assert getattr(module, str(plain.name)).__name__ == "EmbeddedFactorizedFFNN"
+        assert residual.get_init_kwargs()["skip"] is True
+        assert plain.get_init_kwargs()["skip"] is False
 
     @given(st.integers(min_value=1, max_value=16), st.integers(min_value=1, max_value=10))
     def test_model_property_hyperparameter_values(self, heads: int, layers: int) -> None:

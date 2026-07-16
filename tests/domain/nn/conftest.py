@@ -9,8 +9,21 @@ All fixtures use minimal/lightweight dimensions:
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import pytest
 import torch
+
+
+class VarianceBand(NamedTuple):
+    """Inclusive-open bounds an output/input std ratio must fall within.
+
+    Shared type only — each concrete band lives next to the one test file
+    that measures it, since none of them are actually reused across files.
+    """
+
+    low: float
+    high: float
 
 
 @pytest.fixture

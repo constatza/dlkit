@@ -18,6 +18,7 @@ from dlkit.domain.nn.primitives.conditioning import (
     FiLMLayer,
     IConditionedModule,
 )
+from dlkit.domain.nn.primitives.stacks import residual_branch_scale
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -58,6 +59,15 @@ class _ConditionSensitive(IConditionedModule):
 
     def forward(self, x: Tensor, condition: Tensor) -> Tensor:
         return x + condition.mean(dim=-1, keepdim=True)
+
+
+class _ConditionedSkewPairRotation(IConditionedModule):
+    """Feature-pair 90-degree rotation with preserved per-feature variance; condition unused."""
+
+    def forward(self, x: Tensor, condition: Tensor) -> Tensor:
+        pairs = x.reshape(*x.shape[:-1], x.shape[-1] // 2, 2)
+        rotated = torch.stack((-pairs[..., 1], pairs[..., 0]), dim=-1)
+        return rotated.reshape_as(x)
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────
@@ -475,6 +485,69 @@ def test_conditioned_residual_with_explicit_shortcut(
         expected = conditioned_body_output + shortcut_linear(feature_input)
         actual = conditioned_residual_with_shortcut(feature_input, condition_input)
     assert torch.allclose(actual, expected)
+
+
+def test_conditioned_residual_branch_scale_multiplies_body(
+    double_block: _DoubleBlock,
+    passthrough_block: _PassthroughBlock,
+    feature_input: Tensor,
+    condition_input: Tensor,
+) -> None:
+    unscaled = ConditionedResidualSequential(double_block, passthrough_block)
+    scaled = ConditionedResidualSequential(double_block, passthrough_block, branch_scale=0.5)
+
+    with torch.no_grad():
+        unscaled_out = unscaled(feature_input, condition_input)
+        scaled_out = scaled(feature_input, condition_input)
+
+    torch.testing.assert_close(scaled_out - feature_input, 0.5 * (unscaled_out - feature_input))
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_deep_conditioned_residual_sequential_scaled_stack_stays_bounded(
+    num_layers: int,
+) -> None:
+    """Output std stays bounded across depth when each block scales its own skip.
+
+    Mirrors test_deep_manual_residual_sequential_scaled_stack_stays_bounded
+    (test_skip.py) for the conditioned counterpart.
+    """
+    torch.manual_seed(0)
+    x = torch.randn(4096, FEATURE_DIM)
+    condition = torch.randn(4096, CONDITION_DIM)
+    layers = [
+        ConditionedResidualSequential(
+            _ConditionedSkewPairRotation(),
+            branch_scale=residual_branch_scale(num_layers),
+        )
+        for _ in range(num_layers)
+    ]
+
+    out = x
+    with torch.no_grad():
+        for layer in layers:
+            out = layer(out, condition)
+    ratio = (out.std() / x.std()).item()
+
+    assert 0.5 < ratio < 2.0, f"Output std ratio {ratio:.2f} outside [0.5, 2.0]"
+
+
+def test_conditioned_residual_sequential_unscaled_stack_diverges() -> None:
+    torch.manual_seed(0)
+    num_layers = 16
+    x = torch.randn(4096, FEATURE_DIM)
+    condition = torch.randn(4096, CONDITION_DIM)
+    layers = [
+        ConditionedResidualSequential(_ConditionedSkewPairRotation()) for _ in range(num_layers)
+    ]
+
+    out = x
+    with torch.no_grad():
+        for layer in layers:
+            out = layer(out, condition)
+    std_ratio = out.std() / x.std()
+
+    assert std_ratio.item() > 2.0
 
 
 def test_conditioned_residual_shortcut_none_uses_identity(

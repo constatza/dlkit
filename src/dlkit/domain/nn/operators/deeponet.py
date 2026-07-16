@@ -14,7 +14,7 @@ from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
 from dlkit.domain.nn.contracts import StandardEntryConsumer
-from dlkit.domain.nn.ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
+from dlkit.domain.nn.ffnn.residual import FFNN, VarWidthFFNN
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
 
@@ -330,7 +330,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
     ) -> None:
         resolved = resolve_activation(activation)
         latent_dim = basis_dim * out_features
-        branch_net = EmbeddedFFNN(
+        branch_net = FFNN(
             in_features=branch_in_features,
             out_features=latent_dim,
             hidden_size=branch_hidden_size,
@@ -340,7 +340,7 @@ class EmbeddedDeepONet(_FlatBranchDeepONet):
             dropout=dropout,
             bias=bias,
         )
-        trunk_net = EmbeddedFFNN(
+        trunk_net = FFNN(
             in_features=trunk_dim,
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,

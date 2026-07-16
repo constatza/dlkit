@@ -25,6 +25,8 @@ from dlkit.domain.nn.ffnn import (
     VarWidthFiLMFFNN,
 )
 
+from ..conftest import VarianceBand
+
 # ── Constants ──────────────────────────────────────────────────────────────────
 
 BATCH = 5
@@ -36,6 +38,9 @@ NUM_LAYERS = 2
 LAYERS_NARROW = [32, 16, 8]
 SEED = 99
 EQUIVARIANCE_ATOL = 1e-4
+
+#: FiLMEmbeddedFFNN body, measured ~4.37-4.91 at depths 8-64.
+STD_RATIO_BAND = VarianceBand(4.0, 5.5)
 
 ShapeMapping = dict[str, tuple[int, ...]]
 
@@ -562,6 +567,30 @@ def test_film_embedded_ffnn_zero_layers_raises(
     """FiLMEmbeddedFFNN with num_layers=0 raises ValueError."""
     with pytest.raises(ValueError):
         film_embedded_ffnn_zero_layers_factory()
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_film_embedded_ffnn_deep_output_std_stays_bounded(num_layers: int) -> None:
+    torch.manual_seed(0)
+    model = FiLMEmbeddedFFNN(
+        in_features=8,
+        out_features=8,
+        condition_dim=6,
+        hidden_size=8,
+        num_layers=num_layers,
+        normalize=None,
+    )
+    model.eval()
+
+    with torch.no_grad():
+        x = torch.randn(256, 8)
+        condition = torch.randn(256, 6)
+        y = model(x, condition)
+
+    ratio = y.std().item() / x.std().item()
+    assert STD_RATIO_BAND.low < ratio < STD_RATIO_BAND.high, (
+        f"Output std diverged at {num_layers} layers: {ratio:.2f}x"
+    )
 
 
 # ── ScaleEquivariantFiLMFFNN tests ─────────────────────────────────────────────

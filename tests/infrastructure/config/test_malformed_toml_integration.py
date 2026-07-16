@@ -131,7 +131,7 @@ type = "train"
 name = "section_only"
 
 [model]
-class = "ConstantWidthFFNN"
+class = "FFNN"
 module_path = "dlkit.domain.nn"
 
 [data]

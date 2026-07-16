@@ -30,7 +30,7 @@ def minimal_run() -> dict:
 @pytest.fixture
 def minimal_model() -> dict:
     """Minimal model settings dict."""
-    return {"class": "ConstantWidthFFNN", "module_path": "dlkit.domain.nn"}
+    return {"class": "FFNN", "module_path": "dlkit.domain.nn"}
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ def test_run_settings_seed_default_none() -> None:
 
 def test_model_settings_alias(minimal_model: dict) -> None:
     m = ModelComponentSettings.model_validate(minimal_model)
-    assert m.name == "ConstantWidthFFNN"
+    assert m.name == "FFNN"
 
 
 def test_model_hyperparams_live_directly_under_model() -> None:
@@ -152,7 +152,7 @@ def test_inference_job_config_accepts_no_data(minimal_run: dict, minimal_model: 
             "model": {**minimal_model, "checkpoint": "/tmp/model.ckpt"},
         }
     )
-    assert cfg.model.name == "ConstantWidthFFNN"
+    assert cfg.model.name == "FFNN"
     assert cfg.data is None
 
 

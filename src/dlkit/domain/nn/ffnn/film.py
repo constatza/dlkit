@@ -14,6 +14,7 @@ from dlkit.domain.nn.primitives.conditioning import (
     IConditionedModule,
 )
 from dlkit.domain.nn.primitives.dense import DenseBlock
+from dlkit.domain.nn.primitives.stacks import residual_branch_scale
 from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import resolve_activation
 
@@ -69,7 +70,7 @@ class FiLMBlock(IConditionedModule):
 class FiLMResidualBlock(IConditionedModule):
     """Two dense blocks + FiLM modulation + residual skip.
 
-    Op chain: ``[Norm→Act→Lin→Drop] × 2 → FiLM((1+γ)·h+β) → h + x``
+    Op chain: ``[Norm→Act→Lin→Drop] × 2 → FiLM((1+γ)·h+β) → branch_scale * h + x``
 
     Square-only: ``in_features == out_features``. Skip is identity.
 
@@ -79,6 +80,11 @@ class FiLMResidualBlock(IConditionedModule):
         activation (ActivationName | Callable | None): Activation name or callable.
         normalize (NormalizerName | None): Norm layer name or None.
         dropout (float): Dropout rate.
+        branch_scale (float): Multiplier applied to the FiLM-modulated branch
+            before adding the identity skip. Left at ``1.0`` (no compensation)
+            by default; callers stacking many of these blocks should pass
+            ``residual_branch_scale(num_blocks)`` to counteract residual
+            variance growth — see :class:`dlkit.domain.nn.primitives.skip.SkipConnection`.
     """
 
     def __init__(
@@ -89,6 +95,7 @@ class FiLMResidualBlock(IConditionedModule):
         activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
         normalize: NormalizerName | None = None,
         dropout: float = 0.0,
+        branch_scale: float = 1.0,
     ) -> None:
         super().__init__()
         activation = resolve_activation(activation)
@@ -107,6 +114,7 @@ class FiLMResidualBlock(IConditionedModule):
             dropout=dropout,
         )
         self.film = FiLMLayer(condition_dim, feature_dim)
+        self.branch_scale = branch_scale
 
     def forward(self, x: Tensor, condition: Tensor) -> Tensor:
         """Apply two dense blocks, FiLM modulation, and residual addition.
@@ -119,7 +127,7 @@ class FiLMResidualBlock(IConditionedModule):
             Tensor: Output with residual skip, shape ``(..., feature_dim)``.
         """
         h = self.block2(self.block1(x))
-        return x + self.film(h, condition)
+        return x + self.branch_scale * self.film(h, condition)
 
 
 class VarWidthFiLMFFNN(StandardEntryConsumer, nn.Module):
@@ -208,8 +216,10 @@ class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
     Op chain:
         ``Lin(in→H) → ConditionedResidualSequential(FiLMResidualBlock×N) + E2E skip → Lin(H→out)``
 
-    Nested residuals: per-block skip inside each FiLMResidualBlock
-    plus an end-to-end skip across the whole body.
+    Nested residuals: each FiLMResidualBlock scales its own skip by
+    ``residual_branch_scale(num_layers)`` (variance-accumulation compensation
+    for N stacked branches), plus an identity end-to-end skip across the
+    whole body.
 
     Args:
         in_features (int): Input dimension.
@@ -242,6 +252,7 @@ class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
             raise ValueError("num_layers must be >= 1.")
         self.embed = nn.Linear(in_features, hidden_size)
         initialize_(self.embed, activation)
+        branch_scale = residual_branch_scale(num_layers)
         self.body: ConditionedResidualSequential = ConditionedResidualSequential(
             *[
                 FiLMResidualBlock(
@@ -250,9 +261,10 @@ class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
                     activation=activation,
                     normalize=normalize,
                     dropout=dropout,
+                    branch_scale=branch_scale,
                 )
                 for _ in range(num_layers)
-            ]
+            ],
         )
         self.head = nn.Linear(hidden_size, out_features)
         initialize_(self.head, activation)

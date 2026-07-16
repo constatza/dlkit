@@ -41,7 +41,7 @@ Available topology selector values for `make_dense_block(kind, ...)`:
 | `"glu"` | `GatedDenseMLPBlock` | `value(x) * sigmoid(gate(x)) -> Linear` | GLU-style gated FFN |
 | `"geglu"` | `GatedDenseMLPBlock` | `value(x) * GELU(gate(x)) -> Linear` | GEGLU-style gated FFN |
 | `"swiglu"` | `GatedDenseMLPBlock` | `value(x) * SiLU(gate(x)) -> Linear` | SwiGLU-style gated FFN |
-| `"parametric"` | `ParametricDenseBlock` | `Norm -> activation -> layer_factory(out_features) -> Dropout` | For arbitrary injected kernels |
+| `"parametric"` | `ParametricDenseBlock` | `Norm -> activation -> layer_factory(out_features) -> Dropout` | For injected kernels; defaults from `linear_kind` when `layer_factory` is omitted |
 
 `linear_kind` selects the dense kernel used by built-in topologies:
 
@@ -52,6 +52,8 @@ Available topology selector values for `make_dense_block(kind, ...)`:
 
 For example, `block_kind="swiglu", linear_kind="factorized"` builds a SwiGLU
 FFN with factorized value, gate, and output projections.
+Use `resolve_linear_factory(linear_kind, ...)` when a caller needs the same
+projection factory outside `make_dense_block`.
 
 `DenseMLPBlock`, `GatedDenseMLPBlock`, and `ParametricDenseBlock` default to
 `normalize=None`. This follows Transformer/MoE practice: the FFN expert/block
@@ -136,7 +138,7 @@ for `build_linear_skip_layer`.
 | `module` | `nn.Module` | required | Module to wrap |
 | `skip_layer` | `nn.Module` | required | Projection or identity skip path |
 | `how` | `"sum" \| "concat"` | `"sum"` | Aggregation method |
-| `branch_scale` | `float` | `1.0` | Multiplier on the wrapped module's output before aggregation. Set to `1/sqrt(2*num_layers)` (GPT-2 appendix) when stacking many of these to counteract residual variance growth across depth |
+| `branch_scale` | `float` | `1.0` | Multiplier on the wrapped module's output before aggregation. Set to `1/sqrt(num_layers)` for one-branch residual stacks to counteract residual variance growth across depth |
 
 ### Example
 
@@ -218,7 +220,9 @@ out, stats = moe(x, return_stats=True)
 ```
 
 Shared experts can be supplied with `shared_experts=[...]`; they run for every
-token and are added to the routed expert mixture.
+token and are added to the routed expert mixture. `shared_expert_scale`
+controls their contribution. When omitted, it defaults to
+`1 / sqrt(1 + len(shared_experts))`.
 
 ---
 

@@ -20,7 +20,13 @@ from dlkit.domain.nn.ffnn.linear import (
     LinearNetwork,
 )
 from dlkit.domain.nn.ffnn.residual import FFNN, VarWidthFFNN
+from dlkit.domain.nn.primitives import residual_branch_scale
 from dlkit.domain.nn.primitives.parametrized_layers import FactorizedLinear
+
+from .conftest import VarianceBand
+
+#: FFNN's DenseBlock+SkipConnection body, measured ~2.36-2.97 at depths 8-64.
+STD_RATIO_BAND = VarianceBand(2.0, 3.5)
 
 
 @pytest.fixture
@@ -113,6 +119,17 @@ class TestVarWidthFFNN:
         m.eval()
         assert m(dense_input).shape == (dense_input.shape[0], 2)
 
+    def test_project_false_uses_identity_projections(self, dense_input: torch.Tensor) -> None:
+        m = VarWidthFFNN(in_features=2, out_features=2, layers=[2, 2], project=False)
+
+        assert isinstance(m.embedding_layer, nn.Identity)
+        assert isinstance(m.regression_layer, nn.Identity)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+
+    def test_project_false_rejects_body_incompatible_shapes(self) -> None:
+        with pytest.raises(ValueError, match="project=False"):
+            VarWidthFFNN(in_features=2, out_features=2, layers=[4, 4], project=False)
+
     def test_has_parameters(self, ffnn: VarWidthFFNN) -> None:
         """FFNN should have trainable parameters."""
         assert len(list(ffnn.parameters())) > 0
@@ -195,6 +212,13 @@ class TestFFNN:
         assert m(dense_input).shape == (dense_input.shape[0], 2)
         assert len(m.layers) == 0
 
+    def test_project_false_uses_identity_projections(self, dense_input: torch.Tensor) -> None:
+        m = FFNN(in_features=2, out_features=2, hidden_size=2, num_layers=2, project=False)
+
+        assert isinstance(m.embedding_layer, nn.Identity)
+        assert isinstance(m.regression_layer, nn.Identity)
+        assert m(dense_input).shape == (dense_input.shape[0], 2)
+
     def test_single_hidden_layer(self, dense_input: torch.Tensor) -> None:
         """FFNN with one hidden transition should work."""
         m = FFNN(in_features=2, out_features=2, hidden_size=4, num_layers=1)
@@ -218,10 +242,8 @@ class TestFFNN:
     def test_deep_output_std_stays_bounded(self, num_layers: int) -> None:
         """Output std stays within a bounded band of input std at every depth.
 
-        FFNN's DenseBlock+SkipConnection body is a separate residual-stacking
-        primitive from constrained.py's _ConstantWidthParametricBody, and gets
-        its own branch_scale=1/sqrt(2*num_layers) (GPT-2 appendix) wiring —
-        this regression-tests that wiring directly, independent of that body.
+        FFNN's DenseBlock+SkipConnection body uses one residual branch per
+        layer, so its scale is 1/sqrt(num_layers).
         """
         torch.manual_seed(0)
         model = FFNN(in_features=8, out_features=8, hidden_size=8, num_layers=num_layers)
@@ -230,7 +252,10 @@ class TestFFNN:
             x = torch.randn(64, 8)
             y = model(x)
         ratio = y.std().item() / x.std().item()
-        assert 0.2 < ratio < 3.0, f"Output std diverged at {num_layers} layers: {ratio:.2f}x"
+        assert model.layers[0].branch_scale == pytest.approx(residual_branch_scale(num_layers))
+        assert STD_RATIO_BAND.low < ratio < STD_RATIO_BAND.high, (
+            f"Output std diverged at {num_layers} layers: {ratio:.2f}x"
+        )
 
 
 class TestLinearNetwork:

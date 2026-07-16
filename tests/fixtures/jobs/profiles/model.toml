@@ -1,5 +1,5 @@
 [model]
-class = "ConstantWidthFFNN"
+class = "FFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 2

@@ -4,20 +4,10 @@ from .contracts import (
     InputSpec,
 )
 from .ffnn import (
-    ConstantWidthFactorizedFFNN,
-    ConstantWidthHyper,
-    ConstantWidthHyperFactorized,
-    ConstantWidthMoE,
-    ConstantWidthMoEFactorized,
-    ConstantWidthSimpleFactorizedFFNN,
     EmbeddedFactorizedFFNN,
-    EmbeddedHyper,
-    EmbeddedHyperFactorized,
-    EmbeddedMoE,
-    EmbeddedMoEFactorized,
-    EmbeddedParametricFFNN,
-    EmbeddedSimpleFactorizedFFNN,
-    EmbeddedSimpleParametricFFNN,
+    EmbeddedHyperFFNN,
+    EmbeddedMoEFFNN,
+    FactorizedFFNN,
 )
 from .ffnn.film import FiLMBlock, FiLMEmbeddedFFNN, FiLMFFNN, FiLMResidualBlock, VarWidthFiLMFFNN
 from .ffnn.gated import GatedMLP
@@ -25,12 +15,9 @@ from .ffnn.linear import (
     FactorizedLinearNetwork,
     LinearNetwork,
 )
-from .ffnn.residual import FFNN, EmbeddedFFNN, VarWidthFFNN
+from .ffnn.residual import FFNN, VarWidthFFNN
 from .ffnn.scale_equivariant import (
-    ScaleEquivariantConstantWidthFactorizedFFNN,
-    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
-    ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantFFNN,
     ScaleEquivariantFiLMEmbeddedFFNN,
     ScaleEquivariantFiLMFFNN,
@@ -103,7 +90,6 @@ __all__ = [
     "VarWidthFFNN",
     # Constant-width
     "FFNN",
-    "EmbeddedFFNN",
     # FiLM-conditioned
     "FiLMBlock",
     "FiLMEmbeddedFFNN",
@@ -132,27 +118,14 @@ __all__ = [
     "GateActivationName",
     "make_dense_block",
     "ParametricDenseBlock",
-    "EmbeddedParametricFFNN",
-    "EmbeddedSimpleParametricFFNN",
-    "ConstantWidthFactorizedFFNN",
-    "ConstantWidthSimpleFactorizedFFNN",
-    # Embedded Factorized variants (FactorizedLinear embedding, body, and regression)
+    # Factorized variants
+    "FactorizedFFNN",
     "EmbeddedFactorizedFFNN",
-    "EmbeddedSimpleFactorizedFFNN",
     # Hyper/MoE variants
-    "ConstantWidthHyper",
-    "ConstantWidthHyperFactorized",
-    "EmbeddedHyper",
-    "EmbeddedHyperFactorized",
-    "ConstantWidthMoE",
-    "ConstantWidthMoEFactorized",
-    "EmbeddedMoE",
-    "EmbeddedMoEFactorized",
+    "EmbeddedHyperFFNN",
+    "EmbeddedMoEFFNN",
     # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
-    "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
-    "ScaleEquivariantConstantWidthFactorizedFFNN",
-    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",

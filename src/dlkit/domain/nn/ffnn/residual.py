@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Sequence
 from typing import Literal
 
@@ -15,6 +14,7 @@ from dlkit.domain.nn.primitives import (
     SkipConnection,
     build_linear_skip_layer,
     make_dense_block,
+    residual_branch_scale,
 )
 from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
@@ -78,6 +78,8 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         ``skip=True`` wraps each hidden transition after the embedding layer in
         a residual skip path; ``skip=False`` keeps the same widths but removes
         the skip connection.
+        ``project=False`` treats the class as a body-only stack and requires
+        the declared input/output dimensions to match the first/last body widths.
 
     Args:
         in_features: Input dimension.
@@ -89,6 +91,8 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         bias: Whether linear layers include a bias term.
         skip: If ``True`` (default) each hidden transition is wrapped in a
             ``SkipConnection``; set to ``False`` for a plain dense network.
+        project: If ``True`` (default), use embedding and regression projections.
+            If ``False``, skip projections and require body-compatible dimensions.
     """
 
     class InputSpec(_InputSpec):
@@ -105,6 +109,7 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         dropout: float = 0.0,
         bias: bool = True,
         skip: bool = True,
+        project: bool = True,
         block_kind: DenseBlockKind = "dense",
         linear_kind: DenseLinearKind = "linear",
         block_factory: DenseBlockFactory | None = None,
@@ -113,6 +118,12 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
         if not layers:
             raise ValueError("layers must contain at least one hidden width")
         widths = list(layers)
+        if not project and (in_features != widths[0] or out_features != widths[-1]):
+            raise ValueError(
+                "project=False requires in_features == layers[0] and "
+                f"out_features == layers[-1] (got {in_features}, {out_features}, "
+                f"{widths[0]}, {widths[-1]})."
+            )
         self.num_layers = len(widths) - 1
         self.activation = resolve_activation(activation)
         self.hyperparameters: dict[str, HyperParam] = {
@@ -122,16 +133,18 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
             "dropout": dropout,
             "bias": bias,
             "skip": skip,
+            "project": project,
             "block_kind": block_kind if block_factory is None else "custom",
             "linear_kind": linear_kind if block_factory is None else "custom",
         }
-        # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
-        # 1/sqrt(2*num_layers) to counteract geometric variance growth across depth.
-        branch_scale = 1.0 / math.sqrt(2 * self.num_layers) if self.num_layers > 0 else 1.0
+        branch_scale = residual_branch_scale(self.num_layers)
 
         self.layers = nn.ModuleList()
-        self.embedding_layer = nn.Linear(in_features, widths[0], bias=bias)
-        initialize_(self.embedding_layer, activation)
+        self.embedding_layer = (
+            nn.Linear(in_features, widths[0], bias=bias) if project else nn.Identity()
+        )
+        if project:
+            initialize_(self.embedding_layer, activation)
 
         for i in range(len(widths) - 1):
             block = _make_hidden_block(
@@ -154,8 +167,11 @@ class VarWidthFFNN(StandardEntryConsumer, nn.Module):
             )
             self.layers.append(layer)
 
-        self.regression_layer = nn.Linear(widths[-1], out_features, bias=bias)
-        initialize_(self.regression_layer, activation)
+        self.regression_layer = (
+            nn.Linear(widths[-1], out_features, bias=bias) if project else nn.Identity()
+        )
+        if project:
+            initialize_(self.regression_layer, activation)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.embedding_layer(x)
@@ -216,6 +232,7 @@ class FFNN(VarWidthFFNN):
         dropout: float = 0.0,
         bias: bool = True,
         skip: bool = True,
+        project: bool = True,
         block_kind: DenseBlockKind = "dense",
         linear_kind: DenseLinearKind = "linear",
         block_factory: DenseBlockFactory | None = None,
@@ -231,106 +248,8 @@ class FFNN(VarWidthFFNN):
             dropout=dropout,
             bias=bias,
             skip=skip,
+            project=project,
             block_kind=block_kind,
             linear_kind=linear_kind,
             block_factory=block_factory,
         )
-
-
-class EmbeddedFFNN(StandardEntryConsumer, nn.Module):
-    """Embedded constant-width residual feed-forward network.
-
-    Architecture:
-        ``Linear(in_features -> hidden_size)``
-        -> residual constant-width body
-        -> ``Linear(hidden_size -> out_features)``
-
-    Shape diagram:
-        ``(B, in_features)``
-        -> input embedding to ``(B, hidden_size)``
-        -> ``num_layers`` residual hidden stages at width ``hidden_size``
-        -> output projection to ``(B, out_features)``
-
-    Parameter intuition:
-        ``hidden_size`` controls the embedded latent width after the first
-        projection and throughout the residual body.
-        ``num_layers`` controls the depth of that fixed-width residual body.
-
-    Args:
-        in_features: Input dimension.
-        out_features: Output dimension.
-        hidden_size: Width of the hidden body. Always required — no default.
-        num_layers: Number of constant-width hidden stages.
-        activation: Element-wise activation between hidden layers. Defaults
-            to GELU when omitted.
-        normalize: Optional normalisation (``"batch"`` or ``"layer"``).
-        dropout: Dropout probability between hidden layers.
-        bias: Whether linear layers include a bias term.
-    """
-
-    class InputSpec(_InputSpec):
-        pass
-
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        hidden_size: int,
-        num_layers: int,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = "layer",
-        dropout: float = 0.0,
-        bias: bool = True,
-        block_kind: DenseBlockKind = "dense",
-        linear_kind: DenseLinearKind = "linear",
-        block_factory: DenseBlockFactory | None = None,
-    ) -> None:
-        super().__init__()
-        if num_layers <= 0:
-            raise ValueError("num_layers must be a positive integer")
-
-        resolved_activation = resolve_activation(activation, default="gelu")
-        self.hyperparameters: dict[str, HyperParam] = {
-            "num_layers": num_layers,
-            "activation": resolved_activation_name(activation, default="gelu"),
-            "normalize": normalize,
-            "dropout": dropout,
-            "bias": bias,
-            "block_kind": block_kind if block_factory is None else "custom",
-            "linear_kind": linear_kind if block_factory is None else "custom",
-        }
-        hidden = hidden_size
-        # GPT-2 appendix (Radford et al. 2019): scale each residual branch by
-        # 1/sqrt(2*num_layers) to counteract geometric variance growth across depth.
-        branch_scale = 1.0 / math.sqrt(2 * num_layers)
-        self.embedding_layer = nn.Linear(in_features, hidden, bias=bias)
-        initialize_(self.embedding_layer, resolved_activation)
-        self.layers = nn.ModuleList()
-
-        for _ in range(num_layers):
-            block = _make_hidden_block(
-                in_features=hidden,
-                out_features=hidden,
-                activation=resolved_activation,
-                normalize=normalize,
-                dropout=dropout,
-                bias=bias,
-                block_kind=block_kind,
-                linear_kind=linear_kind,
-                block_factory=block_factory,
-            )
-            self.layers.append(
-                SkipConnection(
-                    block, build_linear_skip_layer(block, bias=bias), branch_scale=branch_scale
-                )
-            )
-
-        self.regression_layer = nn.Linear(hidden, out_features, bias=bias)
-        initialize_(self.regression_layer, resolved_activation)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.embedding_layer(x)
-        for layer in self.layers:
-            x = layer(x)
-        return self.regression_layer(x)

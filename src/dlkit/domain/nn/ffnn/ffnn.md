@@ -5,22 +5,20 @@ The package distinguishes:
 - residual vs plain
 - dense vs factorized linear bodies
 - standard vs scale-equivariant wrappers
-- embedded vs non-embedded structured variants
+- projected vs body-only structured variants
 
-The plain-`nn.Linear` embedding/regression layers in `residual.py`, `film.py`,
-and `constrained.py` initialize their weights via `domain.nn.init.initialize_`,
-matched to the network's `activation` — see `nn.md`. Public factorized
-composites resolve `FactorizedLinear` base-weight gain from the same activation
-through `primitives.factorized_init`.
+The plain-`nn.Linear` embedding/regression layers in `residual.py` and
+`film.py` initialize their weights via `domain.nn.init.initialize_`, matched to
+the network's `activation` — see `nn.md`.
 
 ## Module layout
 
 | File | Purpose |
 |---|---|
 | `linear.py` | Linear baselines: `LinearNetwork` and single-layer parametrized variants |
-| `simple.py` | Plain dense FFNNs without skip connections |
-| `residual.py` | Residual dense FFNNs with skip connections |
-| `constrained.py` | Constrained linear FFNN builders and explicit plain/residual variants |
+| `residual.py` | Dense FFNNs with `skip` and `project` selectors |
+| `constrained.py` | Factorized FFNNs with `skip` and `project` selectors |
+| `hyper_moe.py` | Hyper-Connection and sparse-MoE FFNN composites |
 | `scale_equivariant.py` | Class-based scale-equivariant wrappers for dense and constrained FFNNs |
 | `gated.py` | Pluggable-gate feed-forward network (`GatedMLP`) |
 | `film.py` | FiLM-conditioned FFNNs: `FiLMBlock`, `FiLMResidualBlock`, `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN` |
@@ -42,7 +40,7 @@ All classes are keyword-only, expose `in_features` and `out_features`, and imple
 |---|---|---|---|
 | Variable-width | `VarWidthFFNN(skip=False)` | `VarWidthFFNN` | — |
 | Constant-width | `FFNN(skip=False)` | `FFNN` | `ScaleEquivariantFFNN` |
-| Embedded constant-width | — | `EmbeddedFFNN` | — |
+| Body-only constant-width | `FFNN(skip=False, project=False)` | `FFNN(project=False)` | — |
 
 ### Constrained — Factorized layer types
 
@@ -55,22 +53,18 @@ Each factorized layer uses an explicit positive row scale on top of a base
 weight matrix. In `FactorizedLinear`, the effective weight is
 `exp(log_scale).unsqueeze(1) * base_weight`, matching the paper-style random
 weight factorization `diag(exp(s)) @ V`. Public factorized architecture
-constructors do not expose `mean`, `std`, or `kaiming_a`; they resolve that
-policy from the selected activation.
+constructors expose `mean` and `std` for the factorized log-scale
+initialisation while keeping `kaiming_a` internal.
 
 Public factorized model rules:
-- **Constant-width (square)**: `[FactorizedLinear(n→n) × num_layers]`; no
-  embedding or regression projection; requires `in_features == out_features`.
-- **Embedded factorized (rectangular-safe)**:
-  `FactorizedLinear(in→h)` → `[FactorizedLinear(h→h) × num_layers]` →
-  `FactorizedLinear(h→out)`; no plain `nn.Linear` projections.
-- **Hyper/MoE composites**: follow the same square or embedded rule. MoE
-  routers own their gating projection. MoE experts are shape-preserving
-  `ParametricDenseBlock` FFN sublayers, not complete embedded FFNN models.
-  Linear MoE variants use `ParametricDenseBlock` with `nn.Linear`; factorized
-  variants substitute `FactorizedLinear` kernels in the same FFN sublayer shape.
-  Model embedding/readout projections follow the model name: factorized for
-  `Factorized` model names and ordinary `nn.Linear` otherwise.
+- `FactorizedFFNN(skip=True)` keeps the non-embedded first-block → body → head
+  shape; `skip=False` removes residual connections from the body.
+- `EmbeddedFactorizedFFNN(project=True)` uses factorized input/output
+  projections around a constant-width body; `project=False` removes those
+  projections and requires `in_features == out_features == hidden_size`.
+- Hyper/MoE composites use `EmbeddedHyperFFNN` and `EmbeddedMoEFFNN`.
+  `linear_kind="linear" | "factorized"` selects kernels, and `project=False`
+  selects the body-only square form.
 
 This matches Shazeer-style sparsely gated MoE, GShard, and Switch Transformer
 semantics: top-k routers select FFN experts, and Transformer-style residual
@@ -79,23 +73,18 @@ full embedded FFNN.
 
 | Variant | Plain | Residual/stacked | Notes |
 |---|---|---|---|
-| **Embedded factorized exp (rectangular)** | `EmbeddedSimpleFactorizedFFNN` | `EmbeddedFactorizedFFNN` | factorized embedding, body, and head |
-| **Constant-width exp (square)** | `ConstantWidthSimpleFactorizedFFNN` | `ConstantWidthFactorizedFFNN` | pure square factorized body; `in==out` |
-| **Hyper factorized (square)** | — | `ConstantWidthHyperFactorized` | Hyper-Connection stack over factorized blocks |
-| **Hyper embedded factorized** | — | `EmbeddedHyperFactorized` | factorized embedding, Hyper body, factorized head |
-| **MoE factorized (square)** | — | `ConstantWidthMoEFactorized` | residual sparse MoE stack with factorized FFN sublayer experts |
-| **MoE embedded factorized** | — | `EmbeddedMoEFactorized` | factorized embedding, residual MoE body, factorized head |
-| **Hyper linear (square)** | — | `ConstantWidthHyper` | Hyper-Connection stack over `nn.Linear` blocks |
-| **Hyper embedded linear** | — | `EmbeddedHyper` | `nn.Linear` embedding, Hyper body, and head |
-| **MoE linear (square)** | — | `ConstantWidthMoE` | residual sparse MoE stack with `nn.Linear` FFN sublayer experts |
-| **MoE embedded linear** | — | `EmbeddedMoE` | `nn.Linear` embedding, residual MoE body, and head |
+| **Factorized non-embedded** | `FactorizedFFNN(skip=False)` | `FactorizedFFNN` | first block bridges to hidden width |
+| **Factorized projected/body-only** | `EmbeddedFactorizedFFNN(skip=False, project=...)` | `EmbeddedFactorizedFFNN(project=...)` | `project=False` is square body-only |
+| **Hyper linear/factorized** | — | `EmbeddedHyperFFNN(linear_kind=...)` | `project=False` is square body-only |
+| **MoE linear/factorized** | — | `EmbeddedMoEFFNN(linear_kind=...)` | `project=False` is square body-only |
 
-Scale-equivariant public wrappers are kept for the pure factorized
-families:
-- Embedded factorized exp: `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
-- Square exp: `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
+Scale-equivariant public wrappers are kept for dense FFNNs, FiLM FFNNs, and
+the projected/body-only factorized surface:
+`ScaleEquivariantEmbeddedFactorizedFFNN(skip=..., project=...)`.
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
+> They also accept `project: bool = True`; pass `project=False` for a body-only
+> stack when `in_features`/`out_features` already match the body widths.
 > Their hidden transition block is selected by `block_kind: DenseBlockKind`.
 > The default `"dense"` keeps the single-projection dense branch; `"mlp"`,
 > `"glu"`, `"geglu"`, and `"swiglu"` select bibliography-style FFN/gated FFN
@@ -119,50 +108,24 @@ FFNN
   -> constant-width hidden transitions repeated by num_layers
   -> (B, out_features)
 
-EmbeddedFFNN
-  (B, in_features)
-  -> input embedding to hidden_size
-  -> fixed-width residual body repeated by num_layers
-  -> output projection to (B, out_features)
+FFNN(project=False)
+  (B, hidden_size)
+  -> constant-width hidden transitions repeated by num_layers
+  -> (B, hidden_size)
 ```
 
 ## Low-level constrained builders
 
 `constrained.py` also keeps reusable builder-oriented classes:
 - `ParametricDenseBlock` — a single norm → act → injected-layer → dropout block with the same `in_features`/`out_features` constructor contract as the other dense primitives
-- `EmbeddedParametricFFNN` — residual body with `Linear` embedding/regression projections (no `residual:` param)
-- `EmbeddedSimpleParametricFFNN` — plain body with `Linear` embedding/regression projections (no `residual:` param)
+The preferred public model surface is `FactorizedFFNN` and
+`EmbeddedFactorizedFFNN`.
 
-These remain available for custom compositions. The preferred public model surface is the explicit plain/residual class matrix above.
-
-## Embedded dense convenience model
-
-`EmbeddedFFNN` is the standard embedded dense residual variant used by the
-DeepONet operator family.
-
-Architecture:
-
-```text
-Linear(in_features -> hidden_size)
--> residual constant-width body
--> Linear(hidden_size -> out_features)
-```
-
-It exposes the same dense-network knobs as `FFNN`:
-- `in_features`
-- `out_features`
-- `hidden_size`
-- `num_layers`
-- optional `activation`, `normalize`, `dropout`, `bias`
-- optional `block_kind` / `block_factory`
-
-The non-factorized Hyper/MoE composites also expose `block_kind` for the
+The Hyper/MoE composites also expose `block_kind` for the
 wrapped hidden branch or expert block. Their default is `"parametric"` to keep
 the existing linear-kernel branch shape; pass `"mlp"`, `"geglu"`, or `"swiglu"`
 to use Transformer/MoE-style FFN experts. Use `linear_kind="factorized"` to
-make the selected expert topology use `FactorizedLinear` kernels. Factorized
-model variants do not expose this selector because their names guarantee
-`FactorizedLinear` kernels across the model-owned projections.
+make the selected topology use `FactorizedLinear` kernels.
 
 ## Naming rules
 
@@ -170,13 +133,14 @@ model variants do not expose this selector because their names guarantee
 |---|---|
 | `VarWidth...` | explicit per-layer width list required (`layers: Sequence[int]`) |
 | no width prefix | constant-width implied — specify `hidden_size` + `num_layers` |
-| `Simple...` | plain, no skip connections (or use `skip=False` on `FFNN`/`VarWidthFFNN`) |
+| `skip=False` | plain, no skip connections |
 | no `Simple` prefix | residual/skip connections active (`skip=True` default) |
-| `Embedded...` | has a dedicated initial linear projection layer before the body |
-| no `Embedded` prefix | structured layers act directly from the input |
+| `project=True` | has dedicated input/output projection layers around the body |
+| `project=False` | structured layers act directly from the input and require square body dimensions |
 | `ScaleEquivariant...` | wraps a base model with norm-based input/output scaling |
 
-For constrained layer types, "Embedded" means the network has a dedicated initial projection layer before the body (and a regression layer after it).
+For constrained layer types, `Embedded...` means the class can project around a
+body; the `project` flag decides whether those projection layers are present.
 
 Unless stated otherwise, `num_layers` counts learned hidden blocks on the model's main path. Dedicated embedding/setup layers and terminal readout layers are excluded from that count.
 
@@ -185,8 +149,10 @@ Unless stated otherwise, `num_layers` counts learned hidden blocks on the model'
 All constrained FFNNs implement `from_entries(input_shapes, output_shapes, **kwargs)` where
 `input_shapes` and `output_shapes` are `Mapping[str, tuple[int, ...]]`.
 
-- **Square-type classes** (`ConstantWidthFactorizedFFNN`, `ConstantWidthHyperFactorized`, etc.): require the first input and output shapes to be equal; extract `in_features` from the input shape's leading dim.
-- **Rectangular-safe embedded classes** (`EmbeddedFactorizedFFNN`, `EmbeddedHyperFactorized`, etc.): extract `in_features` from the first input shape and `out_features` from the first output shape.
+- **Body-only mode** (`project=False`): requires the first input and output
+  shapes to be equal.
+- **Projected mode** (`project=True`): extracts `in_features` from the first
+  input shape and `out_features` from the first output shape.
 
 `from_entries` does **not** filter kwargs — passing duplicate `in_features` or `out_features` raises a `TypeError`.
 
@@ -194,29 +160,33 @@ All constrained FFNNs implement `from_entries(input_shapes, output_shapes, **kwa
 
 ```toml
 [model]
-name = "ConstantWidthFactorizedFFNN"
+name = "EmbeddedFactorizedFFNN"
 module_path = "dlkit.domain.nn"
 in_features = 64
+out_features = 64
+project = false
 num_layers = 3
 ```
 
 ```toml
 [model]
-name = "EmbeddedHyperFactorized"
+name = "EmbeddedHyperFFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 3
 num_lanes = 4
+linear_kind = "factorized"
 ```
 
 ```toml
 [model]
-name = "EmbeddedMoEFactorized"
+name = "EmbeddedMoEFFNN"
 module_path = "dlkit.domain.nn"
 hidden_size = 64
 num_layers = 3
 num_experts = 8
 top_k = 2
+linear_kind = "factorized"
 ```
 
 ---
@@ -296,7 +266,7 @@ the condition, zero-initialised so the layer is identity at the start of trainin
 |---|---|---|
 | `VarWidthFiLMFFNN` | Variable-width (`layers` list); embedding `Linear` → N `FiLMBlock`s → output `Linear` | `VarWidthFFNN` |
 | `FiLMFFNN` | Constant-width (`hidden_size`, `num_layers`); embedding `Linear` → N `FiLMBlock`s → output `Linear` | `FFNN` |
-| `FiLMEmbeddedFFNN` | Constant-width residual body; `Linear` embed → N `FiLMResidualBlock`s (with per-block skip) wrapped in `ConditionedResidualSequential` (end-to-end skip) → `Linear` head | `EmbeddedFFNN` |
+| `FiLMEmbeddedFFNN` | Constant-width residual body; `Linear` embed → N `FiLMResidualBlock`s (each scaled by `residual_branch_scale(num_layers)`, per-block skip) wrapped in `ConditionedResidualSequential` (identity end-to-end skip) → `Linear` head | `FFNN(project=True)` |
 | `ScaleEquivariantVarWidthFiLMFFNN` | `ConditionedScaleEquivariantWrapper` around `VarWidthFiLMFFNN`; `f(αx, c) = α·f(x, c)` | `VarWidthFiLMFFNN` |
 | `ScaleEquivariantFiLMFFNN` | `ConditionedScaleEquivariantWrapper` around `FiLMFFNN`; `f(αx, c) = α·f(x, c)` | `ScaleEquivariantFFNN` |
 | `ScaleEquivariantFiLMEmbeddedFFNN` | `ConditionedScaleEquivariantWrapper` around `FiLMEmbeddedFFNN` | — |
@@ -308,7 +278,7 @@ Scale equivariance applies to the features branch only; the condition vector pas
 | Class | Role |
 |---|---|
 | `FiLMBlock` | Single dense block (`Norm → Act → Lin → Drop`) followed by `FiLMLayer` modulation |
-| `FiLMResidualBlock` | Two dense blocks + `FiLMLayer` + identity residual skip (square: `in_features == out_features`) |
+| `FiLMResidualBlock` | Two dense blocks + `FiLMLayer` + identity residual skip (square: `in_features == out_features`); `branch_scale` (default `1.0`) multiplies the FiLM-modulated branch before adding the shortcut — `FiLMEmbeddedFFNN` sets this to `residual_branch_scale(num_layers)` on every block it constructs |
 
 ### Parameters
 

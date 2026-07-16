@@ -27,7 +27,7 @@ semantic parameter contracts. No engine orchestration belongs here.
 | `AsConditioned` | Adapter that wraps an unconditional `nn.Module` to satisfy `IConditionedModule`; discards the condition |
 | `FiLMLayer` | Feature-wise Linear Modulation: `(1 + γ(c)) * x + β(c)`; zero-initialised so it is identity at init |
 | `ConditionedSequential` | Sequential chain forwarding the same condition to every block |
-| `ConditionedResidualSequential` | `ConditionedSequential` with an end-to-end skip connection (`body(x, c) + shortcut(x)`) |
+| `ConditionedResidualSequential` | `ConditionedSequential` with a scaled end-to-end skip connection (`branch_scale * body(x, c) + shortcut(x)`) |
 
 `primitives/skip.py` also contains `ResidualSequential` — an unconditional sequential with an end-to-end skip: `chain(x) + shortcut(x)`.
 
@@ -38,6 +38,7 @@ semantic parameter contracts. No engine orchestration belongs here.
 `primitives/moe.py` owns sparse mixture-of-experts building blocks:
 - `TopKRouter` performs feature-last top-k token routing and emits load-balancing diagnostics.
 - `SparseMoE` dispatches selected tokens to ordinary `nn.Module` experts and supports always-on shared experts.
+- Shared experts are scaled by `shared_expert_scale`; when omitted, the default is `1 / sqrt(1 + len(shared_experts))`.
 - `RoutingStats` carries `aux_loss`, `expert_counts`, `router_probs`, and selected expert ids for callers that request stats.
 
 MoE expert semantics follow the Shazeer, GShard, and Switch Transformer line:
@@ -65,22 +66,19 @@ adding new inheritance requirements.
 
 The FFNN family is organized symmetrically around architecture and naming:
 - `VarWidth...` means explicit per-layer width list required; no prefix means constant-width (`hidden_size` + `num_layers`)
-- `Simple...` means plain, no skip connections; no `Simple` prefix means residual/skip connections active
-- `FFNN` and `VarWidthFFNN` both accept `skip: bool = True` — use `skip=False` instead of a separate `Simple*` class
-- `Embedded...` means the network has a dedicated initial projection layer before the body; `EmbeddedFFNN` is the dense constant-width version
+- `FFNN` and `VarWidthFFNN` both accept `skip: bool = True` — use `skip=False` for plain bodies
+- `FFNN`, `VarWidthFFNN`, `EmbeddedFactorizedFFNN`, `EmbeddedHyperFFNN`, and `EmbeddedMoEFFNN` accept `project: bool = True`; use `project=False` for body-only square composition
+- `Embedded...` factorized/Hyper/MoE classes can project around their body; the `project` flag decides whether projections are present
 - `ScaleEquivariant...` means norm-scaled wrapper behavior
-- Square factorized types expose only `in_features`/`out_features` and require them to match; embedded factorized types expose `in_features`, `hidden_size`, and `out_features`
+- Body-only factorized/Hyper/MoE modes require `in_features == out_features == hidden_size`; projected modes expose `in_features`, `hidden_size`, and `out_features`
 - `num_layers` counts learned hidden blocks on the model's main path; pure embedding and readout projections are not included
 
 Representative exports from `dlkit.domain.nn` include:
-- dense: `VarWidthFFNN`, `FFNN`, `EmbeddedFFNN`
+- dense: `VarWidthFFNN`, `FFNN`
 - FiLM-conditioned: `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantVarWidthFiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN`
-- constrained embedded factorized (rectangular-safe, exp): `EmbeddedFactorizedFFNN`, `EmbeddedSimpleFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedSimpleFactorizedFFNN`
-- constrained factorized (square constant-width, exp): `ConstantWidthFactorizedFFNN`, `ConstantWidthSimpleFactorizedFFNN`, `ScaleEquivariantConstantWidthFactorizedFFNN`, `ScaleEquivariantConstantWidthSimpleFactorizedFFNN`
-- Hyper-Connection linear: `ConstantWidthHyper`, `EmbeddedHyper`
-- Hyper-Connection factorized: `ConstantWidthHyperFactorized`, `EmbeddedHyperFactorized`
-- sparse MoE linear: `ConstantWidthMoE`, `EmbeddedMoE`
-- sparse MoE factorized: `ConstantWidthMoEFactorized`, `EmbeddedMoEFactorized`
+- constrained factorized: `FactorizedFFNN`, `EmbeddedFactorizedFFNN`, `ScaleEquivariantEmbeddedFactorizedFFNN`
+- Hyper-Connection composites: `EmbeddedHyperFFNN`
+- sparse MoE composites: `EmbeddedMoEFFNN`
 - coordinate spectral-bias: `FourierFeatureNetwork`, `FactorizedFourierFeatureNetwork`, `Siren`, `ModifiedMLP`, `ScaleEquivariantFourierFeatureNetwork`, `ScaleEquivariantFactorizedFourierFeatureNetwork`
 - scale-equivariant: `ScaleEquivariantFFNN`
 - gated: `GatedMLP`
@@ -312,8 +310,8 @@ mirroring its match/case dispatch so init follows from the existing
 `initialize_(module, activation)` is called once per constructor, right
 after the relevant `nn.Linear`/`nn.Conv*` is built: in `primitives/dense.py`,
 `primitives/convolutional.py`, `primitives/gated.py` (`UVGate`), and the
-plain-`nn.Linear` embedding/regression layers of `ffnn/residual.py`,
-`ffnn/film.py`, and `ffnn/constrained.py`.
+plain-`nn.Linear` embedding/regression layers of `ffnn/residual.py` and
+`ffnn/film.py`.
 
 Left untouched as special cases with their own hand-rolled init:
 `primitives/parametrized_layers.py` (factorized-weight layers, own
@@ -335,7 +333,7 @@ inheritance required. `dlkit.domain.nn.introspection.effective_hyperparameters()
 merges this dict (declared values win) with whatever settings actually forwarded to
 the constructor; the engine layer feeds the result into Lightning's
 `save_hyperparameters()` so `model.hparams` and MLflow logging both reflect what was
-actually built. See `ffnn/residual.py` (`VarWidthFFNN`, `EmbeddedFFNN`) and
+actually built. See `ffnn/residual.py` (`VarWidthFFNN`, `FFNN`) and
 `operators/fno.py` (`FourierNeuralOperator1d`) for the pattern; `utils.py` provides
 `resolved_activation_name()` to recover the resolved activation name from either a
 `None`/string input or the callable `resolve_activation()` already produced.

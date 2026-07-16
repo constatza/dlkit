@@ -176,6 +176,7 @@ class SparseMoE(nn.Module):
         drop_policy: DropPolicy = "none",
         jitter_noise: float = 0.0,
         return_stats: bool = False,
+        shared_expert_scale: float | None = None,
     ) -> None:
         super().__init__()
         if not experts:
@@ -184,6 +185,11 @@ class SparseMoE(nn.Module):
         self.in_features = in_features
         self.experts = nn.ModuleList(experts)
         self.shared_experts = nn.ModuleList(shared_experts)
+        self._shared_expert_scale = (
+            1.0 / math.sqrt(1 + len(self.shared_experts))
+            if shared_expert_scale is None
+            else shared_expert_scale
+        )
         self.return_stats = return_stats
         self.router = router or TopKRouter(
             in_features=in_features,
@@ -238,7 +244,7 @@ class SparseMoE(nn.Module):
                 output = torch.zeros_like(self.experts[0](flat))
 
         if shared is not None:
-            output = output + shared
+            output = output + self._shared_expert_scale * shared
 
         out = output.reshape(*original_shape, output.shape[-1])
         should_return_stats = self.return_stats if return_stats is None else return_stats

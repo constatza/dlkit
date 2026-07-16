@@ -98,7 +98,7 @@ def sample_general_settings_data() -> dict[str, Any]:
         "run": {"type": "train", "seed": 1, "precision": "32"},
         "experiment": {"name": "test-experiment"},
         "model": {
-            "class": "ConstantWidthFFNN",
+            "class": "FFNN",
             "module_path": "dlkit.domain.nn",
             "hidden_size": 64,
         },

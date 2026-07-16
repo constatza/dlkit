@@ -79,7 +79,7 @@ data_role = "target"
 filepath = "<tmp_path>/test_data/split.txt"
 
 [model]
-name = "ConstantWidthFFNN"
+name = "FFNN"
 module_path = "dlkit.domain.nn.ffnn.residual"
 # checkpoint = "/path/to/model.ckpt"  # for inference
 

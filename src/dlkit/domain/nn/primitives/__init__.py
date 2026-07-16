@@ -15,6 +15,7 @@ from .dense import (
     GatedDenseMLPBlock,
     ParametricDenseBlock,
     make_dense_block,
+    resolve_linear_factory,
 )
 from .factorized_init import FactorizedInit, resolve_factorized_init, resolve_kaiming_a
 from .gated import (
@@ -111,4 +112,5 @@ __all__ = [
     "residual_branch_scale",
     "resolve_factorized_init",
     "resolve_kaiming_a",
+    "resolve_linear_factory",
 ]

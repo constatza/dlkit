@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import pytest
 import torch
 from torch import Tensor, nn
 
-from dlkit.domain.nn.primitives import RoutingStats, SparseMoE, TopKRouter
+from dlkit.domain.nn.primitives import MoESequential, RoutingStats, SparseMoE, TopKRouter
+
+from .conftest import SkewPairRotation, assert_bounded_variance
 
 
 class ScaleExpert(nn.Module):
@@ -87,6 +90,7 @@ def test_sparse_moe_adds_shared_experts_and_returns_stats() -> None:
         in_features=2,
         experts=[ScaleExpert(2.0)],
         shared_experts=[ScaleExpert(3.0)],
+        shared_expert_scale=1.0,
     )
     moe.router = router
 
@@ -96,6 +100,48 @@ def test_sparse_moe_adds_shared_experts_and_returns_stats() -> None:
     assert isinstance(stats, RoutingStats)
     assert stats.expert_counts.tolist() == [3]
     assert stats.aux_loss.ndim == 0
+
+
+def test_sparse_moe_defaults_shared_expert_scale() -> None:
+    moe = SparseMoE(
+        in_features=2,
+        experts=[ScaleExpert(2.0)],
+        shared_experts=[ScaleExpert(3.0), ScaleExpert(4.0)],
+    )
+
+    assert moe._shared_expert_scale == pytest.approx(1 / torch.sqrt(torch.tensor(3.0)).item())
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_moe_sequential_scaled_stack_stays_bounded(num_layers: int) -> None:
+    torch.manual_seed(0)
+    x = torch.randn(4096, 16)
+    stack = MoESequential(
+        *[
+            SparseMoE(in_features=16, experts=[SkewPairRotation()], top_k=1)
+            for _ in range(num_layers)
+        ]
+    )
+
+    assert_bounded_variance(stack, x)
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_moe_sequential_unscaled_stack_diverges(num_layers: int) -> None:
+    torch.manual_seed(0)
+    x = torch.randn(4096, 16)
+    stack = MoESequential(
+        *[
+            SparseMoE(in_features=16, experts=[SkewPairRotation()], top_k=1)
+            for _ in range(num_layers)
+        ],
+        branch_scale=1.0,
+    )
+
+    with torch.no_grad():
+        out = stack(x)
+
+    assert (out.std() / x.std()).item() > 2.0
 
 
 def test_sparse_moe_backpropagates_to_router_and_selected_expert() -> None:

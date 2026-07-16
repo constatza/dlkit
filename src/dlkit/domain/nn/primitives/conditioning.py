@@ -131,7 +131,7 @@ class ConditionedSequential(nn.Module):
 class ConditionedResidualSequential(ConditionedSequential):
     """Conditioned sequential with an end-to-end skip connection.
 
-    Computes ``output = body(x, condition) + shortcut(x)`` where ``body``
+    Computes ``output = branch_scale * body(x, condition) + shortcut(x)`` where ``body``
     is the inherited ``ConditionedSequential`` chain.
 
     When ``shortcut=None``, an identity skip is used; this requires the
@@ -140,11 +140,18 @@ class ConditionedResidualSequential(ConditionedSequential):
     Args:
         *blocks (IConditionedModule): Ordered conditioned blocks forming the body.
         shortcut (nn.Module | None): Optional skip-path projection. ``None`` for identity.
+        branch_scale: Multiplicative scale applied to the body output before residual addition.
     """
 
-    def __init__(self, *blocks: IConditionedModule, shortcut: nn.Module | None = None) -> None:
+    def __init__(
+        self,
+        *blocks: IConditionedModule,
+        shortcut: nn.Module | None = None,
+        branch_scale: float = 1.0,
+    ) -> None:
         super().__init__(*blocks)
         self.shortcut = shortcut
+        self.branch_scale = branch_scale
 
     def forward(self, x: Tensor, condition: Tensor) -> Tensor:
         """Apply conditioned body and add the skip connection.
@@ -154,11 +161,11 @@ class ConditionedResidualSequential(ConditionedSequential):
             condition (Tensor): Conditioning tensor forwarded to every block.
 
         Returns:
-            Tensor: ``body(x, condition) + shortcut(x)`` (or ``+ x`` if no shortcut).
+            Tensor: ``branch_scale * body(x, condition) + shortcut(x)``.
         """
         out = super().forward(x, condition)
         skip = self.shortcut(x) if self.shortcut is not None else x
-        return out + skip
+        return out * self.branch_scale + skip
 
 
 __all__ = [

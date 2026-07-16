@@ -82,7 +82,7 @@ Concatenates `[x, rfft(x).real[:n], rfft(x).imag[:n]]` → single MLP.
 
 ```
 augmented = cat([x, rfft(x)_real_trunc, rfft(x)_imag_trunc])
-output    = ConstantWidthFFNN(augmented)
+output    = FFNN(augmented)
 ```
 
 The augmented input dimension is `in_features + n_modes * 2`.
@@ -105,8 +105,8 @@ y = model(x)  # x: (B, 64)
 Two independent branches learn spatial and spectral representations separately:
 
 ```
-h_spatial  = SpatialBranch(x)              # ConstantWidthFFNN
-h_spectral = SpectralBranch(rfft_feats(x)) # ConstantWidthFFNN
+h_spatial  = SpatialBranch(x)              # FFNN
+h_spectral = SpectralBranch(rfft_feats(x)) # FFNN
 merged     = h_spatial + h_spectral        # or cat + linear (merge="concat")
 output     = Linear(merged)
 ```
@@ -139,7 +139,7 @@ before an MLP, directly countering spectral bias (Tancik et al. 2020).
 
 ```
 γ(x) = [sin(2π B x), cos(2π B x)]  ∈ ℝ^{2m}
-output = ConstantWidthFFNN(γ(x))
+output = FFNN(γ(x))
 ```
 
 where `B ∈ ℝ^{m×d}` is sampled from `N(0, σ²)` at construction time.
@@ -182,7 +182,7 @@ and then passed through a residual MLP head.
 
 ```
 encoded = [x, hash_level_0(x), ..., hash_level_{L-1}(x)]
-output  = ConstantWidthFFNN(encoded)
+output  = FFNN(encoded)
 ```
 
 This representation is strongest when the input space is genuinely

@@ -1,12 +1,44 @@
 import pytest
 import torch
-from torch import nn
+from torch import Tensor, nn
 
 from dlkit.domain.nn.primitives.skip import (
     SkipConnection,
     build_conv1d_skip_layer,
     build_linear_skip_layer,
 )
+
+
+class SkewPairRotation(nn.Module):
+    """Feature-pair 90-degree rotation with preserved per-feature variance."""
+
+    def forward(self, x: Tensor) -> Tensor:
+        pairs = x.reshape(*x.shape[:-1], x.shape[-1] // 2, 2)
+        rotated = torch.stack((-pairs[..., 1], pairs[..., 0]), dim=-1)
+        return rotated.reshape_as(x)
+
+
+class GraphSkewPairRotation(nn.Module):
+    """SkewPairRotation with a graph-shaped forward; edge args are unused."""
+
+    def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor | None = None) -> Tensor:
+        pairs = x.reshape(*x.shape[:-1], x.shape[-1] // 2, 2)
+        rotated = torch.stack((-pairs[..., 1], pairs[..., 0]), dim=-1)
+        return rotated.reshape_as(x)
+
+
+def assert_bounded_variance(
+    model: nn.Module,
+    x: Tensor,
+    *,
+    low: float = 0.5,
+    high: float = 2.0,
+) -> None:
+    model.eval()
+    with torch.no_grad():
+        y = model(x)
+    ratio = y.std().item() / x.std().item()
+    assert low < ratio < high, f"Output std ratio {ratio:.2f} outside [{low}, {high}]"
 
 
 @pytest.fixture

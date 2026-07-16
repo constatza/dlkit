@@ -15,6 +15,9 @@ from dlkit.domain.nn.primitives.skip import (
     build_conv1d_skip_layer,
     build_linear_skip_layer,
 )
+from dlkit.domain.nn.primitives.stacks import residual_branch_scale
+
+from .conftest import SkewPairRotation, assert_bounded_variance
 
 
 def test_skip_sum_output_channels(
@@ -104,7 +107,7 @@ def test_branch_scale_multiplies_module_output_before_sum() -> None:
 
     Regression coverage for the depth-variance fix: SkipConnection's contribution
     to residual-stacking blow-up is module(x); branch_scale is the mechanism that
-    counteracts it (GPT-2 appendix, 1/sqrt(2*num_layers)), so it must apply exactly
+    counteracts it for deep residual stacks, so it must apply exactly
     there, not anywhere else in the aggregation.
     """
     module = nn.Linear(4, 8)
@@ -283,3 +286,36 @@ def test_residual_sequential_branch_scale_multiplies_chain_before_sum(
         out_scaled = scaled(rs_input)
 
     torch.testing.assert_close(out_scaled - rs_input, 0.5 * (out_unscaled - rs_input))
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_deep_manual_residual_sequential_scaled_stack_stays_bounded(
+    num_layers: int,
+) -> None:
+    torch.manual_seed(0)
+    x = torch.randn(4096, 16)
+    stack = nn.Sequential(
+        *[
+            ResidualSequential(
+                SkewPairRotation(),
+                branch_scale=residual_branch_scale(num_layers),
+            )
+            for _ in range(num_layers)
+        ]
+    )
+
+    assert_bounded_variance(stack, x)
+
+
+@pytest.mark.parametrize("num_layers", [8, 16, 32, 64])
+def test_deep_manual_residual_sequential_unscaled_stack_diverges(
+    num_layers: int,
+) -> None:
+    torch.manual_seed(0)
+    x = torch.randn(4096, 16)
+    stack = nn.Sequential(*(ResidualSequential(SkewPairRotation()) for _ in range(num_layers)))
+
+    with torch.no_grad():
+        out = stack(x)
+
+    assert (out.std() / x.std()).item() > 2.0

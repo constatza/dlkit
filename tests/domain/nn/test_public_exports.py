@@ -75,41 +75,27 @@ def test_legacy_siren_name_not_exported():
     assert not hasattr(public_nn, "SirenFFNN")
 
 
-def test_named_parametric_bases_exported():
+def test_named_parametric_bases_not_exported():
     for ns in (domain_nn, public_nn):
-        assert hasattr(ns, "EmbeddedParametricFFNN")
-        assert hasattr(ns, "EmbeddedSimpleParametricFFNN")
+        assert not hasattr(ns, "EmbeddedParametricFFNN")
+        assert not hasattr(ns, "EmbeddedSimpleParametricFFNN")
 
 
-def test_public_namespaces_export_factorized_pairs():
-    pairs = [
-        ("ConstantWidthFactorizedFFNN", "ConstantWidthSimpleFactorizedFFNN"),
-        (
-            "ScaleEquivariantConstantWidthFactorizedFFNN",
-            "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
-        ),
-        ("EmbeddedFactorizedFFNN", "EmbeddedSimpleFactorizedFFNN"),
-        (
-            "ScaleEquivariantEmbeddedFactorizedFFNN",
-            "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
-        ),
+def test_public_namespaces_export_factorized_models():
+    names = [
+        "FactorizedFFNN",
+        "EmbeddedFactorizedFFNN",
+        "ScaleEquivariantEmbeddedFactorizedFFNN",
     ]
-    for residual_name, plain_name in pairs:
+    for name in names:
         for ns in (domain_nn, public_nn):
-            assert hasattr(ns, residual_name), f"{residual_name!r} missing from {ns.__name__}"
-            assert hasattr(ns, plain_name), f"{plain_name!r} missing from {ns.__name__}"
+            assert hasattr(ns, name), f"{name!r} missing from {ns.__name__}"
 
 
 def test_public_namespaces_export_hyper_and_moe_factorized_models():
     names = (
-        "ConstantWidthHyper",
-        "ConstantWidthHyperFactorized",
-        "EmbeddedHyper",
-        "EmbeddedHyperFactorized",
-        "ConstantWidthMoE",
-        "ConstantWidthMoEFactorized",
-        "EmbeddedMoE",
-        "EmbeddedMoEFactorized",
+        "EmbeddedHyperFFNN",
+        "EmbeddedMoEFFNN",
     )
     for name in names:
         assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
@@ -146,10 +132,23 @@ def test_public_namespaces_export_hyper_and_moe_primitives():
 
 def test_public_namespaces_do_not_export_internal_nonembedded_factorized_models():
     removed_names = (
-        "FactorizedFFNN",
         "SimpleFactorizedFFNN",
+        "EmbeddedSimpleFactorizedFFNN",
+        "ConstantWidthFactorizedFFNN",
+        "ConstantWidthSimpleFactorizedFFNN",
         "ScaleEquivariantFactorizedFFNN",
         "ScaleEquivariantSimpleFactorizedFFNN",
+        "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
+        "ScaleEquivariantConstantWidthFactorizedFFNN",
+        "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
+        "ConstantWidthHyper",
+        "ConstantWidthHyperFactorized",
+        "EmbeddedHyper",
+        "EmbeddedHyperFactorized",
+        "ConstantWidthMoE",
+        "ConstantWidthMoEFactorized",
+        "EmbeddedMoE",
+        "EmbeddedMoEFactorized",
     )
     for name in removed_names:
         assert not hasattr(domain_nn, name), f"{name!r} should not be exported from dlkit.domain.nn"

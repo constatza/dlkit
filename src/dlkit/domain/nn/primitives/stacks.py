@@ -16,23 +16,17 @@ def residual_branch_scale(
     num_layers: int,
     *,
     residual_branches_per_layer: int = 1,
-    tied_repetitions: int = 1,
 ) -> float:
-    """Return branch scale for ordinary residual stacks and tied looped stacks."""
+    """Return branch scale for ordinary residual stacks."""
 
     if num_layers < 0:
         raise ValueError("num_layers must be non-negative")
     if residual_branches_per_layer <= 0:
         raise ValueError("residual_branches_per_layer must be positive")
-    if tied_repetitions <= 0:
-        raise ValueError("tied_repetitions must be positive")
     if num_layers == 0:
         return 1.0
 
-    scale = 1.0 / math.sqrt(num_layers * residual_branches_per_layer)
-    if tied_repetitions > 1:
-        scale /= tied_repetitions
-    return scale
+    return 1.0 / math.sqrt(num_layers * residual_branches_per_layer)
 
 
 def _apply_asymmetric_init(layer: HyperConnection | GraphHyperConnection) -> None:

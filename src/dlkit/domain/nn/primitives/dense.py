@@ -236,7 +236,7 @@ def make_dense_block(
     layer_factory: Callable[[int], nn.Module] | None = None,
 ) -> nn.Module:
     """Build a dense block variant from a string selector."""
-    linear_factory = _linear_factory(
+    linear_factory = resolve_linear_factory(
         linear_kind,
         bias=bias,
         activation=activation,
@@ -295,7 +295,7 @@ def make_dense_block(
             )
         case "parametric":
             if layer_factory is None:
-                raise ValueError("layer_factory is required for kind='parametric'")
+                layer_factory = lambda n: linear_factory(in_features, n)
             return ParametricDenseBlock(
                 in_features=in_features,
                 out_features=out_features,
@@ -311,7 +311,7 @@ def make_dense_block(
             raise ValueError(f"Unsupported dense block kind {kind!r}; supported: {supported}")
 
 
-def _linear_factory(
+def resolve_linear_factory(
     kind: DenseLinearKind,
     *,
     bias: bool,
@@ -334,3 +334,6 @@ def _linear_factory(
                 std=init.log_scale_std,
                 kaiming_a=init.kaiming_a,
             )
+        case _:
+            supported = ("linear", "factorized")
+            raise ValueError(f"Unsupported dense linear kind {kind!r}; supported: {supported}")

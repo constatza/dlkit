@@ -27,7 +27,7 @@ def training_job_config(npy_data_paths: tuple[Path, Path]) -> TrainingJobConfig:
     return TrainingJobConfig.model_validate(
         {
             "run": {"type": "train", "seed": 1},
-            "model": {"class": "ConstantWidthFFNN", "module_path": "dlkit.domain.nn"},
+            "model": {"class": "FFNN", "module_path": "dlkit.domain.nn"},
             "data": {
                 "class": "FlexibleDataset",
                 "features": [{"name": "x", "format": "npy", "path": str(x_path)}],
@@ -41,7 +41,7 @@ def training_job_config(npy_data_paths: tuple[Path, Path]) -> TrainingJobConfig:
 def test_training_job_config_is_importable(training_job_config: TrainingJobConfig) -> None:
     """Smoke test: engine-facing config type loads cleanly."""
     assert training_job_config.run.seed == 1
-    assert training_job_config.model.name == "ConstantWidthFFNN"
+    assert training_job_config.model.name == "FFNN"
     assert training_job_config.training.loss.name == "mse"
 
 

@@ -1,34 +1,18 @@
 from .constrained import (
-    ConstantWidthFactorizedFFNN,
-    ConstantWidthSimpleFactorizedFFNN,
     EmbeddedFactorizedFFNN,
-    EmbeddedParametricFFNN,
-    EmbeddedSimpleFactorizedFFNN,
-    EmbeddedSimpleParametricFFNN,
+    FactorizedFFNN,
     ParametricDenseBlock,
-)
-from .factorized_composites import (
-    ConstantWidthHyper,
-    ConstantWidthHyperFactorized,
-    ConstantWidthMoE,
-    ConstantWidthMoEFactorized,
-    EmbeddedHyper,
-    EmbeddedHyperFactorized,
-    EmbeddedMoE,
-    EmbeddedMoEFactorized,
 )
 from .film import FiLMBlock, FiLMEmbeddedFFNN, FiLMFFNN, FiLMResidualBlock, VarWidthFiLMFFNN
 from .gated import GatedMLP
+from .hyper_moe import EmbeddedHyperFFNN, EmbeddedMoEFFNN
 from .linear import (
     FactorizedLinearNetwork,
     LinearNetwork,
 )
-from .residual import FFNN, EmbeddedFFNN, VarWidthFFNN
+from .residual import FFNN, VarWidthFFNN
 from .scale_equivariant import (
-    ScaleEquivariantConstantWidthFactorizedFFNN,
-    ScaleEquivariantConstantWidthSimpleFactorizedFFNN,
     ScaleEquivariantEmbeddedFactorizedFFNN,
-    ScaleEquivariantEmbeddedSimpleFactorizedFFNN,
     ScaleEquivariantFFNN,
     ScaleEquivariantFiLMEmbeddedFFNN,
     ScaleEquivariantFiLMFFNN,
@@ -40,7 +24,6 @@ __all__ = [
     "VarWidthFFNN",
     # Constant-width
     "FFNN",
-    "EmbeddedFFNN",
     # FiLM-conditioned
     "FiLMBlock",
     "FiLMEmbeddedFFNN",
@@ -60,25 +43,12 @@ __all__ = [
     "ScaleEquivariantVarWidthFiLMFFNN",
     # Constrained low-level builders
     "ParametricDenseBlock",
-    "EmbeddedParametricFFNN",
-    "EmbeddedSimpleParametricFFNN",
-    "ConstantWidthFactorizedFFNN",
-    "ConstantWidthSimpleFactorizedFFNN",
-    # Embedded Factorized variants (FactorizedLinear embedding, body, and regression)
+    # Factorized variants
+    "FactorizedFFNN",
     "EmbeddedFactorizedFFNN",
-    "EmbeddedSimpleFactorizedFFNN",
     # Hyper/MoE variants
-    "ConstantWidthHyper",
-    "ConstantWidthHyperFactorized",
-    "EmbeddedHyper",
-    "EmbeddedHyperFactorized",
-    "ConstantWidthMoE",
-    "ConstantWidthMoEFactorized",
-    "EmbeddedMoE",
-    "EmbeddedMoEFactorized",
+    "EmbeddedHyperFFNN",
+    "EmbeddedMoEFFNN",
     # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
-    "ScaleEquivariantEmbeddedSimpleFactorizedFFNN",
-    "ScaleEquivariantConstantWidthFactorizedFFNN",
-    "ScaleEquivariantConstantWidthSimpleFactorizedFFNN",
 ]

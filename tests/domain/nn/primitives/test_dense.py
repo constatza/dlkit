@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.nn.ffnn import FFNN, ConstantWidthMoE
+from dlkit.domain.nn.ffnn import FFNN, EmbeddedMoEFFNN
 from dlkit.domain.nn.primitives import (
     DenseBlock,
     DenseBlockKind,
@@ -89,6 +89,18 @@ def test_gated_dense_mlp_block_uses_no_norm_by_default() -> None:
     assert isinstance(block.norm, nn.Identity)
 
 
+@pytest.mark.parametrize("kind", ["glu", "geglu", "swiglu"])
+def test_gated_dense_mlp_block_variance_ratio_is_descriptive(kind: DenseBlockKind) -> None:
+    torch.manual_seed(0)
+    block = make_dense_block(kind, in_features=16, out_features=16, hidden_features=32)
+    x = torch.randn(1024, 16)
+
+    with torch.no_grad():
+        y = block(x)
+
+    assert 0.01 < y.std().item() / x.std().item() < 20.0
+
+
 def test_dense_block_uses_no_norm_by_default() -> None:
     block = DenseBlock(in_features=4, out_features=4)
 
@@ -100,9 +112,11 @@ def test_make_dense_block_rejects_unknown_selector() -> None:
         make_dense_block(cast(DenseBlockKind, "unknown"), in_features=4, out_features=4)
 
 
-def test_parametric_selector_requires_layer_factory() -> None:
-    with pytest.raises(ValueError, match="layer_factory is required"):
-        make_dense_block("parametric", in_features=4, out_features=4)
+def test_parametric_selector_defaults_to_resolved_linear_factory() -> None:
+    block = make_dense_block("parametric", in_features=4, out_features=4)
+
+    assert isinstance(block, ParametricDenseBlock)
+    assert isinstance(block.layer, nn.Linear)
 
 
 def test_selected_block_works_inside_skip_connection() -> None:
@@ -157,11 +171,13 @@ def test_ffnn_accepts_typed_block_kind_and_records_it() -> None:
 
 
 def test_moe_accepts_typed_block_kind_for_experts() -> None:
-    model = ConstantWidthMoE(
+    model = EmbeddedMoEFFNN(
         in_features=4,
         out_features=4,
+        hidden_size=4,
         num_layers=1,
         num_experts=2,
+        project=False,
         block_kind="geglu",
         linear_kind="factorized",
         top_k=1,

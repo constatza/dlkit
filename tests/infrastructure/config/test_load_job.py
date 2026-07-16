@@ -69,7 +69,7 @@ def test_load_simple_train(simple_train_path: Path) -> None:
     assert isinstance(cfg, TrainingJobConfig)
     assert cfg.run.type == "train"
     assert cfg.run.seed == 42
-    assert cfg.model.name == "ConstantWidthFFNN"
+    assert cfg.model.name == "FFNN"
     assert cfg.model.hidden_size == 64
     assert cfg.data.batch_size == 8
     assert cfg.training.loss.name == "mse"
@@ -82,7 +82,7 @@ def test_load_composed_train(composed_train_path: Path) -> None:
     assert isinstance(cfg, TrainingJobConfig)
     assert cfg.experiment is not None
     assert cfg.experiment.name == "test-composed"
-    assert cfg.model.name == "ConstantWidthFFNN"
+    assert cfg.model.name == "FFNN"
     assert cfg.plots.enabled is True
     assert cfg.plots.loss_curve is True
 

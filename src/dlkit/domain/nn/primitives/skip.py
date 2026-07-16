@@ -161,9 +161,8 @@ class SkipConnection(nn.Module):
             ``2 x out_channels`` total width.
         branch_scale (float): Multiplier applied to ``module(x)`` before
             aggregation. Left at ``1.0`` (no compensation) by default; callers
-            stacking many of these (e.g. an N-block residual body) should pass
-            ``1/sqrt(2*N)`` (GPT-2 appendix, Radford et al. 2019) to counteract
-            the geometric variance growth of unscaled residual stacking.
+            stacking many one-branch residual layers should pass
+            ``1/sqrt(num_layers)`` to counteract residual variance growth.
     """
 
     def __init__(
@@ -180,7 +179,7 @@ class SkipConnection(nn.Module):
         self.in_channels = detected_in
         self.out_channels = detected_out
         self._how = how
-        self._branch_scale = branch_scale
+        self.branch_scale = branch_scale
         self.module = module
         self.reduce_layer = skip_layer
 
@@ -212,7 +211,7 @@ class SkipConnection(nn.Module):
         Returns:
             torch.Tensor: Aggregated output.
         """
-        x_out = self.module(x_in) * self._branch_scale
+        x_out = self.module(x_in) * self.branch_scale
         skip = self.reduce_layer(x_in)
         if self._how == "concat":
             return agg_concat(skip, x_out)
@@ -251,7 +250,7 @@ class ResidualSequential(nn.Module):
         super().__init__()
         self.modules_ = nn.ModuleList(modules)  # trailing _ avoids shadowing nn.Module.modules()
         self.shortcut = shortcut
-        self._branch_scale = branch_scale
+        self.branch_scale = branch_scale
 
     def forward(self, x: Tensor) -> Tensor:
         """Apply the sequential body and add the skip connection.
@@ -266,4 +265,4 @@ class ResidualSequential(nn.Module):
         for m in self.modules_:
             out = m(out)
         skip = self.shortcut(x) if self.shortcut is not None else x
-        return out * self._branch_scale + skip
+        return out * self.branch_scale + skip
