@@ -18,6 +18,8 @@ from .ffnn.linear import (
 from .ffnn.residual import FFNN, VarWidthFFNN
 from .ffnn.scale_equivariant import (
     ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedHyperFFNN,
+    ScaleEquivariantEmbeddedMoEFFNN,
     ScaleEquivariantFFNN,
     ScaleEquivariantFiLMEmbeddedFFNN,
     ScaleEquivariantFiLMFFNN,
@@ -29,9 +31,11 @@ from .operators import (
     FFNNDeepONet,
     FourierNeuralOperator1d,
     GridOperatorBase,
+    HyperDeepONet,
     IGridOperator,
     IOperatorNetwork,
     IQueryOperator,
+    MoEDeepONet,
     VarWidthDeepONet,
 )
 from .parameter_roles import ParameterRole
@@ -126,6 +130,9 @@ __all__ = [
     "EmbeddedMoEFFNN",
     # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
+    # Scale-equivariant Hyper/MoE variants
+    "ScaleEquivariantEmbeddedHyperFFNN",
+    "ScaleEquivariantEmbeddedMoEFFNN",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",
@@ -152,6 +159,8 @@ __all__ = [
     "VarWidthDeepONet",
     "FFNNDeepONet",
     "EmbeddedDeepONet",
+    "HyperDeepONet",
+    "MoEDeepONet",
     # Gating mechanisms and gated building blocks
     "IGatingMechanism",
     "GLUGate",

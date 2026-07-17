@@ -77,10 +77,21 @@ full embedded FFNN.
 | **Factorized projected/body-only** | `EmbeddedFactorizedFFNN(skip=False, project=...)` | `EmbeddedFactorizedFFNN(project=...)` | `project=False` is square body-only |
 | **Hyper linear/factorized** | — | `EmbeddedHyperFFNN(linear_kind=...)` | `project=False` is square body-only |
 | **MoE linear/factorized** | — | `EmbeddedMoEFFNN(linear_kind=...)` | `project=False` is square body-only |
+| **Scale-equivariant Hyper** | — | `ScaleEquivariantEmbeddedHyperFFNN` | wraps `EmbeddedHyperFFNN` in `ScaleEquivariantWrapper` |
+| **Scale-equivariant MoE** | — | `ScaleEquivariantEmbeddedMoEFFNN` | wraps `EmbeddedMoEFFNN` in `ScaleEquivariantWrapper`; inner `return_stats` fixed `False` |
 
 Scale-equivariant public wrappers are kept for dense FFNNs, FiLM FFNNs, and
 the projected/body-only factorized surface:
-`ScaleEquivariantEmbeddedFactorizedFFNN(skip=..., project=...)`.
+`ScaleEquivariantEmbeddedFactorizedFFNN(skip=..., project=...)`. The same
+wrapping is applied to the Hyper/MoE composites:
+`ScaleEquivariantEmbeddedHyperFFNN` and `ScaleEquivariantEmbeddedMoEFFNN` wrap
+`EmbeddedHyperFFNN`/`EmbeddedMoEFFNN` exactly as `ScaleEquivariantFFNN` wraps
+`FFNN` — the wrapper normalizes the input, runs the untouched composite, then
+rescales by the original norm, so equivariance holds regardless of any
+internal biases in the lane-mixing or expert blocks. `ScaleEquivariantEmbeddedMoEFFNN`
+always constructs its inner `EmbeddedMoEFFNN` with `return_stats=False`;
+construct `EmbeddedMoEFFNN(..., return_stats=True)` directly (unwrapped) if
+routing diagnostics are needed.
 
 > Note: `VarWidthFFNN` and `FFNN` both accept `skip: bool = True`. Pass `skip=False` to get plain (no skip connection) behavior without needing a separate class.
 > They also accept `project: bool = True`; pass `project=False` for a body-only
@@ -126,6 +137,17 @@ wrapped hidden branch or expert block. Their default is `"parametric"` to keep
 the existing linear-kernel branch shape; pass `"mlp"`, `"geglu"`, or `"swiglu"`
 to use Transformer/MoE-style FFN experts. Use `linear_kind="factorized"` to
 make the selected topology use `FactorizedLinear` kernels.
+
+`EmbeddedHyperFFNN`'s `lane_hidden_features` and `EmbeddedMoEFFNN`'s
+`expert_hidden_features` size each lane's/expert's internal block
+independently of the shared `hidden_size` (which every lane/expert must still
+*output*, since `HyperSequential`/`MoESequential` add the branch back into a
+fixed-width residual stream). Default `None` keeps the block's own width
+(equal to `hidden_size`, i.e. today's behavior). Only expansion-capable
+`block_kind`s (`"mlp"`, `"glu"`, `"geglu"`, `"swiglu"`, or `"parametric"` with
+`linear_kind="factorized"`) support a differing value; the default
+`block_kind="parametric"` with `linear_kind="linear"` is a single `Linear(H,
+H)` and raises `ValueError` if a differing width is requested.
 
 ## Naming rules
 
@@ -187,6 +209,37 @@ num_layers = 3
 num_experts = 8
 top_k = 2
 linear_kind = "factorized"
+```
+
+```toml
+[model]
+name = "EmbeddedMoEFFNN"
+module_path = "dlkit.domain.nn"
+hidden_size = 64
+num_layers = 3
+num_experts = 8
+top_k = 2
+block_kind = "swiglu"
+expert_hidden_features = 256   # independent of hidden_size, needs an expansion-capable block_kind
+```
+
+```toml
+[model]
+name = "ScaleEquivariantEmbeddedHyperFFNN"
+module_path = "dlkit.domain.nn"
+hidden_size = 64
+num_layers = 3
+num_lanes = 4
+```
+
+```toml
+[model]
+name = "ScaleEquivariantEmbeddedMoEFFNN"
+module_path = "dlkit.domain.nn"
+hidden_size = 64
+num_layers = 3
+num_experts = 8
+top_k = 2
 ```
 
 ---

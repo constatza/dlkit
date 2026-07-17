@@ -36,6 +36,7 @@ from dlkit.domain.nn import (
     GRNGate,
     HashEncodingNetwork,
     HyperConnection,
+    HyperDeepONet,
     HyperSequential,
     IGatingMechanism,
     IGridOperator,
@@ -47,11 +48,14 @@ from dlkit.domain.nn import (
     LaneReduce,
     LinearNetwork,
     ModifiedMLP,
+    MoEDeepONet,
     MoESequential,
     ParametricDenseBlock,
     RoutingDecision,
     RoutingStats,
     ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedHyperFFNN,
+    ScaleEquivariantEmbeddedMoEFFNN,
     ScaleEquivariantFactorizedFourierFeatureNetwork,
     ScaleEquivariantFFNN,
     ScaleEquivariantFiLMEmbeddedFFNN,
@@ -111,6 +115,9 @@ __all__ = [
     "EmbeddedMoEFFNN",
     # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
+    # Scale-equivariant Hyper/MoE variants
+    "ScaleEquivariantEmbeddedHyperFFNN",
+    "ScaleEquivariantEmbeddedMoEFFNN",
     # Spectral / frequency-domain networks
     "ISpectralLayer",
     "FourierAugmented",
@@ -136,6 +143,8 @@ __all__ = [
     "VarWidthDeepONet",
     "FFNNDeepONet",
     "EmbeddedDeepONet",
+    "HyperDeepONet",
+    "MoEDeepONet",
     # Gating mechanisms and gated building blocks
     "IGatingMechanism",
     "GLUGate",

@@ -46,47 +46,6 @@ def _validate_features(name: str, value: int) -> None:
         raise ValueError(f"{name} must be positive")
 
 
-class DenseBlock(nn.Module):
-    def __init__(
-        self,
-        *,
-        in_features: int,
-        out_features: int,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: NormalizerName | None = None,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ) -> None:
-        """Initializes a DenseBlock.
-
-        Parameters:
-            in_features (int): Number of input features to the layer.
-            out_features (int): Number of output features from the layer.
-            activation (ActivationName | Callable[[torch.Tensor], torch.Tensor] | None, optional): Activation function or name. Defaults to relu.
-            normalize (str | None, optional): Normalization type ('layer', 'batch', or None).
-            dropout (float, optional): Dropout rate. Defaults to 0.0.
-            bias (bool, optional): Whether to include a bias term. Defaults to True.
-        """
-        super().__init__()
-        _validate_features("in_features", in_features)
-        _validate_features("out_features", out_features)
-        self.in_features = in_features
-        self.out_features = out_features
-        self.norm = make_norm_layer(normalize, in_features)
-        self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-
-        self.fc1 = nn.Linear(in_features, out_features, bias=bias)
-        initialize_(self.fc1, activation)
-        self.activation = resolve_activation(activation)
-
-    def forward(self, x: Tensor) -> Tensor:
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.fc1(x)
-        x = self.dropout(x)
-        return x
-
-
 class DenseMLPBlock(nn.Module):
     """Two-layer dense feed-forward block for feature-last tensors."""
 
@@ -213,6 +172,7 @@ class ParametricDenseBlock(nn.Module):
         self.norm = make_norm_layer(normalize, in_features)
         self.activation = resolve_activation(activation)
         self.layer = layer_factory(out_features)
+        initialize_(self.layer, activation)
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
 
     def forward(self, x: Tensor) -> Tensor:
@@ -220,6 +180,45 @@ class ParametricDenseBlock(nn.Module):
         x = self.activation(x)
         x = self.layer(x)
         return self.dropout(x)
+
+
+class DenseBlock(ParametricDenseBlock):
+    """Dense block with a single ``nn.Linear`` projection (norm → act → linear → dropout).
+
+    A thin, fixed-kernel specialisation of :class:`ParametricDenseBlock`: it
+    always projects with a plain ``nn.Linear``, so it has no separate internal
+    width to control (see ``hidden_features`` on the parent for that).
+    """
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: NormalizerName | None = None,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ) -> None:
+        """Initializes a DenseBlock.
+
+        Parameters:
+            in_features (int): Number of input features to the layer.
+            out_features (int): Number of output features from the layer.
+            activation (ActivationName | Callable[[torch.Tensor], torch.Tensor] | None, optional): Activation function or name. Defaults to relu.
+            normalize (str | None, optional): Normalization type ('layer', 'batch', or None).
+            dropout (float, optional): Dropout rate. Defaults to 0.0.
+            bias (bool, optional): Whether to include a bias term. Defaults to True.
+        """
+        super().__init__(
+            in_features=in_features,
+            out_features=out_features,
+            layer_factory=lambda n: nn.Linear(in_features, n, bias=bias),
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
 
 
 def make_dense_block(
@@ -253,6 +252,13 @@ def make_dense_block(
                     normalize=normalize,
                     dropout=dropout,
                     bias=bias,
+                )
+            if hidden_features is not None and hidden_features != out_features:
+                raise ValueError(
+                    "DenseBlock (kind='dense', linear_kind='linear') has a single "
+                    "projection and does not support hidden_features; use "
+                    "block_kind='mlp'/'glu'/'geglu'/'swiglu' for an internal "
+                    "expansion width."
                 )
             return DenseBlock(
                 in_features=in_features,

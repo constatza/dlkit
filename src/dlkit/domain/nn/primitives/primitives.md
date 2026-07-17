@@ -6,9 +6,12 @@ Building blocks for constructing neural network architectures in DLKit.
 
 This module provides fundamental components that serve as building blocks for larger architectures.
 
-Blocks that take an `activation` kwarg (`DenseBlock`, `ConvolutionBlock1d`,
+Blocks that take an `activation` kwarg (`DenseBlock`, `DenseMLPBlock`,
+`GatedDenseMLPBlock`, `ParametricDenseBlock`, `ConvolutionBlock1d`,
 `DeconvolutionBlock1d`, `UVGate`) initialize their `Linear`/`Conv` weights via
-`domain.nn.init.initialize_`, matched to that activation — see `nn.md`.
+`domain.nn.init.initialize_`, matched to that activation — see `nn.md`. The
+call is a safe no-op for non-`Linear`/`Conv` kernels (e.g. `FactorizedLinear`),
+which own their init instead.
 
 | Component | File | Purpose |
 |-----------|------|---------|
@@ -36,7 +39,7 @@ Available topology selector values for `make_dense_block(kind, ...)`:
 
 | Selector | Class | Pattern | Notes |
 |---|---|---|---|
-| `"dense"` | `DenseBlock` | `Norm -> activation -> Linear -> Dropout` | Single projection, useful as a pre-activation residual branch |
+| `"dense"` | `DenseBlock` | `Norm -> activation -> Linear -> Dropout` | Single projection, useful as a pre-activation residual branch; a thin `ParametricDenseBlock` subclass fixing `layer_factory` to plain `nn.Linear` |
 | `"mlp"` | `DenseMLPBlock` | `Norm -> Linear -> activation -> Dropout -> Linear -> Dropout` | Transformer-style two-layer FFN block |
 | `"glu"` | `GatedDenseMLPBlock` | `value(x) * sigmoid(gate(x)) -> Linear` | GLU-style gated FFN |
 | `"geglu"` | `GatedDenseMLPBlock` | `value(x) * GELU(gate(x)) -> Linear` | GEGLU-style gated FFN |

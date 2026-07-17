@@ -13,6 +13,8 @@ from .linear import (
 from .residual import FFNN, VarWidthFFNN
 from .scale_equivariant import (
     ScaleEquivariantEmbeddedFactorizedFFNN,
+    ScaleEquivariantEmbeddedHyperFFNN,
+    ScaleEquivariantEmbeddedMoEFFNN,
     ScaleEquivariantFFNN,
     ScaleEquivariantFiLMEmbeddedFFNN,
     ScaleEquivariantFiLMFFNN,
@@ -51,4 +53,7 @@ __all__ = [
     "EmbeddedMoEFFNN",
     # Scale-equivariant Factorized variants
     "ScaleEquivariantEmbeddedFactorizedFFNN",
+    # Scale-equivariant Hyper/MoE variants
+    "ScaleEquivariantEmbeddedHyperFFNN",
+    "ScaleEquivariantEmbeddedMoEFFNN",
 ]

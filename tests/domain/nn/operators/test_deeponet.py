@@ -14,10 +14,14 @@ from dlkit.domain.nn.operators import (
     DeepONet,
     EmbeddedDeepONet,
     FFNNDeepONet,
+    HyperDeepONet,
     IOperatorNetwork,
     IQueryOperator,
+    MoEDeepONet,
     VarWidthDeepONet,
 )
+
+from ..conftest import VarianceBand
 
 
 class TestDeepONetShapes:
@@ -276,3 +280,250 @@ class TestDeepONetContractAndProtocols:
         assert isinstance(model, IQueryOperator)
         assert isinstance(model, IOperatorNetwork)
         assert isinstance(model, DeepONet)
+
+
+#: HyperDeepONet/MoEDeepONet outputs (branch/trunk share depth N), measured
+#: ~5.1-7.1 / ~4.3-5.8 std at depths 2-32 with basis_dim=8, hidden_size=16.
+#: Not a ratio like STD_RATIO_BAND (branch/trunk combine via einsum + bias,
+#: not a single residual stream), so this is a coarse divergence guard rather
+#: than a precise calibration.
+DEEPONET_OUTPUT_STD_BAND = VarianceBand(1.0, 15.0)
+
+
+class TestHyperAndMoEDeepONetDepthStability:
+    @pytest.mark.parametrize("num_layers", [2, 4, 8, 16, 32])
+    def test_hyper_deeponet_output_std_stays_bounded_with_depth(self, num_layers: int) -> None:
+        torch.manual_seed(0)
+        model = HyperDeepONet(
+            branch_in_features=20,
+            out_features=4,
+            trunk_dim=2,
+            basis_dim=8,
+            branch_hidden_size=16,
+            branch_num_layers=num_layers,
+            trunk_hidden_size=16,
+            trunk_num_layers=num_layers,
+        )
+        model.eval()
+        with torch.no_grad():
+            branch = torch.randn(256, 20)
+            trunk = torch.randn(256, 5, 2)
+            y = model(branch, trunk)
+        std = y.std().item()
+        assert DEEPONET_OUTPUT_STD_BAND.low < std < DEEPONET_OUTPUT_STD_BAND.high, (
+            f"HyperDeepONet output std diverged at {num_layers} layers: {std:.2f}"
+        )
+
+    @pytest.mark.parametrize("num_layers", [2, 4, 8, 16, 32])
+    def test_moe_deeponet_output_std_stays_bounded_with_depth(self, num_layers: int) -> None:
+        torch.manual_seed(0)
+        model = MoEDeepONet(
+            branch_in_features=20,
+            out_features=4,
+            trunk_dim=2,
+            basis_dim=8,
+            branch_hidden_size=16,
+            branch_num_layers=num_layers,
+            branch_num_experts=4,
+            trunk_hidden_size=16,
+            trunk_num_layers=num_layers,
+            trunk_num_experts=4,
+        )
+        model.eval()
+        with torch.no_grad():
+            branch = torch.randn(256, 20)
+            trunk = torch.randn(256, 5, 2)
+            y = model(branch, trunk)
+        std = y.std().item()
+        assert DEEPONET_OUTPUT_STD_BAND.low < std < DEEPONET_OUTPUT_STD_BAND.high, (
+            f"MoEDeepONet output std diverged at {num_layers} layers: {std:.2f}"
+        )
+
+
+class TestHyperAndMoEDeepONetVariants:
+    def test_hyper_deeponet_produces_correct_shape(
+        self,
+        deeponet_branch: torch.Tensor,
+        batch_size: int,
+        n_queries: int,
+    ) -> None:
+        model = HyperDeepONet(
+            branch_in_features=20,
+            out_features=3,
+            trunk_dim=2,
+            basis_dim=8,
+            branch_hidden_size=16,
+            branch_num_layers=2,
+            trunk_hidden_size=12,
+            trunk_num_layers=2,
+        )
+        trunk = torch.randn(batch_size, n_queries, 2)
+        assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 3)
+
+    def test_moe_deeponet_produces_correct_shape(
+        self,
+        deeponet_branch: torch.Tensor,
+        batch_size: int,
+        n_queries: int,
+    ) -> None:
+        model = MoEDeepONet(
+            branch_in_features=20,
+            out_features=3,
+            trunk_dim=2,
+            basis_dim=8,
+            branch_hidden_size=16,
+            branch_num_layers=2,
+            branch_num_experts=4,
+            trunk_hidden_size=12,
+            trunk_num_layers=2,
+            trunk_num_experts=4,
+        )
+        trunk = torch.randn(batch_size, n_queries, 2)
+        assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 3)
+
+    def test_hyper_deeponet_gradient_reaches_lane_mixing_parameters(
+        self,
+        deeponet_branch: torch.Tensor,
+        batch_size: int,
+        n_queries: int,
+    ) -> None:
+        """Proves the branch/trunk hyperconnection lanes are actually wired
+        into the computation graph, not just type-correct."""
+        model = HyperDeepONet(
+            branch_in_features=20,
+            out_features=2,
+            trunk_dim=1,
+            basis_dim=4,
+            branch_hidden_size=8,
+            branch_num_layers=2,
+            trunk_hidden_size=8,
+            trunk_num_layers=2,
+        )
+        trunk = torch.randn(batch_size, n_queries, 1)
+        model(deeponet_branch, trunk).sum().backward()
+
+        branch_hyper_layer = model.branch_net.body.layers[0]
+        assert branch_hyper_layer.pre_delta.grad is not None
+        assert branch_hyper_layer.post_delta.grad is not None
+
+    def test_moe_deeponet_gradient_reaches_router(
+        self,
+        deeponet_branch: torch.Tensor,
+        batch_size: int,
+        n_queries: int,
+    ) -> None:
+        """Proves the branch/trunk MoE routers are actually wired into the
+        computation graph, not just type-correct."""
+        model = MoEDeepONet(
+            branch_in_features=20,
+            out_features=2,
+            trunk_dim=1,
+            basis_dim=4,
+            branch_hidden_size=8,
+            branch_num_layers=2,
+            branch_num_experts=3,
+            trunk_hidden_size=8,
+            trunk_num_layers=2,
+            trunk_num_experts=3,
+        )
+        trunk = torch.randn(batch_size, n_queries, 1)
+        model(deeponet_branch, trunk).sum().backward()
+
+        branch_moe_layer = model.branch_net.body.layers[0]
+        assert branch_moe_layer.router.proj.weight.grad is not None
+
+    def test_hyper_deeponet_from_context_resolves_shapes(
+        self,
+        non_flat_branch_input_shapes: dict[str, tuple[int, ...]],
+        deeponet_output_shapes: dict[str, tuple[int, ...]],
+    ) -> None:
+        model = HyperDeepONet.from_context(
+            ShapeContext(non_flat_branch_input_shapes, deeponet_output_shapes),
+            basis_dim=8,
+            branch_hidden_size=16,
+            branch_num_layers=2,
+            trunk_hidden_size=12,
+            trunk_num_layers=2,
+        )
+        assert model.branch_net.embedding_layer.in_features == 100
+        assert model.trunk_net.embedding_layer.in_features == 2
+
+    def test_hyper_deeponet_lane_hidden_features_sizes_internal_block(
+        self,
+        deeponet_branch: torch.Tensor,
+        batch_size: int,
+        n_queries: int,
+    ) -> None:
+        model = HyperDeepONet(
+            branch_in_features=20,
+            out_features=2,
+            trunk_dim=1,
+            basis_dim=4,
+            branch_hidden_size=8,
+            branch_num_layers=2,
+            branch_lane_hidden_features=32,
+            trunk_hidden_size=8,
+            trunk_num_layers=2,
+            block_kind="mlp",
+        )
+        trunk = torch.randn(batch_size, n_queries, 1)
+
+        assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 2)
+        branch_hyper_layer = model.branch_net.body.layers[0]
+        assert branch_hyper_layer.module.hidden_features == 32
+
+    def test_moe_deeponet_expert_hidden_features_sizes_internal_block(
+        self,
+        deeponet_branch: torch.Tensor,
+        batch_size: int,
+        n_queries: int,
+    ) -> None:
+        model = MoEDeepONet(
+            branch_in_features=20,
+            out_features=2,
+            trunk_dim=1,
+            basis_dim=4,
+            branch_hidden_size=8,
+            branch_num_layers=2,
+            branch_num_experts=3,
+            branch_expert_hidden_features=32,
+            trunk_hidden_size=8,
+            trunk_num_layers=2,
+            trunk_num_experts=3,
+            block_kind="swiglu",
+        )
+        trunk = torch.randn(batch_size, n_queries, 1)
+
+        assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 2)
+        branch_moe_layer = model.branch_net.body.layers[0]
+        for expert in branch_moe_layer.experts:
+            assert expert.hidden_features == 32
+
+    def test_hyper_and_moe_deeponet_implement_protocols(self) -> None:
+        for model in (
+            HyperDeepONet(
+                branch_in_features=10,
+                out_features=1,
+                trunk_dim=1,
+                basis_dim=8,
+                branch_hidden_size=8,
+                branch_num_layers=1,
+                trunk_hidden_size=8,
+                trunk_num_layers=1,
+            ),
+            MoEDeepONet(
+                branch_in_features=10,
+                out_features=1,
+                trunk_dim=1,
+                basis_dim=8,
+                branch_hidden_size=8,
+                branch_num_layers=1,
+                branch_num_experts=2,
+                trunk_hidden_size=8,
+                trunk_num_layers=1,
+                trunk_num_experts=2,
+            ),
+        ):
+            assert isinstance(model, IQueryOperator)
+            assert isinstance(model, IOperatorNetwork)
+            assert isinstance(model, DeepONet)

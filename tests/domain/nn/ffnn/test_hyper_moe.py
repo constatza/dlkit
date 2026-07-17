@@ -17,8 +17,11 @@ from dlkit.domain.nn.primitives import (
 
 from ..conftest import VarianceBand
 
-#: EmbeddedHyperFFNN/EmbeddedMoEFFNN bodies, measured ~1.48-2.20 / ~1.56-2.13 at depths 8-64.
-STD_RATIO_BAND = VarianceBand(1.0, 2.5)
+#: EmbeddedHyperFFNN/EmbeddedMoEFFNN bodies, measured ~2.22-2.94 / ~2.02-2.26 at depths
+#: 8-64 now that ParametricDenseBlock applies activation-matched init (consistent with
+#: DenseBlock/DenseMLPBlock/GatedDenseMLPBlock) instead of silently falling back to
+#: PyTorch's default nn.Linear init.
+STD_RATIO_BAND = VarianceBand(1.0, 3.2)
 
 
 @pytest.mark.parametrize("model_type", [EmbeddedHyperFFNN, EmbeddedMoEFFNN])
@@ -148,6 +151,65 @@ def test_embedded_hyper_ffnn_deep_output_std_stays_bounded(num_layers: int) -> N
     assert STD_RATIO_BAND.low < ratio < STD_RATIO_BAND.high, (
         f"Output std diverged at {num_layers} layers: {ratio:.2f}x"
     )
+
+
+def test_embedded_hyper_ffnn_lane_hidden_features_sizes_internal_block() -> None:
+    model = EmbeddedHyperFFNN(
+        in_features=3,
+        out_features=5,
+        hidden_size=8,
+        num_layers=2,
+        block_kind="mlp",
+        lane_hidden_features=32,
+    )
+
+    out = model(torch.randn(4, 3))
+
+    assert out.shape == (4, 5)
+    for layer in model.body.layers:
+        hyper_layer = cast(HyperConnection, layer)
+        block = cast(nn.Module, hyper_layer.module)
+        assert block.hidden_features == 32
+
+
+def test_embedded_moe_ffnn_expert_hidden_features_sizes_internal_block() -> None:
+    model = EmbeddedMoEFFNN(
+        in_features=3,
+        out_features=5,
+        hidden_size=8,
+        num_layers=2,
+        num_experts=3,
+        block_kind="swiglu",
+        expert_hidden_features=32,
+    )
+
+    out = model(torch.randn(4, 3))
+
+    assert out.shape == (4, 5)
+    for moe_layer in model.body.layers:
+        routed_layer = cast(SparseMoE, moe_layer)
+        for expert in routed_layer.experts:
+            assert expert.hidden_features == 32
+
+
+@pytest.mark.parametrize("model_type", [EmbeddedHyperFFNN, EmbeddedMoEFFNN])
+def test_default_parametric_block_rejects_differing_hidden_features(
+    model_type: type[nn.Module],
+) -> None:
+    kwargs: dict[str, int] = {"num_experts": 3} if model_type is EmbeddedMoEFFNN else {}
+    hidden_features_kwarg = (
+        "expert_hidden_features" if model_type is EmbeddedMoEFFNN else "lane_hidden_features"
+    )
+
+    with pytest.raises(ValueError, match="does not support hidden_features"):
+        model_type(
+            in_features=3,
+            out_features=5,
+            hidden_size=8,
+            num_layers=2,
+            **kwargs,
+            **{hidden_features_kwarg: 32},
+        )
 
 
 @pytest.mark.parametrize("num_layers", [8, 16, 32, 64])

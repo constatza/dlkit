@@ -1,5 +1,12 @@
 from .base import GridOperatorBase, IGridOperator, IOperatorNetwork, IQueryOperator
-from .deeponet import DeepONet, EmbeddedDeepONet, FFNNDeepONet, VarWidthDeepONet
+from .deeponet import (
+    DeepONet,
+    EmbeddedDeepONet,
+    FFNNDeepONet,
+    HyperDeepONet,
+    MoEDeepONet,
+    VarWidthDeepONet,
+)
 from .fno import FourierNeuralOperator1d
 
 __all__ = [
@@ -15,4 +22,6 @@ __all__ = [
     "VarWidthDeepONet",
     "FFNNDeepONet",
     "EmbeddedDeepONet",
+    "HyperDeepONet",
+    "MoEDeepONet",
 ]

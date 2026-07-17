@@ -79,6 +79,7 @@ def _make_projection(
 def _make_body_block(
     *,
     size: int,
+    hidden_features: int | None,
     activation: Callable[[Tensor], Tensor],
     normalize: Literal["batch", "layer"] | None,
     dropout: float,
@@ -88,6 +89,11 @@ def _make_body_block(
     block_factory: DenseBlockFactory | None,
 ) -> nn.Module:
     if block_factory is not None:
+        if hidden_features is not None:
+            raise ValueError(
+                "hidden_features cannot be combined with a custom block_factory; "
+                "the factory owns its own internal width."
+            )
         return block_factory(
             in_features=size,
             out_features=size,
@@ -100,6 +106,7 @@ def _make_body_block(
         block_kind,
         in_features=size,
         out_features=size,
+        hidden_features=hidden_features,
         activation=activation,
         normalize=normalize,
         dropout=dropout,
@@ -122,6 +129,7 @@ class EmbeddedHyperFFNN(StandardEntryConsumer, nn.Module):
         hidden_size: int | None = None,
         num_layers: int,
         num_lanes: int = 2,
+        lane_hidden_features: int | None = None,
         project: bool = True,
         block_kind: DenseBlockKind = "parametric",
         linear_kind: DenseLinearKind = "linear",
@@ -131,6 +139,21 @@ class EmbeddedHyperFFNN(StandardEntryConsumer, nn.Module):
         bias: bool = True,
         block_factory: DenseBlockFactory | None = None,
     ) -> None:
+        """Initializes an EmbeddedHyperFFNN.
+
+        Args:
+            lane_hidden_features (int | None): Internal expansion width used
+                inside each lane's transformation block (e.g. the MLP/GLU
+                bottleneck width), independent of ``hidden_size``. Defaults to
+                ``None``, which keeps the block's own default (equal to
+                ``hidden_size``). Only supported by expansion-capable
+                ``block_kind`` values (``"mlp"``, ``"glu"``, ``"geglu"``,
+                ``"swiglu"``, or ``"parametric"`` with
+                ``linear_kind="factorized"``); the default
+                ``block_kind="parametric"`` with ``linear_kind="linear"``
+                raises if this is set, since that block has a single
+                projection with no separate internal width.
+        """
         super().__init__()
         hidden = _resolve_hidden_size(hidden_size, in_features, out_features)
         _validate_body_shape(
@@ -149,6 +172,7 @@ class EmbeddedHyperFFNN(StandardEntryConsumer, nn.Module):
             "hidden_size": hidden,
             "num_layers": num_layers,
             "num_lanes": num_lanes,
+            "lane_hidden_features": lane_hidden_features,
             "project": project,
             "activation": resolved_activation_name(activation, default="gelu"),
             "normalize": normalize,
@@ -171,6 +195,7 @@ class EmbeddedHyperFFNN(StandardEntryConsumer, nn.Module):
         modules = [
             _make_body_block(
                 size=hidden,
+                hidden_features=lane_hidden_features,
                 activation=resolved_activation,
                 normalize=normalize,
                 dropout=dropout,
@@ -213,6 +238,7 @@ class EmbeddedMoEFFNN(StandardEntryConsumer, nn.Module):
         num_layers: int,
         num_experts: int,
         top_k: int = 2,
+        expert_hidden_features: int | None = None,
         project: bool = True,
         block_kind: DenseBlockKind = "parametric",
         linear_kind: DenseLinearKind = "linear",
@@ -227,6 +253,23 @@ class EmbeddedMoEFFNN(StandardEntryConsumer, nn.Module):
         bias: bool = True,
         block_factory: DenseBlockFactory | None = None,
     ) -> None:
+        """Initializes an EmbeddedMoEFFNN.
+
+        Args:
+            expert_hidden_features (int | None): Internal expansion width
+                used inside each expert block (e.g. an MLP/GLU bottleneck
+                width), independent of ``hidden_size`` — mirrors how e.g.
+                Mixtral's per-expert intermediate size differs from the
+                model's hidden size. Defaults to ``None``, which keeps the
+                block's own default (equal to ``hidden_size``). Only
+                supported by expansion-capable ``block_kind`` values
+                (``"mlp"``, ``"glu"``, ``"geglu"``, ``"swiglu"``, or
+                ``"parametric"`` with ``linear_kind="factorized"``); the
+                default ``block_kind="parametric"`` with
+                ``linear_kind="linear"`` raises if this is set, since that
+                block has a single projection with no separate internal
+                width.
+        """
         super().__init__()
         hidden = _resolve_hidden_size(hidden_size, in_features, out_features)
         _validate_body_shape(
@@ -248,6 +291,7 @@ class EmbeddedMoEFFNN(StandardEntryConsumer, nn.Module):
             "num_layers": num_layers,
             "num_experts": num_experts,
             "top_k": top_k,
+            "expert_hidden_features": expert_hidden_features,
             "project": project,
             "activation": resolved_activation_name(activation, default="gelu"),
             "normalize": normalize,
@@ -278,6 +322,7 @@ class EmbeddedMoEFFNN(StandardEntryConsumer, nn.Module):
                 experts=[
                     _make_body_block(
                         size=hidden,
+                        hidden_features=expert_hidden_features,
                         activation=resolved_activation,
                         normalize=normalize,
                         dropout=dropout,

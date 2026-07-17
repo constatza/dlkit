@@ -14,7 +14,9 @@ from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
 from dlkit.domain.nn.contracts import StandardEntryConsumer
+from dlkit.domain.nn.ffnn.hyper_moe import EmbeddedHyperFFNN, EmbeddedMoEFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN, VarWidthFFNN
+from dlkit.domain.nn.primitives import DenseBlockKind, DenseLinearKind
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
 
@@ -278,6 +280,206 @@ class FFNNDeepONet(_FlatBranchDeepONet):
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
             activation=resolved,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+        super().__init__(
+            branch_net=branch_net,
+            trunk_net=trunk_net,
+            basis_dim=basis_dim,
+            out_features=out_features,
+        )
+
+
+class HyperDeepONet(_FlatBranchDeepONet):
+    """DeepONet with Hyper-Connection branch and trunk networks.
+
+    Input/output dimensions:
+        branch input after flattening: ``(batch, flattened_branch_width)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
+        output: ``(batch, n_queries, out_features)``
+
+    Architecture dimensions:
+        branch FFNN output: ``(batch, basis_dim * out_features)``
+        trunk FFNN output: ``(batch * n_queries, basis_dim * out_features)``
+
+    Constructor dimensions:
+        ``branch_in_features``: flattened branch width
+        ``branch_in_features = prod(branch_shape)`` derived from the first input shape
+        common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
+        ``branch_in_features = n_sensors``
+        ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
+        ``basis_dim``, ``out_features``, ``branch_hidden_size``,
+        ``branch_num_layers``, ``branch_num_lanes``, ``trunk_hidden_size``,
+        ``trunk_num_layers``, ``trunk_num_lanes``
+
+    ``branch_lane_hidden_features``/``trunk_lane_hidden_features`` size each
+    lane's internal transformation independently of ``branch_hidden_size``/
+    ``trunk_hidden_size`` (default ``None`` keeps current behavior). See
+    ``EmbeddedHyperFFNN``'s ``lane_hidden_features`` for the ``block_kind``
+    compatibility caveat.
+    """
+
+    def __init__(
+        self,
+        *,
+        branch_in_features: int,
+        out_features: int,
+        trunk_dim: int,
+        basis_dim: int,
+        branch_hidden_size: int,
+        branch_num_layers: int,
+        branch_num_lanes: int = 2,
+        branch_lane_hidden_features: int | None = None,
+        trunk_hidden_size: int,
+        trunk_num_layers: int,
+        trunk_num_lanes: int = 2,
+        trunk_lane_hidden_features: int | None = None,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
+        dropout: float = 0.0,
+        bias: bool = True,
+    ) -> None:
+        latent_dim = basis_dim * out_features
+        branch_net = EmbeddedHyperFFNN(
+            in_features=branch_in_features,
+            out_features=latent_dim,
+            hidden_size=branch_hidden_size,
+            num_layers=branch_num_layers,
+            num_lanes=branch_num_lanes,
+            lane_hidden_features=branch_lane_hidden_features,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+        trunk_net = EmbeddedHyperFFNN(
+            in_features=trunk_dim,
+            out_features=latent_dim,
+            hidden_size=trunk_hidden_size,
+            num_layers=trunk_num_layers,
+            num_lanes=trunk_num_lanes,
+            lane_hidden_features=trunk_lane_hidden_features,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+        super().__init__(
+            branch_net=branch_net,
+            trunk_net=trunk_net,
+            basis_dim=basis_dim,
+            out_features=out_features,
+        )
+
+
+class MoEDeepONet(_FlatBranchDeepONet):
+    """DeepONet with Sparse-MoE branch and trunk networks.
+
+    Input/output dimensions:
+        branch input after flattening: ``(batch, flattened_branch_width)``
+        trunk input: ``(batch, n_queries, trunk_dim)``
+        output: ``(batch, n_queries, out_features)``
+
+    Architecture dimensions:
+        branch FFNN output: ``(batch, basis_dim * out_features)``
+        trunk FFNN output: ``(batch * n_queries, basis_dim * out_features)``
+
+    Constructor dimensions:
+        ``branch_in_features``: flattened branch width
+        ``branch_in_features = prod(branch_shape)`` derived from the first input shape
+        common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
+        ``branch_in_features = n_sensors``
+        ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
+        ``basis_dim``, ``out_features``, ``branch_hidden_size``,
+        ``branch_num_layers``, ``branch_num_experts``, ``trunk_hidden_size``,
+        ``trunk_num_layers``, ``trunk_num_experts``, ``top_k``
+
+    ``branch_expert_hidden_features``/``trunk_expert_hidden_features`` size
+    each expert's internal block independently of ``branch_hidden_size``/
+    ``trunk_hidden_size`` (default ``None`` keeps current behavior). See
+    ``EmbeddedMoEFFNN``'s ``expert_hidden_features`` for the ``block_kind``
+    compatibility caveat.
+
+    Routing diagnostics (``RoutingStats``) are not exposed through this
+    preset's ``forward`` — it always returns a plain output ``Tensor`` to
+    preserve the ``DeepONet``/``IQueryOperator`` contract. Construct
+    ``EmbeddedMoEFFNN(..., return_stats=True)`` directly and inject it via the
+    base ``DeepONet(branch_net=..., trunk_net=...)`` if routing stats are
+    needed.
+    """
+
+    def __init__(
+        self,
+        *,
+        branch_in_features: int,
+        out_features: int,
+        trunk_dim: int,
+        basis_dim: int,
+        branch_hidden_size: int,
+        branch_num_layers: int,
+        branch_num_experts: int,
+        branch_expert_hidden_features: int | None = None,
+        trunk_hidden_size: int,
+        trunk_num_layers: int,
+        trunk_num_experts: int,
+        trunk_expert_hidden_features: int | None = None,
+        top_k: int = 2,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        router_activation: Literal["softmax", "normalized_sigmoid"] = "softmax",
+        capacity_factor: float | None = None,
+        drop_policy: Literal["none", "drop"] = "none",
+        jitter_noise: float = 0.0,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
+        dropout: float = 0.0,
+        bias: bool = True,
+    ) -> None:
+        latent_dim = basis_dim * out_features
+        branch_net = EmbeddedMoEFFNN(
+            in_features=branch_in_features,
+            out_features=latent_dim,
+            hidden_size=branch_hidden_size,
+            num_layers=branch_num_layers,
+            num_experts=branch_num_experts,
+            expert_hidden_features=branch_expert_hidden_features,
+            top_k=top_k,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            router_activation=router_activation,
+            capacity_factor=capacity_factor,
+            drop_policy=drop_policy,
+            jitter_noise=jitter_noise,
+            return_stats=False,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+        trunk_net = EmbeddedMoEFFNN(
+            in_features=trunk_dim,
+            out_features=latent_dim,
+            hidden_size=trunk_hidden_size,
+            num_layers=trunk_num_layers,
+            num_experts=trunk_num_experts,
+            expert_hidden_features=trunk_expert_hidden_features,
+            top_k=top_k,
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            router_activation=router_activation,
+            capacity_factor=capacity_factor,
+            drop_policy=drop_policy,
+            jitter_noise=jitter_noise,
+            return_stats=False,
+            activation=activation,
             normalize=normalize,
             dropout=dropout,
             bias=bias,

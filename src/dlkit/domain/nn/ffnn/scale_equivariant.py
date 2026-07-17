@@ -16,11 +16,14 @@ from dlkit.domain.nn.ffnn.constrained import (
     _resolve_hidden_size,
 )
 from dlkit.domain.nn.ffnn.film import FiLMEmbeddedFFNN, FiLMFFNN, VarWidthFiLMFFNN
+from dlkit.domain.nn.ffnn.hyper_moe import EmbeddedHyperFFNN, EmbeddedMoEFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.primitives import (
     DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN,
     DEFAULT_SCALE_EQUIVARIANT_NORM,
     ConditionedScaleEquivariantWrapper,
+    DenseBlockKind,
+    DenseLinearKind,
     ScaleEquivariantWrapper,
 )
 from dlkit.domain.nn.types import ActivationName, NormalizerName
@@ -112,6 +115,122 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(StandardEntryConsumer, ScaleEquivar
                 activation=resolve_activation(activation),
                 normalize=normalize,
                 dropout=dropout,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+# ── Hyper-Connection / Sparse-MoE scale-equivariant variants ────────────────
+
+
+class ScaleEquivariantEmbeddedHyperFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+    """Scale-equivariant Hyper-Connection FFNN with optional projections."""
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        num_lanes: int = 2,
+        lane_hidden_features: int | None = None,
+        project: bool = True,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
+        dropout: float = 0.0,
+        bias: bool = True,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedHyperFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                num_lanes=num_lanes,
+                lane_hidden_features=lane_hidden_features,
+                project=project,
+                block_kind=block_kind,
+                linear_kind=linear_kind,
+                activation=activation,
+                normalize=normalize,
+                dropout=dropout,
+                bias=bias,
+            ),
+            norm=norm,
+            eps_gain=eps_gain,
+            keep_stats=keep_stats,
+        )
+
+
+class ScaleEquivariantEmbeddedMoEFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+    """Scale-equivariant Sparse-MoE FFNN with optional projections.
+
+    Routing diagnostics (``RoutingStats``) are not exposed through this
+    wrapper's ``forward`` — the inner ``EmbeddedMoEFFNN`` is always
+    constructed with ``return_stats=False`` so that ``ScaleEquivariantWrapper``
+    sees a plain output ``Tensor`` to normalize and rescale.
+    """
+
+    class InputSpec(_InputSpec):
+        pass
+
+    def __init__(
+        self,
+        *,
+        in_features: int,
+        out_features: int,
+        hidden_size: int | None = None,
+        num_layers: int,
+        num_experts: int,
+        top_k: int = 2,
+        expert_hidden_features: int | None = None,
+        project: bool = True,
+        block_kind: DenseBlockKind = "parametric",
+        linear_kind: DenseLinearKind = "linear",
+        router_activation: Literal["softmax", "normalized_sigmoid"] = "softmax",
+        capacity_factor: float | None = None,
+        drop_policy: Literal["none", "drop"] = "none",
+        jitter_noise: float = 0.0,
+        norm: str = _DEFAULT_NORM,
+        eps_gain: float = _DEFAULT_EPS_GAIN,
+        keep_stats: bool = False,
+        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+        normalize: Literal["batch", "layer"] | None = "layer",
+        dropout: float = 0.0,
+        bias: bool = True,
+    ) -> None:
+        super().__init__(
+            base_model=EmbeddedMoEFFNN(
+                in_features=in_features,
+                out_features=out_features,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                num_experts=num_experts,
+                top_k=top_k,
+                expert_hidden_features=expert_hidden_features,
+                project=project,
+                block_kind=block_kind,
+                linear_kind=linear_kind,
+                router_activation=router_activation,
+                capacity_factor=capacity_factor,
+                drop_policy=drop_policy,
+                jitter_noise=jitter_noise,
+                return_stats=False,
+                activation=activation,
+                normalize=normalize,
+                dropout=dropout,
+                bias=bias,
             ),
             norm=norm,
             eps_gain=eps_gain,

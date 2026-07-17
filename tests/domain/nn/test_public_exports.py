@@ -96,6 +96,18 @@ def test_public_namespaces_export_hyper_and_moe_factorized_models():
     names = (
         "EmbeddedHyperFFNN",
         "EmbeddedMoEFFNN",
+        "ScaleEquivariantEmbeddedHyperFFNN",
+        "ScaleEquivariantEmbeddedMoEFFNN",
+    )
+    for name in names:
+        assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"
+        assert hasattr(public_nn, name), f"{name!r} missing from dlkit.nn"
+
+
+def test_public_namespaces_export_hyper_and_moe_deeponet_variants():
+    names = (
+        "HyperDeepONet",
+        "MoEDeepONet",
     )
     for name in names:
         assert hasattr(domain_nn, name), f"{name!r} missing from dlkit.domain.nn"

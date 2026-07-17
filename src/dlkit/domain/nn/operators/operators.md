@@ -162,3 +162,71 @@ Constructor dimensions:
 - `branch_num_layers`
 - `trunk_hidden_size`
 - `trunk_num_layers`
+
+## `HyperDeepONet`
+
+Branch and trunk networks are `EmbeddedHyperFFNN` (Hyper-Connection composites,
+see `primitives/primitives.md` and `ffnn/ffnn.md`) instead of plain `FFNN`.
+
+Input/output dimensions:
+- branch input after flattening: `(B, flattened_branch_width)`
+- trunk input: `(B, n_queries, trunk_dim)`
+- output: `(B, n_queries, out_features)`
+
+Architecture dimensions:
+- branch `EmbeddedHyperFFNN` output: `(B, basis_dim * out_features)`
+- trunk `EmbeddedHyperFFNN` output: `(B * n_queries, basis_dim * out_features)`
+
+Constructor dimensions:
+- `branch_in_features`, `trunk_dim`, `basis_dim`, `out_features` — same
+  derivation as `FFNNDeepONet`
+- `branch_hidden_size`, `branch_num_layers`, `branch_num_lanes` (default `2`),
+  `branch_lane_hidden_features` (default `None`, see below)
+- `trunk_hidden_size`, `trunk_num_layers`, `trunk_num_lanes` (default `2`),
+  `trunk_lane_hidden_features` (default `None`)
+- `block_kind`, `linear_kind` — shared between branch and trunk, forwarded to
+  `EmbeddedHyperFFNN`'s hidden lane blocks
+
+`*_lane_hidden_features` sizes each lane's internal transformation
+independently of `*_hidden_size` (which every lane must still output, since
+the residual/lane-mixing math requires a fixed width). See
+`ffnn/ffnn.md`'s `EmbeddedHyperFFNN` section for the `block_kind`
+compatibility caveat.
+
+## `MoEDeepONet`
+
+Branch and trunk networks are `EmbeddedMoEFFNN` (sparse-MoE composites, see
+`primitives/primitives.md` and `ffnn/ffnn.md`) instead of plain `FFNN`.
+
+Input/output dimensions:
+- branch input after flattening: `(B, flattened_branch_width)`
+- trunk input: `(B, n_queries, trunk_dim)`
+- output: `(B, n_queries, out_features)`
+
+Architecture dimensions:
+- branch `EmbeddedMoEFFNN` output: `(B, basis_dim * out_features)`
+- trunk `EmbeddedMoEFFNN` output: `(B * n_queries, basis_dim * out_features)`
+
+Constructor dimensions:
+- `branch_in_features`, `trunk_dim`, `basis_dim`, `out_features` — same
+  derivation as `FFNNDeepONet`
+- `branch_hidden_size`, `branch_num_layers`, `branch_num_experts`,
+  `branch_expert_hidden_features` (default `None`, see below)
+- `trunk_hidden_size`, `trunk_num_layers`, `trunk_num_experts`,
+  `trunk_expert_hidden_features` (default `None`)
+- `top_k` (default `2`), `router_activation`, `capacity_factor`, `drop_policy`,
+  `jitter_noise` — shared between branch and trunk routers
+- `block_kind`, `linear_kind` — shared, forwarded to each expert block
+
+`*_expert_hidden_features` sizes each expert's internal block independently
+of `*_hidden_size` (which every expert must still output, since `SparseMoE`
+combines routed outputs into a fixed-width residual stream). See
+`ffnn/ffnn.md`'s `EmbeddedMoEFFNN` section for the `block_kind` compatibility
+caveat.
+
+Routing diagnostics (`RoutingStats`) are not exposed through `forward` — the
+internal `EmbeddedMoEFFNN` sub-networks are always constructed with
+`return_stats=False` so `DeepONet.forward(branch, trunk) -> Tensor` and
+`IQueryOperator` conformance hold. Build `EmbeddedMoEFFNN(...,
+return_stats=True)` directly and inject it via the base
+`DeepONet(branch_net=..., trunk_net=...)` if routing stats are needed.
