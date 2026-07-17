@@ -1,7 +1,7 @@
 """Tests for neural network utility functions.
 
-Tests make_norm_layer and build_channel_schedule for normalization
-and channel/timestep scheduling.
+Tests make_norm_layer and schedule builders for normalization and
+feature-width/channel scheduling.
 """
 
 from __future__ import annotations
@@ -10,7 +10,11 @@ import pytest
 import torch
 from torch import nn
 
-from dlkit.domain.nn.utils import build_channel_schedule, make_norm_layer
+from dlkit.domain.nn.utils import (
+    build_channel_schedule,
+    build_width_schedule,
+    make_norm_layer,
+)
 
 
 class TestMakeNormLayer:
@@ -129,3 +133,43 @@ class TestBuildChannelSchedule:
         for i in range(len(result) - 1):
             diff = result[i + 1] - result[i]
             assert abs(diff - expected_diff) <= 1  # Allow 1 for rounding
+
+
+class TestBuildWidthSchedule:
+    """Tests for dense feature-width schedule generation."""
+
+    def test_geometric_schedule_doubles_power_of_two_widths(self) -> None:
+        result = build_width_schedule(4, 64, 5)
+        assert result == [4, 8, 16, 32, 64]
+
+    def test_geometric_schedule_decreases_power_of_two_widths(self) -> None:
+        result = build_width_schedule(64, 4, 5)
+        assert result == [64, 32, 16, 8, 4]
+
+    def test_linear_schedule_uses_additive_spacing(self) -> None:
+        result = build_width_schedule(4, 16, 4, mode="linear")
+        assert result == [4, 8, 12, 16]
+
+    def test_round_to_applies_to_intermediate_widths_only(self) -> None:
+        result = build_width_schedule(6, 48, 4, round_to=8)
+        assert result == [6, 16, 24, 48]
+
+    def test_single_step_returns_start_width(self) -> None:
+        result = build_width_schedule(8, 32, 1)
+        assert result == [8]
+
+    def test_invalid_widths_raise(self) -> None:
+        with pytest.raises(ValueError, match="widths must be positive"):
+            build_width_schedule(0, 32, 3)
+
+    def test_invalid_steps_raise(self) -> None:
+        with pytest.raises(ValueError, match="steps must be >= 1"):
+            build_width_schedule(8, 32, 0)
+
+    def test_invalid_round_to_raises(self) -> None:
+        with pytest.raises(ValueError, match="round_to must be positive"):
+            build_width_schedule(8, 32, 3, round_to=0)
+
+    def test_invalid_mode_raises(self) -> None:
+        with pytest.raises(ValueError, match="Unsupported width schedule mode"):
+            build_width_schedule(8, 32, 3, mode="quadratic")  # ty: ignore[invalid-argument-type]

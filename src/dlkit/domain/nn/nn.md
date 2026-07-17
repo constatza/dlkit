@@ -73,6 +73,9 @@ The FFNN family is organized symmetrically around architecture and naming:
 - Body-only factorized/Hyper/MoE modes require `in_features == out_features == hidden_size`; projected modes expose `in_features`, `hidden_size`, and `out_features`
 - `num_layers` counts learned hidden blocks on the model's main path; pure embedding and readout projections are not included
 
+TODO: `build_width_schedule()` in `utils.py` can later feed scheduled-width
+`VarWidthFFNN`/FiLM variants once a public constructor surface is chosen.
+
 Representative exports from `dlkit.domain.nn` include:
 - dense: `VarWidthFFNN`, `FFNN`
 - FiLM-conditioned: `VarWidthFiLMFFNN`, `FiLMFFNN`, `FiLMEmbeddedFFNN`, `ScaleEquivariantVarWidthFiLMFFNN`, `ScaleEquivariantFiLMFFNN`, `ScaleEquivariantFiLMEmbeddedFFNN`
