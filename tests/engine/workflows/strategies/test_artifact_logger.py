@@ -250,7 +250,9 @@ def test_mlflow_log_model_pt2_does_not_raise(model_with_shapes: nn.Module, tmp_p
     from dlkit.engine.tracking.artifact_logger import _build_pt2_signature
 
     mlflow.set_tracking_uri(f"sqlite:///{tmp_path / 'mlflow.db'}")
-    experiment_id = mlflow.create_experiment("pt2-test")
+    experiment_id = mlflow.create_experiment(
+        "pt2-test", artifact_location=(tmp_path / "artifacts").as_uri()
+    )
     with mlflow.start_run(experiment_id=experiment_id):
         mlflow.pytorch.log_model(
             pytorch_model=model_with_shapes,

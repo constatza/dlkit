@@ -16,16 +16,34 @@ from dlkit.engine.tracking.mlflow_resource_manager import (
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 
 
+@pytest.fixture(scope="session")
+def _mlflow_isolation_paths(tmp_path_factory: pytest.TempPathFactory) -> tuple[str, str]:
+    """Session-level isolation targets shared by every test's isolation pin.
+
+    Created once via ``tmp_path_factory`` rather than per-test ``tmp_path`` —
+    this fixture is autouse and runs for every test in the suite (including
+    ones that never touch MLflow), so minting a fresh directory per test would
+    add filesystem churn to the entire suite for no isolation benefit: nothing
+    here needs to be unique per test, only inside pytest's temp tree.
+    """
+    base = tmp_path_factory.mktemp("mlflow_isolation")
+    isolation_uri = f"sqlite:///{(base / 'mlflow_isolation.db').as_posix()}"
+    isolation_artifact_root = (base / "mlflow_isolation_artifacts").as_uri()
+    return isolation_uri, isolation_artifact_root
+
+
 @pytest.fixture(autouse=True)
-def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None]:
+def mlflow_global_state_isolation(
+    _mlflow_isolation_paths: tuple[str, str],
+) -> Generator[None]:
     """Automatically isolate MLflow global state between tests.
 
     This fixture runs before and after each test to ensure clean state.
     MLflow 3.x changed the default tracking URI to ``sqlite:///mlflow.db``
     (relative to CWD).  Without an explicit override, any test that touches
     the tracking store without a URI would create that file in the project
-    root.  We redirect the default to an isolated per-test path in
-    ``tmp_path`` so all artifacts stay inside pytest's temporary tree.
+    root.  We redirect the default to an isolated path inside pytest's
+    temporary tree so all artifacts stay off the project root.
 
     Both ``mlflow.set_tracking_uri`` and ``os.environ["MLFLOW_TRACKING_URI"]``
     are set so that ``select_backend()`` (which honours SQLite env vars) also
@@ -38,32 +56,46 @@ def mlflow_global_state_isolation(tmp_path: Path) -> Generator[None]:
         which would create a stray DB in the project root.  This fixture
         therefore manages both the internal MLflow URI and the env var together,
         and re-pins them after every ``reset_global_state()`` call.
-    """
-    isolation_uri = f"sqlite:///{(tmp_path / 'mlflow_isolation.db').as_posix()}"
-    _original_uri = os.environ.get("MLFLOW_TRACKING_URI")
 
-    # Setup: pin env var + internal URI, reset any stale state, re-pin.
-    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
-    mlflow.set_tracking_uri(isolation_uri)
+        Separately, for SQLite-backed stores MLflow defaults a new
+        experiment's artifact root to ``./mlruns`` (CWD-relative) whenever
+        ``create_experiment()``/``get_or_create_experiment()`` is called
+        without an explicit ``artifact_location`` — pinning the tracking URI
+        alone does not prevent this. We pin ``_MLFLOW_SERVER_ARTIFACT_ROOT``
+        to the isolated directory so that mistake degrades to a harmless tmp
+        write instead of leaking into the project root.
+    """
+    isolation_uri, isolation_artifact_root = _mlflow_isolation_paths
+    _original_uri = os.environ.get("MLFLOW_TRACKING_URI")
+    _original_artifact_root = os.environ.get("_MLFLOW_SERVER_ARTIFACT_ROOT")
+
+    def _pin() -> None:
+        os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
+        os.environ["_MLFLOW_SERVER_ARTIFACT_ROOT"] = isolation_artifact_root
+        mlflow.set_tracking_uri(isolation_uri)
+
+    # Setup: pin env vars + internal URI, reset any stale state, re-pin.
+    _pin()
     MLflowResourceManager.reset_global_state()
     # reset_global_state() now preserves the env var, but re-pin to be explicit.
-    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
-    mlflow.set_tracking_uri(isolation_uri)
+    _pin()
 
     yield
 
     # Teardown: same order — pin → reset → re-pin.
-    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
-    mlflow.set_tracking_uri(isolation_uri)
+    _pin()
     MLflowResourceManager.reset_global_state()
-    os.environ["MLFLOW_TRACKING_URI"] = isolation_uri
-    mlflow.set_tracking_uri(isolation_uri)
+    _pin()
 
     # Restore original env state.
     if _original_uri is None:
         os.environ.pop("MLFLOW_TRACKING_URI", None)
     else:
         os.environ["MLFLOW_TRACKING_URI"] = _original_uri
+    if _original_artifact_root is None:
+        os.environ.pop("_MLFLOW_SERVER_ARTIFACT_ROOT", None)
+    else:
+        os.environ["_MLFLOW_SERVER_ARTIFACT_ROOT"] = _original_artifact_root
 
 
 @pytest.fixture

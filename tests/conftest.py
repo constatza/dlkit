@@ -384,3 +384,7 @@ def _isolate_global_component_state():
 
 
 # Import MLflow test fixtures
+from tests.fixtures.mlflow_fixtures import (  # noqa: E402,F401
+    _mlflow_isolation_paths,
+    mlflow_global_state_isolation,
+)
