@@ -9,6 +9,7 @@ from dlkit.domain.analysis.figures._backend import plt  # noqa: F401
 
 _KDE_POINTS = 300
 _KDE_MAX_POINTS = 10_000
+_TUKEY_K = 3.0
 
 
 def _flatten_and_validate(
@@ -80,7 +81,16 @@ def _error_display_range(
     errors: np.ndarray,
     display_percentiles: tuple[float, float] | None,
 ) -> tuple[float, float]:
-    """Use an explicit percentile display window when configured."""
+    """Use an explicit percentile display window when configured.
+
+    ``display_percentiles=None`` means "show the full raw range" and is
+    left untouched. When a percentile window is requested, it is further
+    clamped by a Tukey IQR fence (``[Q1 - k*IQR, Q3 + k*IQR]``), whichever
+    bound is tighter: the percentile window alone degrades for
+    heavy-tailed error distributions, since the 0.5th/99.5th percentiles
+    of a Cauchy-shaped distribution can still span 100+ units even though
+    the bulk of the mass sits within a few units of the center.
+    """
     full_lo = float(errors.min())
     full_hi = float(errors.max())
     if display_percentiles is not None:
@@ -96,7 +106,13 @@ def _error_display_range(
             [lower_percentile, upper_percentile],
         )
         if full_lo < display_lo or display_hi < full_hi:
-            return _padded_range(float(display_lo), float(display_hi))
+            lo, hi = float(display_lo), float(display_hi)
+            q1, q3 = np.percentile(errors, [25, 75])
+            iqr = float(q3 - q1)
+            if iqr > 0:
+                fence_lo, fence_hi = q1 - _TUKEY_K * iqr, q3 + _TUKEY_K * iqr
+                lo, hi = max(lo, fence_lo), min(hi, fence_hi)
+            return _padded_range(lo, hi)
     return _padded_range(full_lo, full_hi)
 
 
@@ -236,7 +252,10 @@ def error_histogram_figure(
 
     Flattens all dimensions to 1-D. Errors are raw ``targets - predictions``
     values in target units; they are not scaled or normalized. Normal and KDE
-    overlays use the displayed error distribution.
+    overlays use the displayed error distribution. The y-axis uses a log
+    density scale: regression error distributions are commonly leptokurtic
+    (a tall near-zero spike plus a much wider spread), which on a linear
+    scale flattens everything but the spike to invisible.
 
     Args:
         predictions: Model predictions, any shape; flattened to 1-D.
@@ -246,6 +265,9 @@ def error_histogram_figure(
             to NumPy; an integer fixes the bin count.
         display_percentiles: Optional ``(lower, upper)`` percentile window for
             the displayed x-axis. ``None`` uses the full raw min/max range.
+            Always additionally clamped by a Tukey IQR fence
+            (``[Q1 - 3*IQR, Q3 + 3*IQR]``) so heavy-tailed error
+            distributions don't blow out the x-axis.
 
     Returns:
         matplotlib Figure. Caller must close it.
@@ -264,7 +286,7 @@ def error_histogram_figure(
     sigma = float(displayed_errors.std())
 
     fig, ax = plt.subplots(1, 1)
-    ax.hist(displayed_errors, bins=bins, density=True, label="Errors")
+    ax.hist(displayed_errors, bins=bins, density=True, log=True, label="Errors")
 
     x = np.linspace(x_lo, x_hi, _KDE_POINTS)
     if sigma > 0:
@@ -296,7 +318,7 @@ def error_histogram_figure(
 
     ax.set_title(f"{title}\n{range_subtitle}")
     ax.set_xlabel("Error")
-    ax.set_ylabel("Density")
+    ax.set_ylabel("Density (log scale)")
     ax.set_xlim(x_lo, x_hi)
     ax.legend()
     fig.tight_layout()

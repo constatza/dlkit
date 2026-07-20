@@ -23,7 +23,12 @@ Regression residual and error plots use raw signed values computed as
 `error_histogram_figure()` uses NumPy adaptive bins by default, can limit the
 display range to an explicit percentile window supplied by the caller or
 `PlotSettings`, reports full/view ranges in the title, and overlays both a
-normal fit and an in-module Gaussian KDE.
+normal fit and an in-module Gaussian KDE. When a percentile window is active,
+it is further clamped by a Tukey IQR fence (`[Q1 - 3*IQR, Q3 + 3*IQR]`, tighter
+bound wins) since percentile clipping alone is insufficient for heavy-tailed
+error distributions. The density y-axis is log-scaled, since regression error
+distributions are commonly leptokurtic (a tall near-zero spike plus a much
+wider spread) and a linear scale flattens everything but the spike.
 
 ## IFigureGenerator protocol
 

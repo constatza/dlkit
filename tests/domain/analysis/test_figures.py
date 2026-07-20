@@ -563,6 +563,45 @@ class TestErrorHistogramFigure:
         finally:
             plt.close("all")
 
+    def test_y_axis_is_log_scale(self, small_arrays: tuple[np.ndarray, np.ndarray]) -> None:
+        """Density y-axis uses a log scale so spike-shaped errors stay visible.
+
+        Args:
+            small_arrays: Matched (predictions, targets) fixture.
+        """
+        preds, targets = small_arrays
+        fig = error_histogram_figure(preds, targets)
+        try:
+            assert fig.axes[0].get_yscale() == "log"
+        finally:
+            plt.close("all")
+
+    def test_heavy_tailed_errors_use_tukey_fence(self) -> None:
+        """A percentile window is further clamped by a Tukey IQR fence for heavy tails."""
+        rng = np.random.default_rng(0)
+        errors = rng.standard_t(1, 200_000)  # Cauchy-like: extreme heavy tails
+        preds = np.zeros_like(errors)
+        targets = errors
+        fig = error_histogram_figure(preds, targets, display_percentiles=(0.5, 99.5))
+        try:
+            x_lo, x_hi = fig.axes[0].get_xlim()
+            assert x_hi - x_lo < 20.0
+        finally:
+            plt.close("all")
+
+    def test_full_range_display_ignores_tukey_fence(self) -> None:
+        """display_percentiles=None still means the full raw range, fence or not."""
+        errors = np.array([-100.0, -0.1, 0.0, 0.1, 100.0], dtype=np.float32)
+        preds = np.zeros_like(errors)
+        targets = errors
+        fig = error_histogram_figure(preds, targets, display_percentiles=None)
+        try:
+            x_lo, x_hi = fig.axes[0].get_xlim()
+            assert x_lo <= -100.0
+            assert x_hi >= 100.0
+        finally:
+            plt.close("all")
+
 
 # ---------------------------------------------------------------------------
 # residual_vs_index_figure
