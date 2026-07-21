@@ -147,3 +147,18 @@ def test_external_file_split_strategy_loads_persisted_split(tmp_path: Path) -> N
     loaded = ExternalFileSplitStrategy(path).split()
 
     assert loaded == sample_index_split
+
+
+def test_save_split_indices_rejects_unsupported_suffix(tmp_path: Path) -> None:
+    """save_split_indices dispatches on suffix like load_split_indices, not just JSON.
+
+    Guards the ``_SPLIT_WRITERS`` registry added alongside the existing
+    ``_SPLIT_READERS`` one: an unregistered suffix (e.g. a future ``.h5``)
+    must raise loudly instead of silently writing JSON under the wrong
+    extension.
+    """
+    sample_index_split = IndexSplit(train=(0, 1), validation=(2,), test=(3,), predict=None)
+    path = tmp_path / "split.h5"
+
+    with pytest.raises(ValueError, match="Unsupported split file format"):
+        save_split_indices(sample_index_split, path)

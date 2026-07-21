@@ -19,6 +19,12 @@ _SPLIT_READERS: Mapping[str, Callable[[Path], dict]] = MappingProxyType(
     }
 )
 
+_SPLIT_WRITERS: Mapping[str, Callable[[IndexSplit], str]] = MappingProxyType(
+    {
+        ".json": lambda split: json.dumps(split.model_dump(exclude_none=True)),
+    }
+)
+
 
 def load_split_indices(path: FilePath) -> IndexSplit:
     """Load train/val/test indices from a JSON or TOML file."""
@@ -44,7 +50,7 @@ def save_split_indices(
     idx_split: IndexSplit,
     path: Path,
 ) -> None:
-    """Save index splits to a JSON file, atomically.
+    """Save index splits to a file, atomically. Format is chosen by ``path``'s suffix.
 
     Writes to a temp file in the same directory and then atomically renames
     it into place via ``os.replace`` — safe when multiple processes (e.g.
@@ -55,10 +61,17 @@ def save_split_indices(
 
     Args:
         idx_split: Resolved index split to persist.
-        path: Destination JSON file path.
+        path: Destination file path. Its suffix selects the writer (see
+            ``_SPLIT_WRITERS``); only ``.json`` is currently registered.
     """
+    suffix = path.suffix.lower()
+    writer = _SPLIT_WRITERS.get(suffix)
+    if writer is None:
+        raise ValueError(
+            f"Unsupported split file format: {suffix!r}. Supported: {sorted(_SPLIT_WRITERS)}"
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(idx_split.model_dump(exclude_none=True))
+    payload = writer(idx_split)
 
     if path.exists() and path.read_text() == payload:
         return
