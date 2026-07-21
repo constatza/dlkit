@@ -13,6 +13,13 @@ training and optimization flows.
 - `mlflow_tracker.py`: MLflow-backed tracker
 - `mlflow_run_context.py`: concrete run-context implementation
 - `binary_artifact.py`: binary-safe temp-file staging for bytes artifacts (e.g. plot PNGs)
+- `split_recovery.py`: `download_run_split()`, an explicit, user-invoked
+  helper to download the `splits/*.json` artifact logged by a prior MLflow
+  run into a local path (e.g. to recover a pre-fix run's split for
+  evaluation, or to point `data.splits.filepath` at a run trained on a
+  different machine). Never called automatically by `evaluate()` or any
+  other entrypoint — split resolution fails loudly instead of silently
+  invoking a recovery step on the caller's behalf.
 - `backend.py`, `discovery.py`, `uri_resolver.py`: explicit backend selection and URI helpers
 - `naming.py`: experiment/study naming helpers
 
@@ -72,8 +79,18 @@ training and optimization flows.
   number of open runs. This runs on every `MLflowResourceManager.__exit__`
   and is what lets sequential `train()`/`optimize()` calls share a process
   without a later call inheriting an earlier one's still-active run.
-- Split artifacts are logged after the run exists; generated splits are
-  serialized in-memory instead of being cached to local files.
+- Split artifacts are logged after the run exists. Generated splits are
+  additionally persisted to a local `splits/` file under
+  `training.trainer.default_root_dir` when that root is configured (see
+  `dlkit.infrastructure.io.io.md`), independent of MLflow artifact logging.
+- `IExperimentTracker.is_active()` (default `True`; `NullTracker` overrides
+  to `False`) is the capability query `TrackingDecorator` uses to compute
+  `tracking_enabled` for `ArtifactPolicy`, instead of a hardcoded `True`.
+  Combined with `ArtifactPolicy.remove_uploaded_files` actually being read
+  by `ArtifactLogger._log_or_skip_checkpoint` before deleting a local
+  checkpoint (previously computed but never consulted), a fully local or
+  untracked run's checkpoint is never deleted, and a real upload failure
+  correctly prevents deletion rather than being silently swallowed.
 - Optimization settings/artifact manifests should prefer
   `log_artifact_content(...)` over temp-file round trips.
 - Every `ClientBasedRunContext` method except `log_model` is wrapped in

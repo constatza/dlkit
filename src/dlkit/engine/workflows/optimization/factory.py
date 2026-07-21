@@ -290,7 +290,7 @@ class OptimizationServiceFactory:
                 "params": {
                     "seed": search.sampler.seed
                     if search.sampler.seed is not None
-                    else settings.run.seed,
+                    else settings.run.resolve_seed(),
                 },
             }
         if search.pruner:

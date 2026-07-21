@@ -354,6 +354,19 @@ class IExperimentTracker(ABC):
         """
         raise NotImplementedError
 
+    def is_active(self) -> bool:
+        """Return True when this tracker performs real experiment tracking.
+
+        Mirrors :meth:`IRunContext.is_active` at the tracker level, so callers
+        can derive tracking-dependent policy (e.g. whether to treat a run as
+        tracked for artifact-retention purposes) without an
+        ``isinstance(tracker, NullTracker)`` check.
+
+        Returns:
+            True for live tracking backends; False for null/stub trackers.
+        """
+        return True
+
     def configure(self, config: TrackingSettings) -> None:
         """Configure the tracker with backend-specific settings (no-op by default).
 
@@ -559,4 +572,8 @@ class NullTracker(IExperimentTracker):
 
     def is_local(self) -> bool:
         """Return False — null tracker has no backend."""
+        return False
+
+    def is_active(self) -> bool:
+        """Return False — null tracker performs no real tracking."""
         return False

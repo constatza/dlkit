@@ -3,12 +3,70 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 import torch
 
 from dlkit.engine.inference.config import PredictionOutput
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
+
+
+@pytest.fixture
+def simple_checkpoint(tmp_path: Path) -> Path:
+    """Minimal ``torch.nn.Linear`` checkpoint usable by any predictor-loading test.
+
+    Args:
+        tmp_path: Pytest temporary path fixture.
+
+    Returns:
+        Path: Location of the saved checkpoint file.
+    """
+    model = torch.nn.Linear(10, 5).to(torch.float32)
+    model.eval()
+
+    checkpoint_path = tmp_path / "model.ckpt"
+    checkpoint = {
+        "state_dict": model.state_dict(),
+        "dlkit_metadata": {
+            "model_settings": {
+                "name": "Linear",
+                "module_path": "torch.nn",
+                "hyper_kwargs": {"in_features": 10, "out_features": 5},
+            },
+        },
+    }
+    torch.save(checkpoint, checkpoint_path)
+    return checkpoint_path
+
+
+@pytest.fixture
+def make_inference_settings(simple_checkpoint: Path) -> Callable[..., InferenceJobConfig]:
+    """Factory fixture building an ``InferenceJobConfig`` pointed at ``simple_checkpoint``.
+
+    Args:
+        simple_checkpoint: Checkpoint path fixture backing the built settings.
+
+    Returns:
+        Callable accepting keyword overrides for the ``run`` section (e.g.
+        ``seed``, ``precision``) that returns a validated ``InferenceJobConfig``.
+    """
+
+    def _make(**run_overrides: Any) -> InferenceJobConfig:
+        return InferenceJobConfig.model_validate(
+            {
+                "run": {"type": "predict", **run_overrides},
+                "model": {
+                    "class": "Linear",
+                    "module_path": "torch.nn",
+                    "checkpoint": str(simple_checkpoint),
+                },
+            }
+        )
+
+    return _make
 
 
 @pytest.fixture

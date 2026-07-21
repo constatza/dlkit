@@ -59,6 +59,9 @@ class _FakeTracker:
     def is_local(self) -> bool:
         return False
 
+    def is_active(self) -> bool:
+        return True
+
     @contextmanager
     def create_run(self, **_kwargs: object) -> Iterator[_FakeRunContext]:
         yield _FakeRunContext(run_id=next(self._run_ids))

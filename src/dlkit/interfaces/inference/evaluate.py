@@ -103,7 +103,7 @@ def evaluate(
         apply_transforms=True,
     )
     try:
-        datamodule = build_inference_datamodule(settings)
+        datamodule = build_inference_datamodule(settings, checkpoint_override=checkpoint_path)
         result = evaluate_checkpoint(predictor, datamodule, resolved_plots, split=split)
     finally:
         predictor.unload()

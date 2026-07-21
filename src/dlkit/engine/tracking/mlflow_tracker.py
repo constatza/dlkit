@@ -181,6 +181,14 @@ class MLflowTracker(IExperimentTracker):
         """
         return isinstance(self._backend, LocalSqliteBackend)
 
+    def is_active(self) -> bool:
+        """Return True — MLflow tracker performs real experiment tracking.
+
+        Returns:
+            Always True for this backend.
+        """
+        return True
+
     def has_active_parent_run(self) -> bool:
         """Report whether an active parent run already exists for nesting."""
         if self._resource_manager is None:

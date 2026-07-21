@@ -40,7 +40,11 @@ DLKit no longer uses a global project root setting.
   directory is created — only stderr is used.
 - `locations.py` should be treated as DLKit-internal infrastructure only, not
   as the owner of user-facing predictions/checkpoints/splits directories.
-- Generated index splits do not create local files by default.
+- Generated index splits are persisted locally under
+  `training.trainer.default_root_dir/splits/` whenever that root is
+  configured (needed so evaluation can later reload the exact split used at
+  training time rather than regenerating one); with no local root
+  configured, a generated split stays in-memory only.
 - Durable run artifacts belong to the active tracking backend and should be
   logged through `IRunContext`.
 - Non-MLflow training outputs should be contained by Lightning under
@@ -56,6 +60,21 @@ DLKit no longer uses a global project root setting.
 - `arrays.py` owns NumPy buffer mutability handling. Callers should not need to
   special-case read-only `.npy`, `.npz`, or in-memory `ndarray` inputs before
   converting them to tensors.
-- `split_provider.py` applies configured training-split caps after split
-  generation or loading so convergence sweeps can evaluate bounded sample sizes
-  without changing durable split definitions.
+- `split_provider.py` exposes `resolve_training_split()` (producer — may
+  generate a fresh, seeded split via `RatioSplitStrategy`, or reload via
+  `ExternalFileSplitStrategy` when an explicit filepath is given; always
+  persists the resolved split when a local path is provided) and
+  `resolve_evaluation_split()` (consumer — has no ratio/seed parameters at
+  all, can only reload a persisted split file). `ExternalFileSplitStrategy`
+  lives here rather than alongside `RatioSplitStrategy` in
+  `infrastructure.types.split` specifically to avoid a `types -> io`
+  dependency cycle (`io` already depends on `types` for
+  `IndexSplit`/`SplitStrategy`). `split_provider.py` applies configured
+  training-split caps after split generation or loading so convergence
+  sweeps can evaluate bounded sample sizes without changing durable split
+  definitions.
+- `index.py`'s `save_split_indices` writes atomically (temp file in the same
+  directory + `os.replace`) and treats a destination that already exists
+  with byte-identical content as a no-op — this matters because parallel
+  Optuna trials sharing one training root can otherwise race writing the
+  same split file.

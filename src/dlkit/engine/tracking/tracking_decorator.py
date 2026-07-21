@@ -124,7 +124,7 @@ class TrackingDecorator(ITrainingExecutor):
             is_local = self._tracker.is_local()
             tracked_components = self._with_artifact_policy(
                 components,
-                tracking_enabled=True,
+                tracking_enabled=self._tracker.is_active(),
                 is_local=is_local,
             )
             if tracking_uri:
@@ -323,7 +323,7 @@ class TrackingDecorator(ITrainingExecutor):
         is_local = self._tracker.is_local()
         tracked_components = self._with_artifact_policy(
             components,
-            tracking_enabled=True,
+            tracking_enabled=self._tracker.is_active(),
             is_local=is_local,
         )
         return self._run_within_context(

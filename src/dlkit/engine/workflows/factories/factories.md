@@ -12,7 +12,13 @@
 - `build_strategy.py`: shared strategy protocol and graph strategy
 - `flexible_build_strategy.py`: flexible-array strategy
 - `generative_build_strategies.py`: generative/flow-matching strategy
-- `dataset_builder.py`: runtime dataset, split, and datamodule assembly (training)
+- `dataset_builder.py`: runtime dataset and datamodule assembly, plus split
+  resolution split by responsibility: `build_split_for_training` (producer —
+  training/optimize/converge) and `build_split_for_evaluation` (consumer —
+  inference/evaluation; never generates a split)
+- `run_output_paths.py`: `resolve_local_artifact_root()`, the single source
+  of truth for "where does this run's local output live" — used by both
+  split persistence and checkpoint dirpath pinning (`build_strategy.py`)
 - `datamodule_resolution.py`: shared `DataModuleSelector` -> `LightningDataModule`
   resolution, used by both `dataset_builder.py` (training) and
   `inference_data_factory.py` (inference)
@@ -28,8 +34,24 @@
 - Flexible contract inference delegates feature and target shape propagation to `engine.data.geometry` from a single sampled item.
 - Graph dataset assembly forwards `DATASET.root` into PyG dataset constructors so processed caches do not fall back to PyG's `???` placeholder root on Windows.
 - Runtime builders, not `tools.config`, own default module-path resolution.
-- Split generation is seeded before runtime build and remains in memory unless an
-  explicit `DATASET.split.filepath` is provided.
+- Split resolution is split by responsibility (Interface Segregation), not by
+  an optional flag on one shared method: `resolve_training_split` (producer)
+  seeds via `settings.run.resolve_seed()` and, when a local
+  `training.trainer.default_root_dir` is configured, always persists the
+  resolved split under `<root>/splits/`; `resolve_evaluation_split`
+  (consumer) has no ratio/seed parameters at all and can only reload a split
+  file — it structurally cannot regenerate one. Evaluation resolves that
+  file from an explicit `data.splits.filepath`, or auto-locates a colocated
+  `splits/*.json` next to the checkpoint's run root (the checkpoint actually
+  supplied — a caller-provided override always takes precedence over
+  `settings.model.checkpoint`, matching `load_model_from_settings`'s
+  existing override precedence). Both branches fail loudly
+  (`ConfigurationError`) rather than silently falling back to generating an
+  unrelated random split — this is the fix for a real bug where `evaluate()`
+  previously regenerated a fresh, unseeded split on every call, uncorrelated
+  with the model's actual held-out test rows. `data.splits.test_ratio`/
+  `val_ratio` are also rejected as dead config in evaluation mode, since the
+  split is always reloaded verbatim.
 - Build strategies now attach typed split-artifact metadata to
   `RuntimeComponents.artifacts` so tracking can publish the exact split used by
   the run without reading datamodule ad hoc attributes.

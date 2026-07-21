@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 
 from mlflow.exceptions import MlflowException
@@ -11,6 +12,7 @@ from dlkit.engine.tracking.artifact_logger import (
     DEFAULT_MODEL_ARTIFACT_PATH,
     TAG_LOGGED_MODEL_URI,
 )
+from dlkit.engine.tracking.split_recovery import download_run_split as _download_run_split
 
 from ._mlflow_context import create_mlflow_client, tracking_uri_context
 
@@ -71,6 +73,29 @@ def has_checkpoint_artifact(
         if e.error_code == "RESOURCE_DOES_NOT_EXIST":
             return False
         raise
+
+
+def download_run_split(
+    run_id: str,
+    destination: Path,
+    *,
+    tracking_uri: str | None = None,
+) -> Path:
+    """Download a previously trained run's persisted split for recovery.
+
+    Standalone recovery utility — not invoked automatically by ``evaluate()``.
+    Point ``data.splits.filepath`` at the returned path to reuse an old run's
+    exact held-out split rather than an unrelated regenerated one.
+
+    Args:
+        run_id: MLflow run ID that logged a ``splits/*.json`` artifact.
+        destination: Local directory to download the split file into.
+        tracking_uri: Optional explicit MLflow tracking URI override.
+
+    Returns:
+        Path to the downloaded split file.
+    """
+    return _download_run_split(run_id, destination, tracking_uri=tracking_uri)
 
 
 def register_logged_model(

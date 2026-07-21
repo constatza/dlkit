@@ -18,6 +18,7 @@ from torch import Tensor
 from dlkit.common.hooks import ParamValue
 from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
+from dlkit.engine.artifacts import ArtifactPolicy, RuntimeArtifactManifest
 from dlkit.engine.tracking.artifact_logger import (
     CHECKPOINT_ARTIFACT_DIR,
     DEFAULT_MODEL_ARTIFACT_PATH,
@@ -126,12 +127,17 @@ class _RecordingRunContext(IRunContext):
         return f"runs:/{self._run_id}/{artifact_path}"
 
 
-def _build_components(model: Any, trainer: Any = None) -> RuntimeComponents:
+def _build_components(
+    model: Any,
+    trainer: Any = None,
+    artifacts: RuntimeArtifactManifest | None = None,
+) -> RuntimeComponents:
     return RuntimeComponents(
         model=model,
         datamodule=Mock(),
         trainer=trainer,
         meta={},
+        artifacts=artifacts if artifacts is not None else RuntimeArtifactManifest(),
     )
 
 
@@ -426,7 +432,47 @@ def _mock_trainer(callbacks: list[object], checkpoint_callback: object | None = 
     return trainer
 
 
-def test_log_checkpoints_uploads_best_and_last(tmp_path: Path, job_config: JobConfig) -> None:
+def test_log_checkpoints_uploads_best_and_last_and_removes_when_policy_allows(
+    tmp_path: Path, job_config: JobConfig
+) -> None:
+    """``ArtifactPolicy.remove_uploaded_files=True`` (a genuinely remote, tracked
+    backend) removes the local copy after a successful upload."""
+    best_path = tmp_path / "best.ckpt"
+    last_path = tmp_path / "last.ckpt"
+    best_path.write_bytes(b"best")
+    last_path.write_bytes(b"last")
+
+    checkpoint_cb = ModelCheckpoint()
+    checkpoint_cb.best_model_path = str(best_path)
+    checkpoint_cb.last_model_path = str(last_path)
+    trainer = _mock_trainer(callbacks=[checkpoint_cb], checkpoint_callback=checkpoint_cb)
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(
+        model=object(),
+        trainer=trainer,
+        artifacts=RuntimeArtifactManifest(policy=ArtifactPolicy(remove_uploaded_files=True)),
+    )
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    uploaded = {path.name: artifact_dir for path, artifact_dir in run_context.logged_artifact_calls}
+    assert uploaded == {
+        "best.ckpt": CHECKPOINT_ARTIFACT_DIR,
+        "last.ckpt": CHECKPOINT_ARTIFACT_DIR,
+    }
+    # Uploaded local copies are removed after upload when the policy allows it.
+    assert not best_path.exists()
+    assert not last_path.exists()
+
+
+def test_log_checkpoints_keeps_local_files_when_policy_disallows_removal(
+    tmp_path: Path, job_config: JobConfig
+) -> None:
+    """Default ``ArtifactPolicy.remove_uploaded_files=False`` (untracked or
+    local-backend runs) keeps the local checkpoint on disk after upload, so
+    ``TrainingResult.checkpoint_path`` still resolves."""
     best_path = tmp_path / "best.ckpt"
     last_path = tmp_path / "last.ckpt"
     best_path.write_bytes(b"best")
@@ -448,9 +494,45 @@ def test_log_checkpoints_uploads_best_and_last(tmp_path: Path, job_config: JobCo
         "best.ckpt": CHECKPOINT_ARTIFACT_DIR,
         "last.ckpt": CHECKPOINT_ARTIFACT_DIR,
     }
-    # Uploaded local copies are removed after upload.
-    assert not best_path.exists()
-    assert not last_path.exists()
+    # Local copies are still uploaded but not removed when the policy forbids it.
+    assert best_path.exists()
+    assert last_path.exists()
+
+
+class _FailingUploadRunContext(_RecordingRunContext):
+    """Run context whose log_artifact always raises, simulating a failed upload."""
+
+    def log_artifact(self, artifact_path: Path, artifact_dir: str = "") -> None:
+        raise RuntimeError("simulated upload failure")
+
+
+def test_log_checkpoints_keeps_local_file_and_propagates_when_upload_fails(
+    tmp_path: Path, job_config: JobConfig
+) -> None:
+    """A failed upload must not delete the local checkpoint, even when the
+    policy would otherwise allow removal — deletion is only reachable after
+    ``log_artifact`` succeeds, and the failure itself must propagate rather
+    than being silently swallowed."""
+    best_path = tmp_path / "best.ckpt"
+    best_path.write_bytes(b"best")
+
+    checkpoint_cb = ModelCheckpoint()
+    checkpoint_cb.best_model_path = str(best_path)
+    checkpoint_cb.last_model_path = str(best_path)
+    trainer = _mock_trainer(callbacks=[checkpoint_cb], checkpoint_callback=checkpoint_cb)
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _FailingUploadRunContext()
+    components = _build_components(
+        model=object(),
+        trainer=trainer,
+        artifacts=RuntimeArtifactManifest(policy=ArtifactPolicy(remove_uploaded_files=True)),
+    )
+
+    with pytest.raises(RuntimeError, match="simulated upload failure"):
+        artifact_logger.log_checkpoints(components, run_context)
+
+    assert best_path.exists()
 
 
 def test_log_checkpoints_finds_callback_via_callbacks_fallback(

@@ -11,6 +11,7 @@ from .model_logged import (
 )
 from .model_registry import (
     build_registered_model_uri,
+    download_run_split,
     get_model_version,
     has_checkpoint_artifact,
     list_model_versions,
@@ -39,6 +40,7 @@ __all__ = [
     "list_model_versions",
     "get_model_version",
     "has_checkpoint_artifact",
+    "download_run_split",
     "register_logged_model",
     "set_registered_model_alias",
     "set_registered_model_version_tag",

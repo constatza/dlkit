@@ -10,10 +10,15 @@ path = "dlkit.infrastructure.precision"
 depends_on = []
 
 [[modules]]
+path = "dlkit.infrastructure.seeding"
+depends_on = []
+
+[[modules]]
 path = "dlkit.infrastructure"
 depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure.precision" },
+    { path = "dlkit.infrastructure.seeding" },
 ]
 
 [[modules]]
@@ -55,6 +60,7 @@ depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
+    { path = "dlkit.infrastructure.seeding" },
     { path = "dlkit.domain" },
     { path = "dlkit.engine.artifacts" },
     { path = "dlkit.engine.training.optimization" },
@@ -100,6 +106,7 @@ depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure" },
     { path = "dlkit.infrastructure.precision" },
+    { path = "dlkit.infrastructure.seeding" },
     { path = "dlkit.domain" },
     { path = "dlkit.engine.data" },
     { path = "dlkit.engine.adapters.lightning" },

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from lightning.pytorch import LightningDataModule
 
 from dlkit.common import (
@@ -47,7 +49,11 @@ def train(
     )
 
 
-def build_inference_datamodule(settings: InferenceJobConfig) -> LightningDataModule:
+def build_inference_datamodule(
+    settings: InferenceJobConfig,
+    *,
+    checkpoint_override: Path | str | None = None,
+) -> LightningDataModule:
     """Build a datamodule for inference batch iteration.
 
     No training wrapper, no loss, no optimizer. Only run/experiment, data sections.
@@ -55,6 +61,10 @@ def build_inference_datamodule(settings: InferenceJobConfig) -> LightningDataMod
 
     Args:
         settings: Inference job configuration with data section.
+        checkpoint_override: Checkpoint path supplied directly by the caller,
+            used to auto-locate a colocated split file when
+            ``data.splits.filepath`` is unset. Takes precedence over
+            ``settings.model.checkpoint``.
 
     Returns:
         Configured LightningDataModule ready for predict_dataloader iteration.
@@ -62,7 +72,7 @@ def build_inference_datamodule(settings: InferenceJobConfig) -> LightningDataMod
     Raises:
         ValueError: If data section is not configured.
     """
-    return _build_inference_datamodule(settings)
+    return _build_inference_datamodule(settings, checkpoint_override=checkpoint_override)
 
 
 # REMOVED: Old infer() and predict_with_config() functions

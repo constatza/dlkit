@@ -18,7 +18,9 @@
 - `validate_template()`
 - logged-model helpers: `search_logged_models()`, `build_logged_model_uri()`, `load_logged_model()`
 - registry helpers: `register_logged_model()`, `search_registered_models()`, `list_model_versions()`, `get_model_version()`, `set_registered_model_alias()`, `set_registered_model_version_tag()`, `set_registered_model_version_tags()`, `build_registered_model_uri()`, `load_registered_model()`
-- artifact helpers: `has_checkpoint_artifact()`
+- artifact helpers: `has_checkpoint_artifact()`, `download_run_split()`
+  (explicit, user-invoked recovery of a prior MLflow run's persisted split —
+  see `dlkit.engine.tracking.tracking.md`)
 
 ## Example
 ```python

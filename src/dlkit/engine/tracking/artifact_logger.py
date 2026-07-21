@@ -166,19 +166,29 @@ def _log_or_skip_checkpoint(
     run_context: IRunContext,
     ckpt_path: Path,
     artifact_dir: str,
+    *,
+    remove_after_upload: bool,
 ) -> None:
-    """Upload checkpoint to MLflow and remove the local copy.
+    """Upload checkpoint to MLflow and optionally remove the local copy.
 
-    For remote backends the local file is removed after upload to free disk.
-    For local backends the file is also uploaded (via MLflow's copy) and then
-    the original is removed to avoid duplicates.
+    The local file is only removed when the upload succeeds (exceptions from
+    ``log_artifact`` propagate rather than being swallowed here) AND
+    ``remove_after_upload`` is True — i.e. ``ArtifactPolicy.remove_uploaded_files``
+    for the active run, which is only set for a genuinely remote, tracked
+    backend. Local or untracked runs keep the on-disk checkpoint so
+    ``TrainingResult.checkpoint_path`` always points at a file that still
+    exists after ``api_train()`` returns.
 
     Args:
         run_context: Active ``IRunContext`` for logging.
         ckpt_path: Path to the checkpoint file.
         artifact_dir: Sub-path within the artifact store for uploaded files.
+        remove_after_upload: Whether to delete the local file after a
+            successful upload (``ArtifactPolicy.remove_uploaded_files``).
     """
     run_context.log_artifact(ckpt_path, artifact_dir)
+    if not remove_after_upload:
+        return
     try:
         ckpt_path.unlink()
         logger.debug("Removed local checkpoint after upload: {}", ckpt_path)
@@ -266,11 +276,22 @@ class ArtifactLogger:
         if last is not None and not isinstance(last, str | Path):
             last = None
 
+        remove_after_upload = components.artifacts.policy.remove_uploaded_files
         if best:
-            _log_or_skip_checkpoint(run_context, Path(best), CHECKPOINT_ARTIFACT_DIR)
+            _log_or_skip_checkpoint(
+                run_context,
+                Path(best),
+                CHECKPOINT_ARTIFACT_DIR,
+                remove_after_upload=remove_after_upload,
+            )
             logger.debug("Logged best checkpoint {}", best)
         if last and last != best:
-            _log_or_skip_checkpoint(run_context, Path(last), CHECKPOINT_ARTIFACT_DIR)
+            _log_or_skip_checkpoint(
+                run_context,
+                Path(last),
+                CHECKPOINT_ARTIFACT_DIR,
+                remove_after_upload=remove_after_upload,
+            )
             logger.debug("Logged last checkpoint {}", last)
 
     def _log_model_artifact(

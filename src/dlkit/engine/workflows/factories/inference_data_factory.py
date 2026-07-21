@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from lightning.pytorch import LightningDataModule
 
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, JobConfig
@@ -13,6 +15,8 @@ from .dataset_builder import DatasetBuilder
 
 def build_inference_datamodule(
     settings: InferenceJobConfig | object,
+    *,
+    checkpoint_override: Path | str | None = None,
 ) -> LightningDataModule:
     """Build a datamodule for inference batch iteration.
 
@@ -22,6 +26,13 @@ def build_inference_datamodule(
     Args:
         settings: Inference job configuration (InferenceJobConfig or legacy
             InferenceJobConfig) with data sections.
+        checkpoint_override: Checkpoint path supplied directly by the caller
+            (e.g. ``evaluate(checkpoint_path=...)`` or the CLI's required
+            ``CHECKPOINT`` argument), used to auto-locate a colocated split
+            file when ``data.splits.filepath`` is unset. Takes precedence
+            over ``settings.model.checkpoint``, mirroring the same override
+            precedence ``load_model_from_settings`` already applies for
+            checkpoint/weight loading.
 
     Returns:
         Configured LightningDataModule ready for predict_dataloader iteration.
@@ -46,5 +57,7 @@ def build_inference_datamodule(
     context = dataset_builder.build_context(settings)
     overrides = flexible_dataset_overrides(tuple(data.features or ()), tuple(data.targets or ()))
     dataset = dataset_builder.build_dataset(settings, context, overrides)
-    split_resolution = dataset_builder.build_split(settings, dataset)
+    split_resolution = dataset_builder.build_split_for_evaluation(
+        settings, dataset, checkpoint_override=checkpoint_override
+    )
     return build_datamodule_from_selector(data, dataset, split_resolution, context)

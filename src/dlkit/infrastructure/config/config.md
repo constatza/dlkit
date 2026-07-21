@@ -14,13 +14,18 @@ workflow-specific config views, and component-setting models.
 - load-time validation for importable component `module_path` values
 
 Precision is documented in [`../precision/precision.md`](../precision/precision.md).
+Seeding is documented in [`../seeding/seeding.md`](../seeding/seeding.md).
 
 ## Current Structure
 
 - `core/`: base settings, patching, factories, build context, TOML source
 - `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
 - `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `ConvergenceJobConfig`
-- `run_settings.py`: `RunSettings` (type, seed, precision, profile references)
+- `run_settings.py`: `RunSettings` (type, seed, precision, profile references);
+  `RunSettings.resolve_seed()` (pure seed defaulting) and the module-level
+  `apply_run_context(run)` context manager (seeds global RNG state and
+  applies the run's precision override — see
+  [`../seeding/seeding.md`](../seeding/seeding.md))
 - `plot_settings.py`: `PlotSettings` (opt-in plot artifact generation)
 - `experiment_settings.py`: `ExperimentSettings` (name, run_name, tags)
 - `model_components.py`: canonical `ModelComponentSettings`, plus loss/metric component settings

@@ -18,7 +18,6 @@ from dlkit.engine.training._executor_helpers import (
     _checkpoint_artifacts_from_callback,
     _get_lr_tuner,
     _get_optimizer,
-    _get_seed,
     _get_trainer_settings,
     _reload_best_checkpoint_weights,
     _suppress_training_runtime_warnings,
@@ -28,6 +27,7 @@ from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.tuning import ILRTunable, SupportedLRTuningPlan
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.precision.service import get_precision_service
+from dlkit.infrastructure.seeding.service import apply_global_seed
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from .interfaces import ITrainingExecutor
@@ -64,10 +64,10 @@ class VanillaExecutor(ITrainingExecutor):
             raise TypeError(
                 f"VanillaExecutor.execute requires a JobConfig, got {type(settings).__name__}"
             )
-        # Set reproducible seed from settings
-        from lightning.pytorch import seed_everything
-
-        seed_everything(_get_seed(settings), workers=True)
+        # Reseed immediately before fit() for dataloader-worker determinism.
+        # Mutates process-global RNG state (see apply_global_seed's docstring) —
+        # not thread/async-safe, matching the other two seeding chokepoints.
+        apply_global_seed(settings.run.resolve_seed(), workers=True)
 
         trainer = components.trainer
         model = components.model

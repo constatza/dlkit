@@ -11,6 +11,7 @@ from pathlib import Path
 from dlkit.common import ConfigurationError
 from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
+from dlkit.infrastructure.seeding.service import apply_global_seed
 
 from .config import PredictionOutput, PredictorConfig
 from .loading import (
@@ -103,17 +104,54 @@ def load_model_from_settings(
     auto_load: bool = True,
     precision: PrecisionStrategy | None = None,
 ) -> CheckpointPredictor:
-    """Resolve a checkpoint from inference settings or an explicit override."""
+    """Resolve a checkpoint from inference settings or an explicit override.
+
+    Chokepoint for the inference family (mirrors ``BuildFactory`` on the
+    training side): unconditionally applies ``settings.run``'s resolved seed,
+    and — when the caller does not pass an explicit ``precision`` override —
+    resolves precision from ``settings.run.get_precision_strategy()``, falling
+    through to the existing default-inference behavior (precision inferred
+    from the checkpoint) when ``settings.run.precision`` is unset.
+
+    Args:
+        settings: Inference job configuration providing the checkpoint path,
+            seed, and precision defaults.
+        checkpoint_path: Explicit checkpoint path override. Takes precedence
+            over ``settings.model.checkpoint``.
+        device: Device specification forwarded to ``load_model``.
+        batch_size: Default batch size forwarded to ``load_model``.
+        apply_transforms: Whether to apply fitted transforms from checkpoint.
+        auto_load: If True, load the model immediately.
+        precision: Optional explicit precision override. If None, resolved
+            from ``settings.run.get_precision_strategy()`` when configured.
+
+    Returns:
+        CheckpointPredictor: Reusable predictor object.
+
+    Raises:
+        ConfigurationError: If no checkpoint path is found in settings or
+            override.
+    """
+    apply_global_seed(settings.run.resolve_seed(), workers=True)
+
     resolved_checkpoint = checkpoint_path or settings.model.checkpoint
     if resolved_checkpoint is None:
         raise ConfigurationError("No checkpoint path found in settings or override.")
+
+    resolved_precision = precision
+    if resolved_precision is None:
+        try:
+            resolved_precision = settings.run.get_precision_strategy()
+        except NotImplementedError:
+            resolved_precision = None
+
     return load_model(
         checkpoint_path=resolved_checkpoint,
         device=device,
         batch_size=batch_size,
         apply_transforms=apply_transforms,
         auto_load=auto_load,
-        precision=precision,
+        precision=resolved_precision,
     )
 
 

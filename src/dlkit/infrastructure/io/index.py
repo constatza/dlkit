@@ -1,10 +1,12 @@
 """Routines for loading and saving index splits."""
 
 import json
+import os
 import tomllib
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import MappingProxyType
+from uuid import uuid4
 
 from pydantic import FilePath
 
@@ -42,8 +44,28 @@ def save_split_indices(
     idx_split: IndexSplit,
     path: Path,
 ) -> None:
-    """Save index splits to a JSON file, adding 'idx_path' metadata."""
+    """Save index splits to a JSON file, atomically.
+
+    Writes to a temp file in the same directory and then atomically renames
+    it into place via ``os.replace`` — safe when multiple processes (e.g.
+    parallel ``optimize()`` trials sharing one split path) resolve the same
+    split concurrently. When the destination already exists with
+    byte-identical content, this is a silent no-op rather than a redundant
+    write, so concurrent writers converge on one value instead of racing.
+
+    Args:
+        idx_split: Resolved index split to persist.
+        path: Destination JSON file path.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = idx_split.model_dump(exclude_none=True)
-    with path.open("w") as f:
-        json.dump(data, f)
+    payload = json.dumps(idx_split.model_dump(exclude_none=True))
+
+    if path.exists() and path.read_text() == payload:
+        return
+
+    tmp_path = path.with_name(f".{path.name}.{os.getpid()}.{uuid4().hex[:8]}.tmp")
+    try:
+        tmp_path.write_text(payload)
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)

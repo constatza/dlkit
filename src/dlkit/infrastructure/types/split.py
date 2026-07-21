@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel
-from torch import randperm
+from torch import Generator, randperm
 
 
 class IndexSplit(BaseModel):
@@ -21,13 +23,16 @@ class SplitStrategy(Protocol):
 class RatioSplitStrategy:
     """Create immutable train/val/test index splits for a dataset of size num_samples."""
 
-    def __init__(self, *, num_samples: int, test_ratio: float, val_ratio: float) -> None:
+    def __init__(self, *, num_samples: int, test_ratio: float, val_ratio: float, seed: int) -> None:
         """Create immutable train/val/test index splits for a dataset of size num_samples.
 
         Args:
             num_samples (int): Number of samples in the dataset.
             test_ratio (float): Fraction of dataflow used for testing.
             val_ratio (float): Fraction of dataflow used for validation.
+            seed (int): Seed for the local RNG used to permute indices. The
+                permutation is fully determined by this seed, independent of
+                ambient global RNG state elsewhere in the pipeline.
         """
         if num_samples < 0:
             msg = "num_samples must be a non-negative integer"
@@ -36,9 +41,11 @@ class RatioSplitStrategy:
         self.test_count = int(num_samples * test_ratio)
         self.val_count = int(num_samples * val_ratio)
         self.train_count = num_samples - self.test_count - self.val_count
+        self.seed = seed
 
     def split(self) -> IndexSplit:
-        perm = randperm(self.num_samples)
+        generator = Generator().manual_seed(self.seed)
+        perm = randperm(self.num_samples, generator=generator)
         train_count = self.train_count
         val_count = self.val_count
         test_count = self.test_count

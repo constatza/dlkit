@@ -6,6 +6,7 @@ Import as: from dlkit.mlflow import build_logged_model_uri, ...
 from dlkit.interfaces.api.functions import (
     build_logged_model_uri,
     build_registered_model_uri,
+    download_run_split,
     get_model_version,
     has_checkpoint_artifact,
     list_model_versions,
@@ -22,6 +23,7 @@ from dlkit.interfaces.api.functions import (
 __all__ = [
     "build_logged_model_uri",
     "build_registered_model_uri",
+    "download_run_split",
     "get_model_version",
     "has_checkpoint_artifact",
     "list_model_versions",

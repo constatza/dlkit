@@ -105,7 +105,11 @@ def _run_inference_impl(
         # concatenate orchestration to the engine layer.
         inference_task = progress.add_task("Running inference...", total=None)
 
-        datamodule = build_inference_datamodule(job) if job.data is not None else None
+        datamodule = (
+            build_inference_datamodule(job, checkpoint_override=checkpoint)
+            if job.data is not None
+            else None
+        )
         predictions = run_batched_prediction(predictor, datamodule)
 
         progress.remove_task(inference_task)

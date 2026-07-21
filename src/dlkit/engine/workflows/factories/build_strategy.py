@@ -23,6 +23,7 @@ from dlkit.infrastructure.config.training_settings import StoppingSettings, Trai
 from .component_builders import build_wrapper_components
 from .dataset_builder import DatasetBuilder
 from .module_defaults import with_runtime_module_defaults
+from .run_output_paths import resolve_local_artifact_root
 
 type WorkflowSettings = JobConfig
 
@@ -82,14 +83,15 @@ def build_trainer(settings: JobConfig) -> Trainer | None:
     trainer_settings = _inject_early_stopping_callback(trainer_settings, training.stopping)
 
     if _requires_explicit_local_root(trainer_settings):
-        if getattr(trainer_settings, "default_root_dir", None) is None:
+        default_root_dir = resolve_local_artifact_root(settings)
+        if default_root_dir is None:
             raise WorkflowError(
                 "TRAINING.trainer.default_root_dir is required when using local-output "
                 "trainer components such as checkpointing, loggers, or "
                 "ModelCheckpoint callbacks.",
                 {"stage": "trainer_build", "component": "trainer.default_root_dir"},
             )
-        trainer_settings = _pin_lightning_local_outputs(trainer_settings)
+        trainer_settings = _pin_lightning_local_outputs(trainer_settings, default_root_dir)
     return trainer_settings.build(session=None)
 
 
@@ -186,9 +188,19 @@ def _requires_explicit_local_root(trainer_settings: TrainerSettings) -> bool:
     return False
 
 
-def _pin_lightning_local_outputs(trainer_settings: TrainerSettings) -> TrainerSettings:
-    """Contain Lightning-owned local writes under one default root."""
-    default_root_dir = trainer_settings.default_root_dir
+def _pin_lightning_local_outputs(
+    trainer_settings: TrainerSettings, default_root_dir: Path
+) -> TrainerSettings:
+    """Contain Lightning-owned local writes under one default root.
+
+    Args:
+        trainer_settings: Trainer settings whose logger/callbacks may need pinning.
+        default_root_dir: Resolved local artifact root (via
+            ``resolve_local_artifact_root``) to pin local outputs under.
+
+    Returns:
+        TrainerSettings with logger/callback local paths pinned.
+    """
     updates: dict[str, Any] = {}
 
     if getattr(trainer_settings.logger, "name", None):
@@ -201,10 +213,8 @@ def _pin_lightning_local_outputs(trainer_settings: TrainerSettings) -> TrainerSe
     for callback in trainer_settings.callbacks:
         callback_name = getattr(callback, "name", None)
         dirpath = getattr(callback, "dirpath", None)
-        if callback_name == "ModelCheckpoint" and dirpath is None and default_root_dir is not None:
-            callback = callback.model_copy(
-                update={"dirpath": Path(default_root_dir) / "checkpoints"}
-            )
+        if callback_name == "ModelCheckpoint" and dirpath is None:
+            callback = callback.model_copy(update={"dirpath": default_root_dir / "checkpoints"})
             callbacks_changed = True
         pinned_callbacks.append(callback)
 
@@ -234,7 +244,7 @@ def _build_datamodule(
         Constructed LightningDataModule and the split artifact used by the run.
     """
     context = dataset_builder.build_context(settings)
-    split_resolution = dataset_builder.build_split(settings, dataset)
+    split_resolution = dataset_builder.build_split_for_training(settings, dataset)
     datamodule = dataset_builder.build_datamodule(
         settings,
         context,

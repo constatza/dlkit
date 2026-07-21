@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
@@ -53,6 +55,20 @@ class RunSettings(BasicSettings):
             raise NotImplementedError("No precision configured — use service default")
         return self.precision
 
+    def resolve_seed(self, *, default: int = 42) -> int:
+        """Resolve the effective global random seed for this run.
+
+        Single source of truth for seed defaulting, replacing ad hoc
+        per-call-site seed-resolution helpers.
+
+        Args:
+            default: Seed to use when ``self.seed`` is unset.
+
+        Returns:
+            int: ``self.seed`` if set, otherwise ``default``.
+        """
+        return self.seed if self.seed is not None else default
+
     @field_validator("precision", mode="before")
     @classmethod
     def _coerce_precision(cls, v: object) -> PrecisionStrategy | None:
@@ -78,3 +94,39 @@ class RunSettings(BasicSettings):
                 f"Invalid precision value {v!r}. Valid values: "
                 + ", ".join(s.value for s in PrecisionStrategy)
             ) from None
+
+
+@contextmanager
+def apply_run_context(run: RunSettings, *, workers: bool = True) -> Iterator[int]:
+    """Seed global RNG state and apply a run's precision override for a block.
+
+    Kept as a standalone function rather than a ``RunSettings`` method: the
+    class stays pure data plus pure resolution methods (``resolve_seed``,
+    ``get_precision_strategy``); the side-effecting global-state mutation
+    (RNG seeding, thread-local precision override) lives in this explicit
+    action function instead — separation of actions vs. pure functions.
+
+    Not thread/async-safe: mutates process-global RNG state. Safe for
+    today's single-threaded CLI/script entrypoints; revisit if a
+    concurrent-serving entrypoint is ever built.
+
+    Args:
+        run: RunSettings whose seed and precision are applied.
+        workers: Whether to also seed dataloader worker processes
+            (forwarded to ``lightning.pytorch.seed_everything``).
+
+    Yields:
+        int: The resolved seed that was applied.
+    """
+    from dlkit.infrastructure.precision.context import precision_override
+    from dlkit.infrastructure.seeding.service import apply_global_seed
+
+    seed = run.resolve_seed()
+    apply_global_seed(seed, workers=workers)
+    try:
+        precision_strategy = run.get_precision_strategy()
+    except NotImplementedError:
+        yield seed
+        return
+    with precision_override(precision_strategy):
+        yield seed

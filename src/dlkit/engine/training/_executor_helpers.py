@@ -18,11 +18,6 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _get_seed(settings: JobConfig) -> int:
-    """Extract seed from JobConfig."""
-    return settings.run.seed or 42
-
-
 def _get_lr_tuner(settings: JobConfig) -> Any | None:
     """Extract LR tuner settings from JobConfig."""
     return settings.training.lr_tuner if settings.training else None
