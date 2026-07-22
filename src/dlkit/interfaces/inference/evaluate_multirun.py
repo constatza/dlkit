@@ -77,7 +77,9 @@ def evaluate_multirun(
         WorkflowError: ``parent_run_id`` does not exist or has no child
             runs.
     """
-    child_run_ids = find_child_run_ids(parent_run_id=parent_run_id)
+    child_run_ids = find_child_run_ids(
+        parent_run_id=parent_run_id, tracking_uri=settings.tracking.uri
+    )
     children = tuple(
         ChildEvaluation(
             run_id=child_run_id,

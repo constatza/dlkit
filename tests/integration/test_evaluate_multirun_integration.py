@@ -233,6 +233,33 @@ def test_evaluate_multirun_evaluates_every_child_run(
                 plt.close(fig)
 
 
+def test_evaluate_multirun_with_log_to_mlflow_distinguishes_source_and_logging_runs(
+    trained_sweep: tuple[str, tuple[TrainingJobConfig, ...]],
+    multirun_inference_settings: InferenceJobConfig,
+) -> None:
+    """`ChildEvaluation.run_id` (source checkpoint's run) and its own
+    `EvaluationResult.mlflow_run_id` (the run opened to *log* that evaluation, only
+    present when `log_to_mlflow=True`) must be two genuinely distinct, non-empty run
+    ids — not merely two fields that happen to both be unset.
+    """
+    parent_run_id, _variant_settings = trained_sweep
+
+    result = evaluate_multirun(
+        multirun_inference_settings, parent_run_id=parent_run_id, log_to_mlflow=True
+    )
+
+    try:
+        assert len(result.children) == NUM_VARIANTS
+        for child in result.children:
+            assert child.run_id
+            assert child.result.mlflow_run_id
+            assert child.run_id != child.result.mlflow_run_id
+    finally:
+        for child in result.children:
+            for fig in child.result.figures.values():
+                plt.close(fig)
+
+
 def test_evaluate_multirun_raises_when_parent_has_no_children(
     monkeypatch: pytest.MonkeyPatch,
     minimal_dataset: dict[str, Path],
