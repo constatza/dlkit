@@ -104,8 +104,8 @@ def _default_checkpoint_callback_settings(stopping: StoppingSettings) -> Callbac
     """Build CallbackSettings for a bounded-file-count default ModelCheckpoint.
 
     Reuses `stopping.monitor`/`stopping.direction` rather than inventing new
-    config. `save_top_k=1` + `save_last=True` with a step/epoch-free filename
-    bounds checkpoint files to at most 2: the current best and the last.
+    config. `save_top_k=1` with a step/epoch-free filename bounds checkpoint
+    files to at most 1: the current best.
     """
     # CallbackSettings (ComponentSettings) uses extra="allow": these kwargs are
     # accepted at runtime and forwarded to ModelCheckpoint's constructor, but
@@ -116,7 +116,6 @@ def _default_checkpoint_callback_settings(stopping: StoppingSettings) -> Callbac
         monitor=stopping.monitor,  # ty: ignore[unknown-argument]
         mode=stopping.direction,  # ty: ignore[unknown-argument]
         save_top_k=1,  # ty: ignore[unknown-argument]
-        save_last=True,  # ty: ignore[unknown-argument]
         filename="best",  # ty: ignore[unknown-argument]
     )
 

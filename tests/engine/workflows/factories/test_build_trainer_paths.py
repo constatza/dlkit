@@ -159,10 +159,29 @@ def test_build_trainer_auto_injects_default_checkpoint_when_enabled_and_unconfig
     assert len(checkpoint_callbacks) == 1
     cb = checkpoint_callbacks[0]
     assert cb.save_top_k == 1
-    assert cb.save_last is True
+    # save_last is not set by the default; None is Lightning's own default for
+    # ModelCheckpoint(save_last=...) when the argument is omitted.
+    assert cb.save_last is None
     assert cb.monitor == "val/loss"
     assert cb.mode == "min"
     assert Path(cb.dirpath).resolve() == (tmp_path / "checkpoints").resolve()
+
+
+def test_build_trainer_user_supplied_checkpoint_callback_can_opt_into_save_last(
+    tmp_path: Path,
+) -> None:
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[{"name": "ModelCheckpoint", "save_last": True}],
+        enable_checkpointing=True,
+    )
+
+    trainer = build_trainer(settings)
+
+    checkpoint_callbacks = _callbacks_named(trainer, "ModelCheckpoint")
+    assert len(checkpoint_callbacks) == 1
+    cb = checkpoint_callbacks[0]
+    assert cb.save_last is True
 
 
 def test_build_trainer_respects_user_supplied_checkpoint_callback(tmp_path: Path) -> None:

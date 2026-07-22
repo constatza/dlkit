@@ -212,10 +212,10 @@ class _LossLoggingProbe(LightningModule):
         return torch.optim.Adam(self.parameters(), lr=0.1)
 
 
-def test_default_style_checkpoint_bounds_files_to_two(tmp_path, train_val_test_dataloaders):
-    """The smart-default ModelCheckpoint shape (save_top_k=1, save_last=True,
-    step/epoch-free filename) must produce at most 2 checkpoint files - not one
-    per epoch - regardless of how many epochs run.
+def test_default_style_checkpoint_bounds_files_to_one(tmp_path, train_val_test_dataloaders):
+    """The smart-default ModelCheckpoint shape (save_top_k=1, step/epoch-free
+    filename, best-only) must produce at most 1 checkpoint file - not one per
+    epoch - regardless of how many epochs run.
 
     Uses overfit_batches=1 + a tiny dataset to keep this cheap.
     """
@@ -225,7 +225,6 @@ def test_default_style_checkpoint_bounds_files_to_two(tmp_path, train_val_test_d
         monitor="val_loss",
         mode="min",
         save_top_k=1,
-        save_last=True,
         filename="best",
     )
     # Construct the real Trainer directly (not via TrainerSettings.build()) so
@@ -249,7 +248,7 @@ def test_default_style_checkpoint_bounds_files_to_two(tmp_path, train_val_test_d
     trainer.fit(model, train_dataloaders=train_loader, val_dataloaders=val_loader)
 
     ckpt_files = list(Path(tmp_path).glob("*.ckpt"))
-    assert len(ckpt_files) <= 2
+    assert len(ckpt_files) <= 1
 
 
 def test_overfit_batches_leaves_the_test_split_unrestricted(train_val_test_dataloaders):
