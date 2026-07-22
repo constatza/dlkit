@@ -76,6 +76,11 @@ def evaluate_multirun(
     Raises:
         WorkflowError: ``parent_run_id`` does not exist or has no child
             runs.
+
+    Note:
+        Evaluation is all-or-nothing: if any child ``evaluate()`` call
+        raises, it propagates immediately and aborts the whole batch — there
+        is no partial ``MultiRunResult`` for the children evaluated so far.
     """
     child_run_ids = find_child_run_ids(
         parent_run_id=parent_run_id, tracking_uri=settings.tracking.uri

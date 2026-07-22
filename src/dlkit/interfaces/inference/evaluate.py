@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from dlkit.common import ConfigurationError, EvaluationResult
-from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
+from dlkit.common.checkpoint_source import CheckpointSource, LatestRunCheckpoint, RunCheckpoint
 from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.engine.inference import (
     evaluate_checkpoint,
@@ -36,11 +36,13 @@ _DEFAULT_EVAL_PLOTS = PlotSettings(
     residual_vs_index=True,
 )
 
+_DEFAULT_EXPERIMENT_NAME = "dlkit-evaluate"
+
 
 def _resolve_checkpoint_path(
     *,
     checkpoint_path: Path | str | None,
-    run_checkpoint: RunCheckpoint | LatestRunCheckpoint | None,
+    run_checkpoint: CheckpointSource | None,
     settings: InferenceJobConfig,
 ) -> Path | str | None:
     """Resolve a single effective checkpoint path from mutually exclusive sources.
@@ -78,7 +80,7 @@ def _resolve_checkpoint_path(
         case LatestRunCheckpoint(experiment_name=experiment_name):
             resolved_run_id = find_latest_run_id(
                 experiment_name=experiment_name
-                or (settings.experiment.name if settings.experiment else "dlkit-evaluate"),
+                or (settings.experiment.name if settings.experiment else _DEFAULT_EXPERIMENT_NAME),
                 tracking_uri=tracking_uri,
             )
         case None:
@@ -95,7 +97,7 @@ def evaluate(
     settings: InferenceJobConfig,
     *,
     checkpoint_path: Path | str | None = None,
-    run_checkpoint: RunCheckpoint | LatestRunCheckpoint | None = None,
+    run_checkpoint: CheckpointSource | None = None,
     split: Literal["test", "predict"] = "test",
     plots: PlotSettings | None = None,
     log_to_mlflow: bool = False,
@@ -201,7 +203,7 @@ def evaluate(
     if log_to_mlflow:
         tracker = MLflowTracker()
         tracker.configure(settings.tracking)
-        exp_name = settings.experiment.name if settings.experiment else "dlkit-evaluate"
+        exp_name = settings.experiment.name if settings.experiment else _DEFAULT_EXPERIMENT_NAME
         with tracker, tracker.create_run(experiment_name=exp_name, run_name=run_name) as run:
             if hooks is not None and hooks.on_run_created is not None:
                 hooks.on_run_created(

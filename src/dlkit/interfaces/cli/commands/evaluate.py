@@ -15,7 +15,7 @@ import typer
 from rich.console import Console
 
 from dlkit.common import ConfigurationError
-from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
+from dlkit.common.checkpoint_source import CheckpointSource, LatestRunCheckpoint, RunCheckpoint
 from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.inference import evaluate as evaluate_api
 
@@ -68,7 +68,7 @@ def _resolve_checkpoint_selection(
     checkpoint: Path | None,
     run_id: str | None,
     latest_run: bool,
-) -> tuple[Path | None, RunCheckpoint | LatestRunCheckpoint | None]:
+) -> tuple[Path | None, CheckpointSource | None]:
     """Translate CLI checkpoint-selection flags into exactly one selector.
 
     Args:
