@@ -5,10 +5,10 @@ Fixtures fall into two families:
 - Pure-MLflow-client fixtures (`tracking_uri`, `mlflow_client`,
   `experiment_name`, `experiment_id`) for `test_run_queries.py`, which only
   needs runs to exist — not real training.
-- Real-training fixtures (`default_checkpoint_run`, `save_last_checkpoint_run`,
-  `no_checkpoint_run`) for `test_checkpoint_recovery.py`, which needs actual
-  `checkpoints/*.ckpt` artifacts logged to a real (local sqlite) MLflow
-  backend via `api_train()`.
+- Real-training fixtures (`default_checkpoint_run`, `no_checkpoint_run`) for
+  `test_checkpoint_recovery.py`, which needs actual `checkpoints/best.ckpt`
+  artifacts logged to a real (local sqlite) MLflow backend via
+  `api_train()`.
 """
 
 from __future__ import annotations
@@ -120,7 +120,6 @@ def _build_training_job_config(
     default_root_dir: Path,
     experiment_name: str,
     enable_checkpointing: bool = True,
-    callbacks: list[dict[str, Any]] | None = None,
 ) -> TrainingJobConfig:
     """Build a TrainingJobConfig for a real, MLflow-tracked training run.
 
@@ -133,9 +132,8 @@ def _build_training_job_config(
             validates it as a `DirectoryPath`).
         experiment_name: MLflow experiment name for the run.
         enable_checkpointing: Whether Lightning checkpointing is enabled.
-        callbacks: Optional explicit callback overrides (e.g. a
-            `ModelCheckpoint` with `save_last=True`). `None` uses dlkit's
-            auto-injected default (best-only) checkpoint callback.
+            When `True`, dlkit auto-injects its default best-only
+            `ModelCheckpoint` callback.
 
     Returns:
         TrainingJobConfig ready for `api_train()`.
@@ -151,8 +149,6 @@ def _build_training_job_config(
         "max_epochs": EPOCHS,
         "default_root_dir": str(default_root_dir),
     }
-    if callbacks is not None:
-        trainer_dict["callbacks"] = callbacks
 
     payload: dict[str, Any] = {
         "run": {"type": "train", "seed": 42},
@@ -207,71 +203,6 @@ def default_checkpoint_run(
         experiment_name="checkpoint_recovery_default",
     )
     return api_train(config)
-
-
-@pytest.fixture
-def save_last_checkpoint_run(
-    checkpoint_dataset: dict[str, Path], tracking_uri: str, tmp_path: Path
-) -> TrainingResult:
-    """TrainingResult for a run trained with an explicit `save_last=True` override.
-
-    Args:
-        checkpoint_dataset: Synthetic dataset fixture.
-        tracking_uri: Isolated sqlite tracking URI fixture.
-        tmp_path: Pytest temporary directory fixture.
-
-    Returns:
-        TrainingResult with `mlflow_run_id` set, logging both `best.ckpt` and
-        `last.ckpt`.
-
-    Note:
-        Works around a pre-existing, separate bug in
-        `dlkit.engine.training._executor_helpers._reload_best_checkpoint_weights`:
-        it reloads best-checkpoint weights via
-        `trainer.validate(..., ckpt_path="best")`, which makes Lightning
-        restore the `ModelCheckpoint` callback's *entire* state (including
-        `last_model_path`) from the snapshot embedded in `best.ckpt` — taken
-        before `last.ckpt` was ever written, so `last_model_path` reads back
-        as `""` by the time `ArtifactLogger.log_checkpoints` runs, and
-        `last.ckpt` never gets uploaded even though Lightning wrote it to
-        disk. Confirmed independently of dlkit via a bare
-        `lightning.pytorch.Trainer` + `ModelCheckpoint(save_last=True)`
-        reproduction. Not this task's concern to fix (it lives in
-        `engine/training`, not `engine/tracking`), so this fixture uploads
-        the genuine local `last.ckpt` Lightning produced directly via the
-        MLflow client, to exercise `download_checkpoint_artifact` against a
-        real artifact rather than leaving this scenario untestable.
-    """
-    config = _build_training_job_config(
-        feature_path=checkpoint_dataset["features"],
-        target_path=checkpoint_dataset["targets"],
-        tracking_uri=tracking_uri,
-        default_root_dir=tmp_path / "save_last_checkpoint_output",
-        experiment_name="checkpoint_recovery_save_last",
-        callbacks=[
-            {
-                "name": "ModelCheckpoint",
-                "monitor": "val/loss",
-                "mode": "min",
-                "save_top_k": 1,
-                "filename": "best",
-                "save_last": True,
-            }
-        ],
-    )
-    result = api_train(config)
-    assert result.mlflow_run_id is not None
-
-    local_last_ckpt = tmp_path / "save_last_checkpoint_output" / "checkpoints" / "last.ckpt"
-    assert local_last_ckpt.exists(), "Lightning did not write last.ckpt locally as expected"
-    client = MLflowClientFactory.create_client(tracking_uri)
-    existing = {
-        artifact.path
-        for artifact in client.list_artifacts(result.mlflow_run_id, path="checkpoints")
-    }
-    if "checkpoints/last.ckpt" not in existing:
-        client.log_artifact(result.mlflow_run_id, str(local_last_ckpt), artifact_path="checkpoints")
-    return result
 
 
 @pytest.fixture
