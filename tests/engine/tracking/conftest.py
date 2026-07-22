@@ -5,8 +5,11 @@ Fixtures fall into two families:
 - Pure-MLflow-client fixtures (`tracking_uri`, `mlflow_client`,
   `experiment_name`, `experiment_id`) for `test_run_queries.py`, which only
   needs runs to exist — not real training.
-- Real-training fixtures (`default_checkpoint_run`, `no_checkpoint_run`) for
-  `test_checkpoint_recovery.py`, which needs actual `checkpoints/best.ckpt`
+- Real-training fixtures (`default_checkpoint_run`,
+  `custom_filename_checkpoint_run`, `no_checkpoint_run`,
+  `multiple_checkpoint_files_with_best_run`,
+  `multiple_checkpoint_files_without_best_run`) for
+  `test_checkpoint_recovery.py`, which needs actual `checkpoints/*.ckpt`
   artifacts logged to a real (local sqlite) MLflow backend via
   `api_train()`.
 """
@@ -120,6 +123,7 @@ def _build_training_job_config(
     default_root_dir: Path,
     experiment_name: str,
     enable_checkpointing: bool = True,
+    callbacks: list[dict[str, Any]] | None = None,
 ) -> TrainingJobConfig:
     """Build a TrainingJobConfig for a real, MLflow-tracked training run.
 
@@ -132,8 +136,11 @@ def _build_training_job_config(
             validates it as a `DirectoryPath`).
         experiment_name: MLflow experiment name for the run.
         enable_checkpointing: Whether Lightning checkpointing is enabled.
-            When `True`, dlkit auto-injects its default best-only
-            `ModelCheckpoint` callback.
+            When `True` and `callbacks` is `None`, dlkit auto-injects its
+            default best-only `ModelCheckpoint` callback.
+        callbacks: Optional explicit callback overrides (e.g. a
+            `ModelCheckpoint` with a custom `filename=` template). `None`
+            uses dlkit's auto-injected default.
 
     Returns:
         TrainingJobConfig ready for `api_train()`.
@@ -149,6 +156,8 @@ def _build_training_job_config(
         "max_epochs": EPOCHS,
         "default_root_dir": str(default_root_dir),
     }
+    if callbacks is not None:
+        trainer_dict["callbacks"] = callbacks
 
     payload: dict[str, Any] = {
         "run": {"type": "train", "seed": 42},
@@ -206,6 +215,44 @@ def default_checkpoint_run(
 
 
 @pytest.fixture
+def custom_filename_checkpoint_run(
+    checkpoint_dataset: dict[str, Path], tracking_uri: str, tmp_path: Path
+) -> TrainingResult:
+    """TrainingResult for a run trained with a custom `ModelCheckpoint` filename template.
+
+    Proves `download_checkpoint_artifact` is name-agnostic: it must still
+    find and download the single checkpoint file even though it isn't named
+    `best.ckpt`.
+
+    Args:
+        checkpoint_dataset: Synthetic dataset fixture.
+        tracking_uri: Isolated sqlite tracking URI fixture.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        TrainingResult with `mlflow_run_id` set, logging a single checkpoint
+        file named `my-custom-name.ckpt`.
+    """
+    config = _build_training_job_config(
+        feature_path=checkpoint_dataset["features"],
+        target_path=checkpoint_dataset["targets"],
+        tracking_uri=tracking_uri,
+        default_root_dir=tmp_path / "custom_filename_checkpoint_output",
+        experiment_name="checkpoint_recovery_custom_filename",
+        callbacks=[
+            {
+                "name": "ModelCheckpoint",
+                "monitor": "val/loss",
+                "mode": "min",
+                "save_top_k": 1,
+                "filename": "my-custom-name",
+            }
+        ],
+    )
+    return api_train(config)
+
+
+@pytest.fixture
 def no_checkpoint_run(
     checkpoint_dataset: dict[str, Path], tracking_uri: str, tmp_path: Path
 ) -> TrainingResult:
@@ -228,3 +275,69 @@ def no_checkpoint_run(
         enable_checkpointing=False,
     )
     return api_train(config)
+
+
+@pytest.fixture
+def multiple_checkpoint_files_with_best_run(
+    default_checkpoint_run: TrainingResult, tracking_uri: str, tmp_path: Path
+) -> TrainingResult:
+    """A run with two files under `checkpoints/`, one of them `best.ckpt`.
+
+    Built on top of `default_checkpoint_run` (already has one real
+    `checkpoints/best.ckpt` artifact, since the default config's `filename`
+    is `"best"`), then a second, independent checkpoint file is uploaded
+    directly via the MLflow client — not by relying on training to ever
+    produce two files, since dlkit's own checkpoint config never does.
+    Exercises the `best.ckpt`-disambiguation success path.
+
+    Args:
+        default_checkpoint_run: TrainingResult with one `best.ckpt`
+            artifact already logged.
+        tracking_uri: Isolated sqlite tracking URI fixture.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        TrainingResult whose run now has two files under `checkpoints/`,
+        including `best.ckpt`.
+    """
+    assert default_checkpoint_run.mlflow_run_id is not None
+    extra_ckpt = tmp_path / "extra.ckpt"
+    extra_ckpt.write_bytes(b"not a real checkpoint, just a second file")
+
+    client = MLflowClientFactory.create_client(tracking_uri)
+    client.log_artifact(
+        default_checkpoint_run.mlflow_run_id, str(extra_ckpt), artifact_path="checkpoints"
+    )
+    return default_checkpoint_run
+
+
+@pytest.fixture
+def multiple_checkpoint_files_without_best_run(
+    custom_filename_checkpoint_run: TrainingResult, tracking_uri: str, tmp_path: Path
+) -> TrainingResult:
+    """A run with two files under `checkpoints/`, neither of them `best.ckpt`.
+
+    Built on top of `custom_filename_checkpoint_run` (already has one real
+    `checkpoints/my-custom-name.ckpt` artifact), then a second, independent,
+    non-`best.ckpt`-named file is uploaded directly via the MLflow client.
+    Exercises the unresolvable-ambiguity error path.
+
+    Args:
+        custom_filename_checkpoint_run: TrainingResult with one
+            custom-named checkpoint artifact already logged.
+        tracking_uri: Isolated sqlite tracking URI fixture.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        TrainingResult whose run now has two files under `checkpoints/`,
+        neither named `best.ckpt`.
+    """
+    assert custom_filename_checkpoint_run.mlflow_run_id is not None
+    extra_ckpt = tmp_path / "another-extra.ckpt"
+    extra_ckpt.write_bytes(b"not a real checkpoint, just a second file")
+
+    client = MLflowClientFactory.create_client(tracking_uri)
+    client.log_artifact(
+        custom_filename_checkpoint_run.mlflow_run_id, str(extra_ckpt), artifact_path="checkpoints"
+    )
+    return custom_filename_checkpoint_run
