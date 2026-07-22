@@ -15,7 +15,7 @@ import pytest
 
 from dlkit.common.errors import WorkflowError
 from dlkit.common.results import MultiRunResult
-from dlkit.engine.tracking.mlflow_tracker import MLFLOW_DEFAULT_EXPERIMENT, MLflowTracker
+from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.tracking.run_queries import find_child_run_ids
 from dlkit.engine.training.vanilla_executor import VanillaExecutor
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
@@ -168,17 +168,7 @@ def trained_sweep(
     parent_run_ids: list[str] = []
     orchestrator.run_sweep(
         variants=variants,
-        # `MultiRunOrchestrator._run_one()` opens each child run without forwarding
-        # `experiment_name`, so `MLflowResourceManager.create_run()` places every
-        # child under its own default (`MLFLOW_DEFAULT_EXPERIMENT`) rather than the
-        # parent's experiment — even though the `mlflow.parentRunId` tag is still set
-        # correctly. `find_child_run_ids()` only searches within the parent run's own
-        # experiment, so parent and children must share one here for discovery to
-        # work; naming the parent's experiment `MLFLOW_DEFAULT_EXPERIMENT` makes the
-        # child's implicit default land in the same place. This is a real
-        # interoperability gap between `MultiRunOrchestrator` and `find_child_run_ids`,
-        # not something this test should paper over silently — see the task report.
-        experiment_name=MLFLOW_DEFAULT_EXPERIMENT,
+        experiment_name="sweep_experiment",
         parent_run_name="sweep_parent",
         on_sweep_complete=lambda parent_run, _results: parent_run_ids.append(parent_run.run_id),
     )

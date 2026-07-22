@@ -127,12 +127,12 @@ class MultiRunOrchestrator:
                             is_outermost=True,
                         )
                     )
-                results = tuple(self._run_one(v) for v in variants)
+                results = tuple(self._run_one(v, experiment_name) for v in variants)
                 if on_sweep_complete is not None:
                     on_sweep_complete(parent_run, results)
                 return results
 
-    def _run_one(self, variant: RunVariant) -> TrainingResult:
+    def _run_one(self, variant: RunVariant, experiment_name: str) -> TrainingResult:
         """Execute one variant as a nested child run.
 
         Fires ``on_run_created`` immediately after opening the child run
@@ -144,11 +144,15 @@ class MultiRunOrchestrator:
 
         Args:
             variant: The run specification to execute.
+            experiment_name: MLflow experiment name shared with the parent
+                run, so the child run lands in the same experiment instead
+                of the tracker's default.
 
         Returns:
             TrainingResult from the training executor.
         """
         with self._tracker.create_run(
+            experiment_name=experiment_name,
             run_name=variant.run_name,
             nested=True,
             tags=variant.tags,

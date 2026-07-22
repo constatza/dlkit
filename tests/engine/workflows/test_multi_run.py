@@ -6,18 +6,24 @@ Covers:
 - run_sweep() calls executor.execute exactly once per variant
 - run_sweep() calls on_sweep_complete exactly once with (parent_run_ctx, results)
 - run_sweep() returns a tuple of the correct length
+- run_sweep() places every child run in the parent's own experiment (real
+  MLflow backend, not mocked) rather than the tracker's default experiment
 """
 
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError, dataclass
+from pathlib import Path
 from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
+import torch
+from mlflow import MlflowClient
 
 from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.common.results import TrainingResult
+from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.workflows.multi_run import (
     IMultiRunOrchestrator,
@@ -196,6 +202,77 @@ def orchestrator_with_hooks(
         executor=mock_executor,
         tracker=tracker,
         hooks=hooks,
+    )
+
+
+@pytest.fixture
+def real_tracker(tmp_path: Path) -> MLflowTracker:
+    """Real MLflowTracker backed by a local sqlite file.
+
+    Used only by the experiment-placement regression test below: the mock
+    tracker used everywhere else in this file stubs out ``create_run``
+    entirely, so it can't catch a bug in *which* experiment a child run
+    actually lands in. This fixture exercises real
+    ``MLflowResourceManager.create_run()`` experiment resolution instead.
+
+    Args:
+        tmp_path: Pytest-provided temp directory for the sqlite file.
+
+    Returns:
+        MLflowTracker: Configured against an isolated sqlite backend.
+    """
+    tracker = MLflowTracker()
+    tracker.configure(
+        TrackingSettings(backend="mlflow", uri=f"sqlite:///{(tmp_path / 'mlflow.db').as_posix()}")
+    )
+    return tracker
+
+
+@pytest.fixture
+def real_build_factory() -> MagicMock:
+    """Mock BuildFactory returning RuntimeComponents with a real loggable model.
+
+    Unlike ``mock_build_factory``'s ``DummyModel`` (a plain dataclass — fine
+    behind a fully-mocked tracker, but not a real ``torch.nn.Module``), the
+    real MLflow-backed tracker used by ``real_orchestrator`` exercises actual
+    model-artifact logging, which requires a genuine ``torch.nn.Module``.
+    ``trainer=None`` skips callback injection/checkpoint-dir resolution
+    entirely, keeping this fixture minimal.
+
+    Returns:
+        MagicMock: Build factory mock.
+    """
+    components = RuntimeComponents(
+        model=cast("Any", torch.nn.Identity()),
+        datamodule=MagicMock(),
+        trainer=None,
+        meta={},
+    )
+    build_factory = MagicMock()
+    build_factory.build_components = MagicMock(return_value=components)
+    return build_factory
+
+
+@pytest.fixture
+def real_orchestrator(
+    real_build_factory: MagicMock,
+    mock_executor: MagicMock,
+    real_tracker: MLflowTracker,
+) -> MultiRunOrchestrator:
+    """MultiRunOrchestrator wired with a real MLflow-backed tracker.
+
+    Args:
+        real_build_factory: Build factory mock returning a real, loggable model.
+        mock_executor: Executor mock (no real training needed).
+        real_tracker: Real sqlite-backed MLflowTracker.
+
+    Returns:
+        MultiRunOrchestrator: Instance under test.
+    """
+    return MultiRunOrchestrator(
+        build_factory=real_build_factory,
+        executor=mock_executor,
+        tracker=real_tracker,
     )
 
 
@@ -442,3 +519,55 @@ def test_run_sweep_fires_on_run_created_for_parent_and_variants(
 
     assert [event.kind for event in recorded_run_creations] == ["sweep", "train", "train"]
     assert [event.is_outermost for event in recorded_run_creations] == [True, False, False]
+
+
+# ---------------------------------------------------------------------------
+# Experiment placement regression test (real MLflow backend)
+# ---------------------------------------------------------------------------
+
+
+def test_run_sweep_places_child_runs_in_parent_experiment(
+    real_orchestrator: MultiRunOrchestrator,
+    real_tracker: MLflowTracker,
+    variant_a: RunVariant,
+    variant_b: RunVariant,
+) -> None:
+    """Every child run must land in the parent's own experiment.
+
+    Regression test for a bug where `_run_one()` never forwarded
+    `experiment_name` into `tracker.create_run()`, so
+    `MLflowResourceManager.create_run()` resolved each child run's
+    experiment independently and placed it under the tracker's default
+    (`"DLKit"`) experiment instead of the sweep's actual experiment —
+    breaking `find_child_run_ids()`, which only searches within the
+    parent run's own experiment. Uses an experiment name that is
+    deliberately NOT `"DLKit"` so this test would have caught the bug.
+
+    Args:
+        real_orchestrator: Orchestrator wired with a real sqlite-backed tracker.
+        real_tracker: The same real tracker, used to fetch a client for assertions.
+        variant_a: First variant.
+        variant_b: Second variant.
+    """
+    parent_run_ids: list[str] = []
+
+    real_orchestrator.run_sweep(
+        variants=[variant_a, variant_b],
+        experiment_name="my-custom-experiment",
+        parent_run_name="parent",
+        on_sweep_complete=lambda parent_run, _results: parent_run_ids.append(parent_run.run_id),
+    )
+
+    client = MlflowClient(tracking_uri=real_tracker.get_tracking_uri())
+    parent = client.get_run(parent_run_ids[0])
+    custom_experiment = client.get_experiment_by_name("my-custom-experiment")
+    assert custom_experiment is not None
+    assert parent.info.experiment_id == custom_experiment.experiment_id
+
+    children = client.search_runs(
+        [parent.info.experiment_id],
+        filter_string=f"tags.mlflow.parentRunId = '{parent.info.run_id}'",
+    )
+    assert len(children) == 2
+    for child in children:
+        assert child.info.experiment_id == parent.info.experiment_id
