@@ -173,3 +173,30 @@ SAVE_PREDICTIONS_FLAG = Annotated[
 When enabled, prediction results are saved to disk in the output directory.
 The output format depends on the model and data type (arrays, graphs, etc.).
 """
+
+
+# ============================================================================
+# Evaluation-Specific Parameters
+# ============================================================================
+
+SPLIT_PARAM = Annotated[
+    str,
+    typer.Option("--split", help="Labeled split to evaluate against: 'test' or 'predict'."),
+]
+"""Labeled split selector for evaluation commands.
+
+Chooses which labeled partition an evaluation runs against: ``"test"`` (the
+held-out test partition) or ``"predict"`` (the predict partition, for
+datamodules where it also carries labels). Shared by `evaluate` and
+`evaluate-multirun`.
+"""
+
+OUTPUT_DIR_PARAM = Annotated[
+    Path | None,
+    typer.Option("--output-dir", help="Directory to save generated figures locally."),
+]
+"""Local output directory for evaluation figures.
+
+When provided, evaluation commands save their generated figures as PNG files
+under this directory. Shared by `evaluate` and `evaluate-multirun`.
+"""

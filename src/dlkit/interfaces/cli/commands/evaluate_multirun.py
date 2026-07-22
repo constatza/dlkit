@@ -19,8 +19,7 @@ from dlkit.interfaces.inference import evaluate_multirun as evaluate_multirun_ap
 from ..adapters.config_adapter import load_config
 from ..adapters.result_presenter import present_multirun_evaluation_result
 from ..middleware.error_handler import handle_cli_errors
-from ..params import CONFIG_PATH_ARG, MLFLOW_FLAG
-from .evaluate import OUTPUT_DIR_PARAM, SPLIT_PARAM
+from ..params import CONFIG_PATH_ARG, MLFLOW_FLAG, OUTPUT_DIR_PARAM, SPLIT_PARAM
 
 app = typer.Typer(
     name="evaluate-multirun",

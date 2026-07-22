@@ -26,7 +26,9 @@ from ..params import (
     BATCH_SIZE_PARAM,
     CONFIG_PATH_ARG,
     MLFLOW_FLAG,
+    OUTPUT_DIR_PARAM,
     RUN_NAME_PARAM,
+    SPLIT_PARAM,
 )
 
 app = typer.Typer(
@@ -59,16 +61,6 @@ LATEST_RUN_FLAG = Annotated[
         help="Resolve the checkpoint from the most recently started MLflow run "
         "in the configured experiment.",
     ),
-]
-
-SPLIT_PARAM = Annotated[
-    str,
-    typer.Option("--split", help="Labeled split to evaluate against: 'test' or 'predict'."),
-]
-
-OUTPUT_DIR_PARAM = Annotated[
-    Path | None,
-    typer.Option("--output-dir", help="Directory to save generated figures locally."),
 ]
 
 
