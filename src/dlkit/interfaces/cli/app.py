@@ -23,6 +23,7 @@ from dlkit.infrastructure.utils.logging_config import (
 from .commands import config, convert, optimize
 from .commands import converge as converge
 from .commands import evaluate as evaluate
+from .commands import evaluate_multirun as evaluate_multirun
 from .commands import predict as predict
 from .commands import train as train
 
@@ -61,6 +62,11 @@ app.add_typer(
     evaluate.app,
     name="evaluate",
     help="📊 Evaluation — Stats/plots for a trained checkpoint against labeled data",
+)
+app.add_typer(
+    evaluate_multirun.app,
+    name="evaluate-multirun",
+    help="📊 Multirun evaluation — Batch-evaluate every child run of a sweep",
 )
 
 # Keep other command groups

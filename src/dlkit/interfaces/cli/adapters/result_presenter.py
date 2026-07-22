@@ -12,7 +12,9 @@ from rich.table import Table
 from rich.text import Text
 
 from dlkit.common import EvaluationResult, InferenceResult, OptimizationResult, TrainingResult
+from dlkit.common.results import MultiRunResult
 from dlkit.interfaces.cli.presenters import summarize
+from dlkit.interfaces.inference import ChildEvaluation
 
 
 def present_training_result(result: TrainingResult, console: Console) -> None:
@@ -111,6 +113,34 @@ def present_evaluation_result(
             fig_path = output_dir / f"{name}.png"
             fig.savefig(fig_path, dpi=300, bbox_inches="tight")
         console.print(f"Figures saved to: {output_dir}", style="yellow")
+
+
+def present_multirun_evaluation_result(
+    result: MultiRunResult[ChildEvaluation], console: Console, output_dir: Path | None = None
+) -> None:
+    """Present a multirun evaluation result: one child evaluation per run.
+
+    Loops `present_evaluation_result` per child under a run-id header — no new
+    rendering framework, matching `present_evaluation_result`'s own style.
+
+    Args:
+        result: Multirun evaluation result to display.
+        console: Rich console for output.
+        output_dir: If provided, save each child's figures as local PNG files
+            under `output_dir / child.run_id` (see `present_evaluation_result`).
+    """
+    header_text = Text()
+    header_text.append("📊 Multirun Evaluation Results\n\n", style="bold blue")
+    header_text.append(f"Parent run: {result.parent_run_id}\n", style="yellow")
+    header_text.append(f"Children: {len(result.children)} evaluated\n", style="cyan")
+
+    header_panel = Panel.fit(header_text, title="Multirun Evaluation Summary", border_style="blue")
+    console.print(header_panel)
+
+    for child in result.children:
+        console.print(f"\n[bold]Run: {child.run_id}[/bold]")
+        child_output_dir = output_dir / child.run_id if output_dir is not None else None
+        present_evaluation_result(child.result, console, output_dir=child_output_dir)
 
 
 def present_optimization_result(result: OptimizationResult, console: Console) -> None:
