@@ -4,9 +4,15 @@ Import as: from dlkit.mlflow import build_logged_model_uri, ...
 """
 
 from dlkit.interfaces.api.functions import (
+    LatestRunCheckpoint,
+    MultiRunResult,
+    RunCheckpoint,
     build_logged_model_uri,
     build_registered_model_uri,
+    download_checkpoint_artifact,
     download_run_split,
+    find_child_run_ids,
+    find_latest_run_id,
     get_model_version,
     has_checkpoint_artifact,
     list_model_versions,
@@ -35,4 +41,10 @@ __all__ = [
     "set_registered_model_alias",
     "set_registered_model_version_tag",
     "set_registered_model_version_tags",
+    "find_latest_run_id",
+    "find_child_run_ids",
+    "download_checkpoint_artifact",
+    "RunCheckpoint",
+    "LatestRunCheckpoint",
+    "MultiRunResult",
 ]

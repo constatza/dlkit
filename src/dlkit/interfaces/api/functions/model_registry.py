@@ -12,6 +12,11 @@ from dlkit.engine.tracking.artifact_logger import (
     DEFAULT_MODEL_ARTIFACT_PATH,
     TAG_LOGGED_MODEL_URI,
 )
+from dlkit.engine.tracking.checkpoint_recovery import (
+    download_checkpoint_artifact as _download_checkpoint_artifact,
+)
+from dlkit.engine.tracking.run_queries import find_child_run_ids as _find_child_run_ids
+from dlkit.engine.tracking.run_queries import find_latest_run_id as _find_latest_run_id
 from dlkit.engine.tracking.split_recovery import download_run_split as _download_run_split
 
 from ._mlflow_context import create_mlflow_client, tracking_uri_context
@@ -96,6 +101,72 @@ def download_run_split(
         Path to the downloaded split file.
     """
     return _download_run_split(run_id, destination, tracking_uri=tracking_uri)
+
+
+def find_latest_run_id(
+    *,
+    experiment_name: str,
+    tracking_uri: str | None = None,
+) -> str:
+    """Find the most recently started active run in an experiment.
+
+    Standalone recovery utility for run-based checkpoint selection — not
+    invoked automatically by ``evaluate()``. Use the returned run id with
+    ``download_checkpoint_artifact()`` or a ``RunCheckpoint`` override.
+
+    Args:
+        experiment_name: Name of the MLflow experiment to search.
+        tracking_uri: Optional explicit MLflow tracking URI override.
+
+    Returns:
+        Run id of the active run with the latest ``start_time`` in the
+        experiment.
+    """
+    return _find_latest_run_id(experiment_name=experiment_name, tracking_uri=tracking_uri)
+
+
+def find_child_run_ids(
+    *,
+    parent_run_id: str,
+    tracking_uri: str | None = None,
+) -> tuple[str, ...]:
+    """Find all active child runs of a parent run, in creation order.
+
+    Standalone recovery utility for run-based checkpoint selection — not
+    invoked automatically by ``evaluate()``.
+
+    Args:
+        parent_run_id: MLflow run id of the parent run.
+        tracking_uri: Optional explicit MLflow tracking URI override.
+
+    Returns:
+        Tuple of child run ids ordered by ascending ``start_time``.
+    """
+    return _find_child_run_ids(parent_run_id=parent_run_id, tracking_uri=tracking_uri)
+
+
+def download_checkpoint_artifact(
+    run_id: str,
+    destination: Path,
+    *,
+    tracking_uri: str | None = None,
+) -> Path:
+    """Download a run's logged checkpoint artifact to a local directory.
+
+    Standalone recovery utility — not invoked automatically by
+    ``evaluate()``. Point the model's checkpoint override at the returned
+    path to reuse an old run's exact checkpoint rather than an unrelated one.
+
+    Args:
+        run_id: MLflow run id that logged a checkpoint artifact during
+            training.
+        destination: Local directory to download the checkpoint file into.
+        tracking_uri: Optional explicit MLflow tracking URI override.
+
+    Returns:
+        Path to the downloaded checkpoint file.
+    """
+    return _download_checkpoint_artifact(run_id, destination, tracking_uri=tracking_uri)
 
 
 def register_logged_model(

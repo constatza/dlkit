@@ -8,6 +8,7 @@ checkpoints/MLflow runs (not mocked), plus a focused unit-level test that
 
 from __future__ import annotations
 
+from importlib import import_module
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -23,6 +24,14 @@ from dlkit.engine.workflows.multi_run import MultiRunOrchestrator, RunVariant
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.interfaces.inference.evaluate_multirun import ChildEvaluation, evaluate_multirun
+
+# `dlkit.interfaces.inference`'s __init__ re-exports the `evaluate_multirun`
+# *function* under the `evaluate_multirun` attribute, shadowing the submodule
+# on the package object (same shadowing `evaluate`/`evaluate.py` already has,
+# see `tests/interfaces/inference/test_checkpoint_source.py`) — so
+# `import_module` looks the submodule up in `sys.modules` directly, sidestepping
+# the shadowing, letting us monkeypatch `find_child_run_ids` at its point of use.
+evaluate_multirun_module = import_module("dlkit.interfaces.inference.evaluate_multirun")
 
 # Same model/data shape as tests/integration/conftest.py's _make_training_job_config,
 # since InferenceJobConfig must describe the identical model + data the checkpoints
@@ -270,10 +279,7 @@ def test_evaluate_multirun_raises_when_parent_has_no_children(
             {"parent_run_id": parent_run_id},
         )
 
-    monkeypatch.setattr(
-        "dlkit.interfaces.inference.evaluate_multirun.find_child_run_ids",
-        _raise_no_children,
-    )
+    monkeypatch.setattr(evaluate_multirun_module, "find_child_run_ids", _raise_no_children)
 
     settings = _build_inference_settings(minimal_dataset)
 

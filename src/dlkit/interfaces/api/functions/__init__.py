@@ -1,5 +1,8 @@
 """API functions module."""
 
+from dlkit.common import MultiRunResult
+from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
+
 from .config import generate_template, validate_config, validate_template
 from .core import build_inference_datamodule, converge, optimize, train
 from .execution import execute
@@ -11,7 +14,10 @@ from .model_logged import (
 )
 from .model_registry import (
     build_registered_model_uri,
+    download_checkpoint_artifact,
     download_run_split,
+    find_child_run_ids,
+    find_latest_run_id,
     get_model_version,
     has_checkpoint_artifact,
     list_model_versions,
@@ -51,4 +57,11 @@ __all__ = [
     "search_logged_models",
     "build_logged_model_uri",
     "load_logged_model",
+    # Run-based checkpoint selection helpers
+    "find_latest_run_id",
+    "find_child_run_ids",
+    "download_checkpoint_artifact",
+    "RunCheckpoint",
+    "LatestRunCheckpoint",
+    "MultiRunResult",
 ]

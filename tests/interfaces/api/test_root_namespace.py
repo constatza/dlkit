@@ -63,6 +63,46 @@ class TestNamespacedShims:
         assert callable(load_model)
         assert callable(validate_checkpoint)
 
+    def test_mlflow_shim_exposes_run_based_checkpoint_selection_helpers(self) -> None:
+        from dlkit.mlflow import (
+            LatestRunCheckpoint,
+            MultiRunResult,
+            RunCheckpoint,
+            download_checkpoint_artifact,
+            find_child_run_ids,
+            find_latest_run_id,
+        )
+
+        assert RunCheckpoint is not None
+        assert LatestRunCheckpoint is not None
+        assert MultiRunResult is not None
+        assert callable(find_latest_run_id)
+        assert callable(find_child_run_ids)
+        assert callable(download_checkpoint_artifact)
+
+    def test_api_functions_expose_run_based_checkpoint_selection_helpers(self) -> None:
+        from dlkit.interfaces.api.functions import (
+            LatestRunCheckpoint,
+            MultiRunResult,
+            RunCheckpoint,
+            download_checkpoint_artifact,
+            find_child_run_ids,
+            find_latest_run_id,
+        )
+
+        assert RunCheckpoint is not None
+        assert LatestRunCheckpoint is not None
+        assert MultiRunResult is not None
+        assert callable(find_latest_run_id)
+        assert callable(find_child_run_ids)
+        assert callable(download_checkpoint_artifact)
+
+    def test_inference_package_exposes_multirun_evaluation(self) -> None:
+        from dlkit.interfaces.inference import ChildEvaluation, evaluate_multirun
+
+        assert ChildEvaluation is not None
+        assert callable(evaluate_multirun)
+
 
 class TestLifecycleHookTyping:
     """Verify the public hook contract carries concrete result types."""
