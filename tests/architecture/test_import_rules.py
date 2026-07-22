@@ -135,6 +135,7 @@ class TestImportRules:
                     r"api_train\s*\(",  # train via interfaces.api
                     r"api_optimize\s*\(",  # optimize via interfaces.api
                     r"api_evaluate\s*\(",  # evaluate via interfaces.inference
+                    r"evaluate_multirun\s*\(",  # batch-evaluate via interfaces.inference
                 ]
 
                 has_api_usage = any(re.search(pattern, content) for pattern in high_level_apis)

@@ -17,6 +17,7 @@ from .results import (
     ConvergenceResult,
     EvaluationResult,
     InferenceResult,
+    MultiRunResult,
     OptimizationResult,
     TrainingResult,
 )
@@ -39,6 +40,7 @@ __all__ = [
     "ModelLoadingError",
     "ModelState",
     "ModelStateError",
+    "MultiRunResult",
     "OptimizationResult",
     "OptimizationOverrides",
     "OutputShapes",

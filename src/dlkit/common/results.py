@@ -100,6 +100,20 @@ class EvaluationResult:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class MultiRunResult[T]:
+    """Parent run id plus one record per child run.
+
+    Generic so both eval's batch results and (potentially, as a later,
+    separate follow-up) MultiRunOrchestrator.run_sweep()'s currently-bare
+    tuple[TrainingResult, ...] can share one container shape instead of
+    each inventing its own.
+    """
+
+    parent_run_id: str
+    children: tuple[T, ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OptimizationResult:
     """Result of hyperparameter optimization workflow."""
 
