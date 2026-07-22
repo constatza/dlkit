@@ -21,6 +21,15 @@
 - artifact helpers: `has_checkpoint_artifact()`, `download_run_split()`
   (explicit, user-invoked recovery of a prior MLflow run's persisted split —
   see `dlkit.engine.tracking.tracking.md`)
+- run-based checkpoint selection helpers: `find_latest_run_id()`,
+  `find_child_run_ids()`, `download_checkpoint_artifact()` — thin wrappers
+  over `dlkit.engine.tracking.run_queries`/`checkpoint_recovery` (see
+  `dlkit.engine.tracking.tracking.md`); none is invoked automatically by
+  `evaluate()`
+- run-based checkpoint selection types: `MultiRunResult`, `RunCheckpoint`,
+  `LatestRunCheckpoint` (re-exported from `dlkit.common`/
+  `dlkit.common.checkpoint_source` for use with `evaluate()`'s
+  `run_checkpoint` parameter — see `dlkit.interfaces.inference.inference.md`)
 
 ## Example
 ```python

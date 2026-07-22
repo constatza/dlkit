@@ -22,8 +22,15 @@ implementations.
 - `evaluate()` — eval-only checkpoint stats/plots (see below)
 - `evaluate_checkpoint()`, `log_evaluation_result()` — lower-level building
   blocks `evaluate()` composes
+- `evaluate_multirun()`, `ChildEvaluation` — batch `evaluate()` over every
+  child run of a multirun/sweep parent (see below)
 
-These symbols are re-exported from `dlkit.engine.inference`.
+`load_model()`, `load_model_from_settings()`, `validate_checkpoint()`,
+`get_checkpoint_info()`, `CheckpointPredictor`, `IPredictor`,
+`PredictionOutput`, `PredictorConfig`, `evaluate_checkpoint()`, and
+`log_evaluation_result()` are re-exported from `dlkit.engine.inference`.
+`evaluate()` and `evaluate_multirun()`/`ChildEvaluation` are defined in this
+package (`evaluate.py`, `evaluate_multirun.py`) — see below for why.
 
 ## Usage
 
@@ -60,6 +67,59 @@ labeled partition to evaluate against — `predict_dataloader()` is a genuinely
 different partition from `test_dataloader()` for `GraphDataModule`-backed
 configs, so this is a real choice, not cosmetic. Pass `log_to_mlflow=True` to
 also open an MLflow run and log the metrics/figures as artifacts.
+
+`checkpoint_path` and `run_checkpoint` are mutually exclusive; passing both
+raises `ConfigurationError`. `run_checkpoint` resolves the checkpoint from a
+previously trained MLflow run instead of a local path, downloading the run's
+checkpoint artifact to a temp directory first:
+
+```python
+from dlkit.interfaces.inference import evaluate
+from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
+
+# Exact, caller-named run.
+result = evaluate(inference_settings, run_checkpoint=RunCheckpoint(run_id="abc123"))
+
+# Most recently started run in an experiment; experiment_name defaults to
+# settings.experiment.name (or "dlkit-evaluate" if that is also unset).
+result = evaluate(inference_settings, run_checkpoint=LatestRunCheckpoint())
+result = evaluate(inference_settings, run_checkpoint=LatestRunCheckpoint(experiment_name="exp"))
+```
+
+### Batch evaluation over a sweep (`evaluate_multirun()`)
+
+`evaluate_multirun()` and `ChildEvaluation` live in this package's
+`evaluate_multirun.py` and are importable as
+`from dlkit.interfaces.inference import evaluate_multirun, ChildEvaluation`.
+They are reachable at that path only — unlike `evaluate()`, they are not
+re-exported as `dlkit.evaluate_multirun` or
+`dlkit.interfaces.api.evaluate_multirun`.
+
+`evaluate_multirun()` fans a single `evaluate()` call out over every active
+child run of a multirun/sweep parent run, matching on the
+`mlflow.parentRunId` tag convention — this covers both dlkit-native nested
+sweeps (`MultiRunOrchestrator`) and externally-linked runs sharing the same
+convention:
+
+```python
+from dlkit.interfaces.inference import evaluate_multirun
+
+batch = evaluate_multirun(inference_settings, parent_run_id="parent-run-id")
+batch.parent_run_id   # "parent-run-id"
+for child in batch.children:
+    child.run_id       # the child run the checkpoint was pulled from
+    child.result        # EvaluationResult for that child
+```
+
+Returns a `MultiRunResult[ChildEvaluation]` (`dlkit.common.MultiRunResult`):
+`parent_run_id` plus one `ChildEvaluation` per active child run, in ascending
+`start_time` order. `ChildEvaluation.run_id` names the run the checkpoint was
+pulled from; this is distinct from `ChildEvaluation.result.mlflow_run_id`,
+which (only when `log_to_mlflow=True`) names the run created to log that eval
+result. `split`, `plots`, `log_to_mlflow`, `hooks`, `device`, and
+`batch_size` are forwarded unchanged to every child `evaluate()` call.
+Raises `WorkflowError` if `parent_run_id` does not exist or has no active
+child runs.
 
 ## Dependency Direction
 

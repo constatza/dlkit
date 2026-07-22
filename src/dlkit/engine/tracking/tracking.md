@@ -20,6 +20,26 @@ training and optimization flows.
   different machine). Never called automatically by `evaluate()` or any
   other entrypoint — split resolution fails loudly instead of silently
   invoking a recovery step on the caller's behalf.
+- `run_queries.py`: `find_latest_run_id(*, experiment_name, tracking_uri=None)`
+  and `find_child_run_ids(*, parent_run_id, tracking_uri=None)`, pure MLflow
+  run-lookup helpers with no artifact downloading. `find_latest_run_id`
+  resolves the active run with the latest `start_time` in an experiment;
+  `find_child_run_ids` resolves every active run tagged
+  `mlflow.parentRunId` under a given parent, ordered by ascending
+  `start_time`, regardless of whether the children came from
+  `MLflowResourceManager.create_run(nested=True)` or an externally tagged
+  run. Both raise `WorkflowError` on a missing experiment/run or a
+  zero-result search.
+- `checkpoint_recovery.py`: `download_checkpoint_artifact(run_id, destination, *, tracking_uri=None)`,
+  an explicit, user-invoked helper mirroring `split_recovery.py` that
+  downloads a run's logged checkpoint artifact under `checkpoints/` to a
+  local directory. Discovers whichever single checkpoint file actually
+  exists rather than assuming a fixed filename; if more than one file is
+  present it falls back to a file literally named `best.ckpt` as a
+  disambiguator, and raises `WorkflowError` if none of several files is so
+  named (or if the run has no checkpoint file at all). Never called
+  automatically by `evaluate()` — the caller downloads the checkpoint first,
+  then points the model's checkpoint override at the result.
 - `backend.py`, `discovery.py`, `uri_resolver.py`: explicit backend selection and URI helpers
 - `naming.py`: experiment/study naming helpers
 
