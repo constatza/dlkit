@@ -129,12 +129,14 @@ type = "multirun"
 [multirun]
 experiment_name = "sweep"
 parent_run_name = "sweep-parent"
+parent_tags = { team = "platform" }              # optional, default {}
 failure_policy = "continue_mark_parent_failed"   # optional, default "fail_fast"
 
 [[multirun.runs]]
 id = "a"
 label = "Run A"
 files = ["jobs/base.toml", "jobs/variant_a.toml"]   # merged left-to-right
+patches = { "run.seed" = 7 }                        # optional, applied after loading
 
 [[multirun.runs]]
 id = "variants"
@@ -143,10 +145,12 @@ files = "jobs/variants/*.toml"   # a string containing *, ?, or [ is glob shorth
 
 `MultiRunJobConfig` hoists the `[multirun]` table's keys onto itself (a
 `model_validator(mode="before")`) so callers read `settings.experiment_name`,
-`settings.parent_run_name`, `settings.failure_policy`, and `settings.runs`
-directly — no `.multirun` indirection. Each `[[multirun.runs]]` entry is a
-`ChildEntryConfig` (`id`, `label`, `files`, optional `run_type`, opaque
-`tags`/`params`/`metadata`).
+`settings.parent_run_name`, `settings.parent_tags`, `settings.failure_policy`,
+and `settings.runs` directly — no `.multirun` indirection. Each
+`[[multirun.runs]]` entry is a `ChildEntryConfig` (`id`, `label`, `files`,
+optional `run_type`, optional `patches`, opaque `tags`/`params`/`metadata`).
+`patches` is rejected on a glob-sourced entry (`files` containing `*`/`?`/`[`)
+— a single patch dict can't sensibly apply to every glob match.
 
 `load_job()` resolves every child entry's `files` (explicit list or glob
 pattern) to an absolute path/pattern relative to the multirun config file's

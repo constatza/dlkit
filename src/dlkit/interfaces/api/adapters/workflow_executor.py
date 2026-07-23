@@ -135,6 +135,7 @@ class EngineWorkflowExecutor:
         settings: MultiRunJobConfig,
         *,
         mlflow: bool = False,
+        hooks: LifecycleHooks | None = None,
     ) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
         """Execute a multirun sweep from a validated MultiRunJobConfig.
 
@@ -146,6 +147,8 @@ class EngineWorkflowExecutor:
                 configures tracking from the first child's own settings
                 (mlflow-flag-forced) regardless of this flag — see
                 ``dlkit.engine.workflows.entrypoints.multirun._run_sweep``.
+            hooks: Optional lifecycle hooks fired around the parent run and
+                forwarded into every child's own workflow execution.
 
         Returns:
             MultiRunResult with the parent run id, tracking URI, and one
@@ -158,13 +161,14 @@ class EngineWorkflowExecutor:
             raise TypeError(
                 f"run_multirun_config() requires MultiRunJobConfig, got {type(settings).__name__}"
             )
-        return runtime_run_multirun(settings)
+        return runtime_run_multirun(settings, hooks=hooks)
 
     def run_multirun_spec(
         self,
         spec: MultiRunSpec,
         *,
         mlflow: bool = False,
+        hooks: LifecycleHooks | None = None,
     ) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
         """Execute a multirun sweep from an already-built MultiRunSpec.
 
@@ -172,12 +176,14 @@ class EngineWorkflowExecutor:
             spec: Fully-specified sweep: parent identity plus expanded children.
             mlflow: Accepted for signature symmetry with the other executor
                 methods; has no effect — see ``run_multirun_config``'s docstring.
+            hooks: Optional lifecycle hooks fired around the parent run and
+                forwarded into every child's own workflow execution.
 
         Returns:
             MultiRunResult with the parent run id, tracking URI, and one
             ChildOutcome per child, in expansion order.
         """
-        return runtime_run_multirun_spec(spec)
+        return runtime_run_multirun_spec(spec, hooks=hooks)
 
     def execute(
         self,

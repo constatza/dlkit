@@ -147,6 +147,10 @@ class ChildEntryConfig(BasicSettings):
             glob pattern string.
         run_type: Optional ``run.type`` override for the child's own
             settings, same semantics as ``load_job()``'s ``run_type`` param.
+        patches: Optional patch mapping applied to the child's settings via
+            ``settings.patch(...)`` after loading, same semantics as
+            ``ExplicitFileSource.patches``. Ignored for glob-sourced children
+            (a single patch dict can't sensibly apply to every glob match).
         tags: MLflow tags applied to the child's run.
         params: Opaque caller-supplied parameters threaded onto the
             resulting ``RunSpec`` — never interpreted by DLKit.
@@ -158,6 +162,7 @@ class ChildEntryConfig(BasicSettings):
     label: str = ""
     files: str | list[str]
     run_type: str | None = None
+    patches: dict[str, Any] = Field(default_factory=dict)
     tags: dict[str, str] = Field(default_factory=dict)
     params: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -177,6 +182,7 @@ class MultiRunJobConfig(BasicSettings):
         experiment_name: MLflow experiment name shared by the parent and
             every child run.
         parent_run_name: MLflow name for the parent sweep run.
+        parent_tags: MLflow tags applied to the parent sweep run.
         failure_policy: How the sweep reacts when a child run fails.
         runs: Ordered child run sources.
     """
@@ -184,6 +190,7 @@ class MultiRunJobConfig(BasicSettings):
     run: RunSettings
     experiment_name: str
     parent_run_name: str
+    parent_tags: dict[str, str] = Field(default_factory=dict)
     failure_policy: FailurePolicy = "fail_fast"
     runs: list[ChildEntryConfig]
 

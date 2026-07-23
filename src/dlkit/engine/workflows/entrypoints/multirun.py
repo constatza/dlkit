@@ -67,11 +67,19 @@ def _child_source_from_entry(entry: ChildEntryConfig) -> ChildSource:
 
     Raises:
         ConfigValidationError: A list of files contains a glob-pattern string
-            — glob shorthand must be a single string, not a list.
+            — glob shorthand must be a single string, not a list — or
+            ``entry.patches`` is set on a glob-sourced entry, where a single
+            patch dict can't sensibly apply to every glob match.
     """
     label = entry.label or entry.id
     match entry.files:
         case str() as pattern if _is_glob_pattern(pattern):
+            if entry.patches:
+                raise ConfigValidationError(
+                    f"Child {entry.id!r}: `patches` is not supported on a "
+                    "glob-sourced entry (a single patch dict can't apply to "
+                    "every matched file); use explicit `files` instead."
+                )
             pattern_path = Path(pattern)
             return GlobSource(
                 id_prefix=f"{entry.id}_",
@@ -88,6 +96,7 @@ def _child_source_from_entry(entry: ChildEntryConfig) -> ChildSource:
                 label=label,
                 files=(Path(single_file),),
                 run_type=entry.run_type,
+                patches=entry.patches,
                 tags=entry.tags,
                 params=entry.params,
                 metadata=entry.metadata,
@@ -103,6 +112,7 @@ def _child_source_from_entry(entry: ChildEntryConfig) -> ChildSource:
                 label=label,
                 files=tuple(Path(f) for f in files_list),
                 run_type=entry.run_type,
+                patches=entry.patches,
                 tags=entry.tags,
                 params=entry.params,
                 metadata=entry.metadata,
@@ -242,7 +252,7 @@ def run_multirun(
         children=children,
         experiment_name=settings.experiment_name,
         parent_run_name=settings.parent_run_name,
-        parent_tags=None,
+        parent_tags=settings.parent_tags,
         failure_policy=settings.failure_policy,
         hooks=hooks,
     )

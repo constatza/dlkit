@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .results import ChildFailure, TrainingResult
+from .results import ChildFailure, ChildOutcome, TrainingResult, WorkflowResult
 
 # Extensible scalar parameter value for runtime metadata surfaces.
 # This is a sum type, not a renaming alias.
@@ -36,6 +36,22 @@ class RunCreatedEvent:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class SweepCompletedEvent:
+    """Fired via ``LifecycleHooks.on_sweep_complete`` after a multirun sweep's
+    children have all finished, once the parent run has closed.
+
+    ``run_id``/``tracking_uri`` mirror :class:`RunCreatedEvent` rather than
+    carrying an engine-layer run-context object: ``common`` must not import
+    ``engine``, and this is enough for a caller to reopen the parent run
+    through their own MLflow client (e.g. to log a summary artifact).
+    """
+
+    run_id: str
+    tracking_uri: str | None
+    outcomes: tuple[ChildOutcome[WorkflowResult], ...]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class LifecycleHooks:
     """Functional extension points for lifecycle events.
 
@@ -48,6 +64,8 @@ class LifecycleHooks:
             training run.
         on_child_failed: Fires with a ``ChildFailure`` record when a multirun
             child fails under a continuing failure policy.
+        on_sweep_complete: Fires once a multirun sweep's children have all
+            finished, after the parent run has closed.
     """
 
     on_run_created: Callable[[RunCreatedEvent], None] | None = field(default=None)
@@ -56,3 +74,4 @@ class LifecycleHooks:
     extra_params: Callable[[TrainingResult], dict[str, ParamValue]] | None = field(default=None)
     extra_artifacts: Callable[[TrainingResult], Sequence[Path]] | None = field(default=None)
     on_child_failed: Callable[[ChildFailure], None] | None = field(default=None)
+    on_sweep_complete: Callable[[SweepCompletedEvent], None] | None = field(default=None)

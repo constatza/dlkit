@@ -28,9 +28,12 @@ the generic parent/children result shape shared by `evaluate_multirun()`
 (`MultiRunResult[ChildEvaluation]`) and `MultiRunOrchestrator.run_sweep()`
 (`MultiRunResult[ChildOutcome[WorkflowResult]]`), instead of each inventing its own
 container. `LifecycleHooks.on_child_failed` fires with a `ChildFailure` record when a
-multirun child fails under a continuing `FailurePolicy` — see
-`dlkit.engine.workflows.entrypoints.entrypoints.md` for the sweep entrypoints that
-produce these.
+multirun child fails under a continuing `FailurePolicy`; `LifecycleHooks.on_sweep_complete`
+fires with a `SweepCompletedEvent` (`run_id`, `tracking_uri`, `outcomes`) once a sweep's
+children have all finished, after the parent run has closed — it carries plain
+`run_id`/`tracking_uri` rather than an engine-layer run-context object, since `common`
+must not import `engine`. See `dlkit.engine.workflows.entrypoints.entrypoints.md` for
+the sweep entrypoints that produce these.
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:
 - `stacked`

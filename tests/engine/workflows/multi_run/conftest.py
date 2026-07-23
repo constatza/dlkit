@@ -190,3 +190,22 @@ def spec_b(job_config_settings: JobConfig) -> RunSpec:
         RunSpec: Spec with id/run_name "b"/"variant_b".
     """
     return RunSpec(id="b", label="b", settings=job_config_settings, run_name="variant_b")
+
+
+@pytest.fixture
+def spec_with_tags(job_config_settings: JobConfig) -> RunSpec:
+    """RunSpec carrying child-level MLflow tags, for tag-propagation tests.
+
+    Args:
+        job_config_settings: Real JobConfig shared across specs.
+
+    Returns:
+        RunSpec: Spec with tags={"assignment_id": "42", "dataset_id": "ds-1"}.
+    """
+    return RunSpec(
+        id="tagged",
+        label="tagged",
+        settings=job_config_settings,
+        run_name="variant_tagged",
+        tags={"assignment_id": "42", "dataset_id": "ds-1"},
+    )

@@ -10,6 +10,7 @@ from dlkit.common import (
     OptimizationResult,
     TrainingResult,
 )
+from dlkit.common.hooks import LifecycleHooks
 from dlkit.common.results import ChildOutcome, ConvergenceResult, MultiRunResult, WorkflowResult
 from dlkit.engine.workflows.entrypoints import MultiRunSpec
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
@@ -113,6 +114,7 @@ def run_multirun_config(
     settings: MultiRunJobConfig,
     *,
     mlflow: bool = False,
+    hooks: LifecycleHooks | None = None,
 ) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
     """Run a multirun sweep from a validated MultiRunJobConfig.
 
@@ -122,18 +124,21 @@ def run_multirun_config(
             has no effect — a multirun sweep always configures MLflow tracking
             (parent/child linkage is the point of a sweep). See
             ``EngineWorkflowExecutor.run_multirun_config``'s docstring.
+        hooks: Optional lifecycle hooks fired around the parent run and
+            forwarded into every child's own workflow execution.
 
     Returns:
         MultiRunResult with the parent run id, tracking URI, and one
         ChildOutcome per child, in expansion order.
     """
-    return _executor.run_multirun_config(settings, mlflow=mlflow)
+    return _executor.run_multirun_config(settings, mlflow=mlflow, hooks=hooks)
 
 
 def run_multirun_spec(
     spec: MultiRunSpec,
     *,
     mlflow: bool = False,
+    hooks: LifecycleHooks | None = None,
 ) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
     """Run a multirun sweep from an already-built MultiRunSpec.
 
@@ -141,12 +146,14 @@ def run_multirun_spec(
         spec: Fully-specified sweep: parent identity plus expanded children.
         mlflow: Accepted for signature symmetry with other workflow functions;
             has no effect — see ``run_multirun_config``'s docstring.
+        hooks: Optional lifecycle hooks fired around the parent run and
+            forwarded into every child's own workflow execution.
 
     Returns:
         MultiRunResult with the parent run id, tracking URI, and one
         ChildOutcome per child, in expansion order.
     """
-    return _executor.run_multirun_spec(spec, mlflow=mlflow)
+    return _executor.run_multirun_spec(spec, mlflow=mlflow, hooks=hooks)
 
 
 def optimize(

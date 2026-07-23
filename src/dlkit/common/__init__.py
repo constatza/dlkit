@@ -10,7 +10,7 @@ from .errors import (
     StrategyError,
     WorkflowError,
 )
-from .hooks import LifecycleHooks, RunCreatedEvent, RunKind
+from .hooks import LifecycleHooks, RunCreatedEvent, RunKind, SweepCompletedEvent
 from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
 from .results import (
     ChildFailure,
@@ -60,6 +60,7 @@ __all__ = [
     "ShapeContext",
     "ShapeProvider",
     "StrategyError",
+    "SweepCompletedEvent",
     "TrainingResult",
     "TrainingOverrides",
     "WorkflowError",

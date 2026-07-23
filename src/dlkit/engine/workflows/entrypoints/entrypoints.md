@@ -68,3 +68,38 @@ is always enabled rather than silently producing an untrackable sweep; the
 public `run_multirun_config()`/`run_multirun_spec()` API functions accept an
 `mlflow: bool` parameter for signature symmetry with `train()`/`converge()`/
 `optimize()`, but it has no effect for multirun.
+
+`run_multirun()`/`run_multirun_spec()` accept an optional `hooks:
+LifecycleHooks | None` and forward it into `MultiRunOrchestrator`, which
+forwards it into every child's own `execute()` call — a caller's
+`on_run_created` fires for the parent sweep run and for every child's own
+run. `ChildEntryConfig.tags` (TOML) / `RunSpec.tags` (programmatic) reach the
+child's actual MLflow run via `ExperimentSettings.tags`, merged with
+whatever the child's own settings already set (child tags win on
+conflict) — this is what makes tag-filtered run lookup work for a sweep's
+children. `MultiRunJobConfig.parent_tags` / `MultiRunSpec.parent_tags` reach
+the parent run the same way. A `ChildFailure`'s `run_id` is a best-effort
+capture of whatever run the child opened before it raised (via a wrapped
+`on_run_created`), not guaranteed — a child that fails before opening any
+run still reports `run_id=None`.
+
+## Two-phase dispatch pattern (no dispatch injection seam)
+
+`_run_sweep()` always dispatches children through the runtime's own
+`execute()` — there is no caller-supplied dispatcher parameter. A caller
+needing work *around* each child's execution (e.g. staging a dataset before
+training, or moving a checkpoint to durable storage after) does it in two
+phases instead of injecting into dispatch:
+
+1. **Before calling `run_multirun_config()`/`run_multirun_spec()`**: do any
+   per-child prep (dataset staging, etc.) while building each child's
+   settings/`RunSpec`.
+2. **After the call returns**: iterate the returned `MultiRunResult`'s
+   `ChildOutcome`s, keyed by `child_id`, and do post-processing (checkpoint
+   durability, registry updates) against each child's `run_id`/`result`
+   (present on `ChildSuccess`; `run_id` is also present, best-effort, on
+   `ChildFailure`).
+
+This needs no DLKit-side seam: everything a caller needs per child (`tags`,
+`run_id`, the raw workflow `result`) is already on the returned
+`ChildOutcome`.

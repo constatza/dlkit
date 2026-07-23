@@ -4,11 +4,14 @@ Covers:
 - MultiRunOrchestrator satisfies IMultiRunOrchestrator protocol
 - run_sweep() calls entrypoints.execute() exactly once per child, with hooks forwarded
 - run_sweep() patches each child's settings to the sweep's experiment/run_name
+- run_sweep() merges spec.tags into the child's experiment.tags
 - run_sweep() returns a MultiRunResult with one ChildSuccess per child, in order
 - run_sweep() calls on_sweep_complete exactly once with (parent_run_ctx, outcomes)
 - run_sweep() without a callback does not raise
 - run_sweep() fires on_run_created once for its own parent run (kind='sweep')
 - run_sweep() tags a successful child's own MLflow run with the parent run id
+- a ChildFailure carries the child's best-effort run_id when on_run_created fired first
+- hooks.on_sweep_complete (LifecycleHooks) fires with a SweepCompletedEvent
 - failure_policy="fail_fast" (default) propagates a child's exception immediately
 - failure_policy="continue" records a ChildFailure and still runs later children
 - failure_policy="continue_mark_parent_failed" additionally tags the parent run
@@ -18,7 +21,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent, SweepCompletedEvent
 from dlkit.common.results import ChildFailure, ChildSuccess, MultiRunResult, TrainingResult
 from dlkit.engine.workflows.multi_run import IMultiRunOrchestrator, MultiRunOrchestrator, RunSpec
 
@@ -67,14 +70,23 @@ def test_run_sweep_forwards_hooks_to_execute(
     orchestrator_with_hooks: MultiRunOrchestrator,
     mock_execute: MagicMock,
     hooks: LifecycleHooks,
+    recorded_run_creations: list[RunCreatedEvent],
     spec_a: RunSpec,
 ) -> None:
     """run_sweep() forwards its own hooks into each execute() call.
+
+    The forwarded hooks object wraps ``on_run_created`` (to capture a
+    best-effort child run_id for ChildFailure — see
+    test_continue_records_best_effort_run_id_on_failure), so it is not the
+    same object as the orchestrator's own ``hooks``. Every other hook, and
+    the *behavior* of ``on_run_created`` (still recording the event), must
+    be preserved.
 
     Args:
         orchestrator_with_hooks: Orchestrator fixture wired with hooks.
         mock_execute: Patched execute() to inspect call kwargs.
         hooks: The same LifecycleHooks instance orchestrator_with_hooks was built with.
+        recorded_run_creations: Events recorded by the hooks fixture's on_run_created.
         spec_a: Single child spec.
     """
     orchestrator_with_hooks.run_sweep(
@@ -82,7 +94,14 @@ def test_run_sweep_forwards_hooks_to_execute(
         experiment_name="test_experiment",
         parent_run_name="parent",
     )
-    assert mock_execute.call_args.kwargs["hooks"] is hooks
+    forwarded_hooks = mock_execute.call_args.kwargs["hooks"]
+    assert forwarded_hooks.on_child_failed is hooks.on_child_failed
+
+    event = RunCreatedEvent(
+        run_id="child-run-id", tracking_uri=None, kind="train", is_outermost=True
+    )
+    forwarded_hooks.on_run_created(event)
+    assert recorded_run_creations[-1] == event
 
 
 def test_run_one_patches_experiment_and_run_name(
@@ -108,6 +127,31 @@ def test_run_one_patches_experiment_and_run_name(
     called_settings = mock_execute.call_args.args[0]
     assert called_settings.experiment.name == "my-sweep-experiment"
     assert called_settings.experiment.run_name == spec_a.run_name
+
+
+def test_run_one_merges_spec_tags_into_experiment_tags(
+    orchestrator: MultiRunOrchestrator,
+    mock_execute: MagicMock,
+    spec_with_tags: RunSpec,
+) -> None:
+    """_run_one() merges spec.tags into the child's own experiment.tags.
+
+    Regression guard for tag-filtered run lookup: a caller's assignment_id /
+    dataset_id / job_id tags must actually reach the child's MLflow run, not
+    just sit unused on RunSpec.
+
+    Args:
+        orchestrator: Orchestrator fixture.
+        mock_execute: Patched execute() to inspect the settings it was called with.
+        spec_with_tags: Single child spec carrying tags={"assignment_id": "42", ...}.
+    """
+    orchestrator.run_sweep(
+        children=[spec_with_tags],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+    called_settings = mock_execute.call_args.args[0]
+    assert called_settings.experiment.tags == spec_with_tags.tags
 
 
 def test_run_sweep_returns_multi_run_result_with_child_successes(
@@ -207,6 +251,84 @@ def test_run_sweep_without_callback_does_not_raise(
         parent_run_name="parent",
     )
     assert len(result.children) == 1
+
+
+def test_run_sweep_fires_hooks_on_sweep_complete(
+    mock_tracker: MagicMock,
+    mock_execute: MagicMock,
+    spec_a: RunSpec,
+    spec_b: RunSpec,
+) -> None:
+    """hooks.on_sweep_complete fires once with a SweepCompletedEvent.
+
+    Regression guard for the public multirun API's on_sweep_complete gap:
+    LifecycleHooks.on_sweep_complete must actually be reachable from
+    run_sweep(), not just accepted and ignored.
+
+    Args:
+        mock_tracker: Tracker mock fixture; parent run_id="parent-run-id".
+        mock_execute: Mock dispatcher fixture.
+        spec_a: First child spec.
+        spec_b: Second child spec.
+    """
+    recorded: list[SweepCompletedEvent] = []
+    hooks_with_sweep_complete = LifecycleHooks(on_sweep_complete=recorded.append)
+    orchestrator = MultiRunOrchestrator(
+        tracker=mock_tracker, dispatch=mock_execute, hooks=hooks_with_sweep_complete
+    )
+
+    orchestrator.run_sweep(
+        children=[spec_a, spec_b],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    assert len(recorded) == 1
+    event = recorded[0]
+    assert event.run_id == "parent-run-id"
+    assert len(event.outcomes) == 2
+
+
+def test_continue_records_best_effort_run_id_on_failure(
+    orchestrator_with_hooks: MultiRunOrchestrator,
+    mock_execute: MagicMock,
+    spec_a: RunSpec,
+) -> None:
+    """A ChildFailure carries the child's run_id if it opened one before failing.
+
+    Regression guard for the "worse than today" discoverability gap: a
+    child that opens its own MLflow run and then crashes must not become an
+    untagged, unreferenced orphan run — the orchestrator captures the run_id
+    via the child's own on_run_created firing (forwarded through hooks)
+    before dispatch() raises.
+
+    Args:
+        orchestrator_with_hooks: Orchestrator fixture wired with hooks.
+        mock_execute: Patched execute(); fires on_run_created then raises.
+        spec_a: Single failing child spec.
+    """
+
+    def _fire_then_raise(settings: object, *, hooks: LifecycleHooks) -> None:
+        assert hooks.on_run_created is not None
+        hooks.on_run_created(
+            RunCreatedEvent(
+                run_id="orphaned-child-run", tracking_uri=None, kind="train", is_outermost=True
+            )
+        )
+        raise ValueError("boom")
+
+    mock_execute.side_effect = _fire_then_raise
+
+    result = orchestrator_with_hooks.run_sweep(
+        children=[spec_a],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+        failure_policy="continue",
+    )
+
+    failure = result.children[0]
+    assert isinstance(failure, ChildFailure)
+    assert failure.run_id == "orphaned-child-run"
 
 
 def test_run_sweep_fires_on_run_created_for_parent(

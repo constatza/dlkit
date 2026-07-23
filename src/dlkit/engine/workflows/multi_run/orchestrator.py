@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
+from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent, SweepCompletedEvent
 from dlkit.common.results import (
     ChildFailure,
     ChildOutcome,
@@ -18,6 +19,7 @@ from dlkit.common.results import (
     WorkflowResult,
 )
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
+from dlkit.engine.workflows.factories.build_strategy import WorkflowSettings
 from dlkit.engine.workflows.factories.tracking_flag import apply_mlflow_flag
 
 from .spec import RunSpec
@@ -25,15 +27,24 @@ from .spec import RunSpec
 if TYPE_CHECKING:
     from dlkit.engine.tracking.interfaces import IRunContext
 
-# One child's dispatch: routes settings to whichever workflow entrypoint
-# applies to its concrete type (train/optimize/converge) and returns that
-# workflow's result. In practice this is
-# `dlkit.engine.workflows.entrypoints.execute`, injected by the caller
-# (e.g. `entrypoints/convergence.py`) rather than imported here: `tach.toml`
-# only allows `entrypoints -> engine.workflows` (not the reverse), so this
-# package cannot import `entrypoints` itself. Called as
-# ``dispatch(settings, hooks=hooks)``.
-type ChildDispatcher = Callable[..., WorkflowResult]
+
+class ChildDispatcher(Protocol):
+    """Routes one child's settings to its workflow result.
+
+    In practice this is `dlkit.engine.workflows.entrypoints.execute`,
+    injected by the caller (e.g. `entrypoints/multirun.py`,
+    `entrypoints/convergence.py`) rather than imported here: `tach.toml` only
+    allows `entrypoints -> engine.workflows` (not the reverse), so this
+    package cannot import `entrypoints` itself. A `Protocol` (rather than a
+    bare `Callable[..., WorkflowResult]`) lets the type checker catch a
+    signature drift between this contract and the injected callable, instead
+    of only failing at runtime inside `_run_one`.
+    """
+
+    def __call__(
+        self, settings: WorkflowSettings, *, hooks: LifecycleHooks | None = None
+    ) -> WorkflowResult: ...
+
 
 # MLflow tag applied to a child run, after the fact, pointing back at its
 # sweep's parent run. Children are NOT real MLflow-nested runs (each child's
@@ -87,6 +98,8 @@ class IMultiRunOrchestrator(Protocol):
                 completes, if any child failed.
             on_sweep_complete: Called with ``(parent_run, outcomes)`` before
                 the parent run closes. Use for summary artifact logging.
+                ``hooks.on_sweep_complete`` (if set) fires afterwards, after
+                the parent run has closed.
 
         Returns:
             MultiRunResult with the parent run id, tracking URI, and one
@@ -203,6 +216,15 @@ class MultiRunOrchestrator:
             if on_sweep_complete is not None:
                 on_sweep_complete(self._tracker.get_run_context(parent_run_id), outcomes)
 
+            if self._hooks and self._hooks.on_sweep_complete:
+                self._hooks.on_sweep_complete(
+                    SweepCompletedEvent(
+                        run_id=parent_run_id,
+                        tracking_uri=tracking_uri,
+                        outcomes=outcomes,
+                    )
+                )
+
             return MultiRunResult(
                 parent_run_id=parent_run_id,
                 tracking_uri=tracking_uri,
@@ -221,9 +243,10 @@ class MultiRunOrchestrator:
         Patches the child's settings so its run lands in the sweep's own
         experiment (mirroring the pre-multi_run-package behavior of forcing
         every child into the parent's experiment) and under ``spec.run_name``,
-        then ensures MLflow tracking is enabled before dispatching. On
-        success, tags the child's own MLflow run with the parent run id so
-        it stays discoverable under the sweep.
+        merges ``spec.tags`` into the child's own ``experiment.tags`` (child
+        tags win on key conflict), then ensures MLflow tracking is enabled
+        before dispatching. On success, tags the child's own MLflow run with
+        the parent run id so it stays discoverable under the sweep.
 
         Args:
             spec: The child run specification to execute.
@@ -242,15 +265,36 @@ class MultiRunOrchestrator:
             Exception: Whatever the dispatched workflow raises, when
                 ``failure_policy == "fail_fast"``.
         """
+        existing_tags = (
+            dict(spec.settings.experiment.tags) if spec.settings.experiment is not None else {}
+        )
+        existing_tags.update(spec.tags)
         child_settings = apply_mlflow_flag(
             spec.settings.patch(
-                {"experiment": {"name": experiment_name, "run_name": spec.run_name}}
+                {
+                    "experiment": {
+                        "name": experiment_name,
+                        "run_name": spec.run_name,
+                        "tags": existing_tags,
+                    }
+                }
             ),
             mlflow=True,
         )
 
+        # Capture the child's own run id as soon as it opens, so a
+        # ChildFailure can carry a best-effort run_id even though dispatch()
+        # itself only returns a result (or raises) at the end — the run id
+        # would otherwise be unrecoverable once dispatch() raises.
+        captured_run_id: list[str | None] = [None]
+
+        def _record_run_id(event: RunCreatedEvent) -> None:
+            captured_run_id[0] = event.run_id
+
+        child_hooks = _wrap_on_run_created(self._hooks, _record_run_id)
+
         try:
-            result = self._dispatch(child_settings, hooks=self._hooks)
+            result = self._dispatch(child_settings, hooks=child_hooks)
         except Exception as exc:
             if failure_policy == "fail_fast":
                 raise
@@ -258,9 +302,7 @@ class MultiRunOrchestrator:
                 child_id=spec.id,
                 exception_type=type(exc).__name__,
                 message=str(exc),
-                # Can't reliably recover a partial run id from a failed
-                # dispatch() call — best-effort None rather than guessing.
-                run_id=None,
+                run_id=captured_run_id[0],
                 stage="execute",
             )
             if self._hooks and self._hooks.on_child_failed:
@@ -272,6 +314,34 @@ class MultiRunOrchestrator:
             self._tracker.set_run_tag(run_id, _PARENT_RUN_ID_TAG, parent_run_id)
 
         return ChildSuccess(child_id=spec.id, run_id=run_id, result=result)
+
+
+def _wrap_on_run_created(
+    hooks: LifecycleHooks | None, capture: Callable[[RunCreatedEvent], None]
+) -> LifecycleHooks:
+    """Return hooks with ``on_run_created`` augmented to also call ``capture``.
+
+    ``capture`` fires first, then the original ``on_run_created`` (if any),
+    so callers observing run creation still see every event; every other
+    hook field is passed through unchanged.
+
+    Args:
+        hooks: Base hooks to wrap, or None.
+        capture: Extra callable invoked with every RunCreatedEvent.
+
+    Returns:
+        A LifecycleHooks instance whose on_run_created wraps ``capture``.
+    """
+    original_on_run_created = hooks.on_run_created if hooks else None
+
+    def _on_run_created(event: RunCreatedEvent) -> None:
+        capture(event)
+        if original_on_run_created is not None:
+            original_on_run_created(event)
+
+    if hooks is not None:
+        return replace(hooks, on_run_created=_on_run_created)
+    return LifecycleHooks(on_run_created=_on_run_created)
 
 
 def _extract_run_id(result: WorkflowResult) -> str | None:

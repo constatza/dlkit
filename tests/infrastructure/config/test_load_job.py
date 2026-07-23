@@ -144,6 +144,7 @@ def test_load_multirun(multirun_path: Path) -> None:
     assert cfg.run.type == "multirun"
     assert cfg.experiment_name == "test-multirun"
     assert cfg.parent_run_name == "sweep-parent"
+    assert cfg.parent_tags == {"team": "platform"}
     assert cfg.failure_policy == "continue_mark_parent_failed"
     assert len(cfg.runs) == 2
 
@@ -151,6 +152,7 @@ def test_load_multirun(multirun_path: Path) -> None:
     assert explicit_child.id == "explicit"
     assert explicit_child.label == "Explicit Child"
     assert explicit_child.files == [str(multirun_path.parent / "simple_train.toml")]
+    assert explicit_child.patches == {"run.seed": 7}
 
     assert glob_child.id == "variants"
     assert glob_child.files == str(multirun_path.parent / "multirun_variants" / "*.toml")
