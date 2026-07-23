@@ -70,6 +70,18 @@ class ConvergenceOverrides(RuntimeOverrideModel):
     target: float | None = None
 
 
+class EvaluationOverrides(RuntimeOverrideModel):
+    """Supported runtime overrides for the evaluation entrypoint."""
+
+    checkpoint_path: Path | None = None
+    experiment_name: str | None = None
+    run_name: str | None = None
+    tags: dict[str, str] | None = None
+    batch_size: int | None = None
+    split: str | None = None
+    device: str | None = None
+
+
 class ExecutionOverrides(TrainingOverrides):
     """Superset of supported overrides for the unified execution entrypoint."""
 
@@ -79,6 +91,8 @@ class ExecutionOverrides(TrainingOverrides):
     sizes: tuple[int, ...] | None = None
     repeats: int | None = None
     target: float | None = None
+    split: str | None = None
+    device: str | None = None
 
     def to_training_overrides(self) -> TrainingOverrides:
         """Project the unified payload onto training-only fields."""

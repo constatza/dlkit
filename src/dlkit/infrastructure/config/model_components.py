@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, ModelWrapValidatorHandler, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
+from dlkit.common.checkpoint_source import CheckpointSource
 from dlkit.common.types import ActivationName, NormalizerName
 
 from .core.base_settings import (
@@ -380,12 +381,14 @@ class ModelComponentSettings(RequiredNameComponentSettings, HyperParameterSettin
     )
 
     # Checkpoint for inference (NOT for training resume)
-    checkpoint: Path | str | None = Field(
+    checkpoint: Path | str | CheckpointSource | None = Field(
         default=None,
         exclude=True,
         description=(
-            "Checkpoint path for inference workflows (model weights only). "
-            "For resuming training, use training.resume_from_checkpoint instead."
+            "Checkpoint path for inference workflows (model weights only), or a "
+            "CheckpointSource (RunCheckpoint/LatestRunCheckpoint) resolved from an "
+            "MLflow run at evaluate time. For resuming training, use "
+            "training.resume_from_checkpoint instead."
         ),
         json_schema_extra={"dlkit_init_kwarg": False},
     )

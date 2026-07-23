@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from dlkit.common import OptimizationResult, TrainingResult
 from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
-from dlkit.common.results import ConvergenceResult
+from dlkit.common.results import WorkflowResult
 from dlkit.infrastructure.config.job_config import (
     ConvergenceJobConfig,
     InferenceJobConfig,
@@ -18,12 +17,14 @@ from dlkit.infrastructure.config.job_config import (
 
 from ._override_types import (
     ConvergenceOverrides,
+    EvaluationOverrides,
     ExecutionOverrides,
     OptimizationOverrides,
     TrainingOverrides,
     require_override_model,
 )
 from .convergence import converge
+from .evaluate import evaluate
 from .optimization import optimize
 from .training import train
 
@@ -66,6 +67,17 @@ _ALLOWED_OVERRIDE_KEYS: Mapping[type[JobConfig], frozenset[str]] = {
             "target",
         }
     ),
+    InferenceJobConfig: frozenset(
+        {
+            "checkpoint_path",
+            "experiment_name",
+            "run_name",
+            "tags",
+            "batch_size",
+            "split",
+            "device",
+        }
+    ),
 }
 
 
@@ -78,7 +90,7 @@ def execute(
     overrides: ExecutionOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
-) -> TrainingResult | OptimizationResult | ConvergenceResult:
+) -> WorkflowResult:
     """Dispatch between runtime training and optimization entrypoints."""
     validated_overrides = require_override_model(overrides, ExecutionOverrides)
     override_payload = (
@@ -99,9 +111,15 @@ def execute(
             )
 
         case InferenceJobConfig():
-            raise WorkflowError(
-                "execute() does not support inference workflows. Use dlkit.load_model() instead.",
-                {"workflow": "inference"},
+            evaluation_overrides = EvaluationOverrides.model_validate(
+                {
+                    key: value
+                    for key, value in override_payload.items()
+                    if key in _ALLOWED_OVERRIDE_KEYS[InferenceJobConfig]
+                }
+            )
+            return evaluate(
+                settings, evaluation_overrides if override_payload else None, hooks=hooks
             )
 
         case TrainingJobConfig():

@@ -108,10 +108,10 @@ class EvaluationResult:
 class MultiRunResult[T]:
     """Parent run id plus one record per child run.
 
-    Generic so both eval's batch results and (potentially, as a later,
-    separate follow-up) MultiRunOrchestrator.run_sweep()'s currently-bare
-    tuple[TrainingResult, ...] can share one container shape instead of
-    each inventing its own.
+    Generic so every multirun consumer — MultiRunOrchestrator.run_sweep()'s
+    ChildOutcome[WorkflowResult] sweeps and evaluate_multirun()'s batch
+    evaluations alike — shares one container shape instead of each
+    inventing its own.
 
     Args:
         parent_run_id: MLflow run id of the parent sweep run.
@@ -256,4 +256,4 @@ class ConvergenceResult:
 
 # Closed union of DLKit's per-workflow result types, used as multirun's generic
 # child result type since a single sweep can mix workflow kinds.
-WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult
+WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult | EvaluationResult

@@ -17,6 +17,7 @@ import pytest
 import tomli_w
 
 from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
+from dlkit.interfaces.api.functions import train as api_train
 
 FEATURE_SIZE = 4
 TARGET_SIZE = 1
@@ -262,6 +263,121 @@ def train_and_search_child_paths(
     search_path.write_bytes(tomli_w.dumps(search_payload).encode("utf-8"))
 
     return train_path, search_path
+
+
+def _predict_payload(
+    *,
+    feature_path: Path,
+    target_path: Path,
+    tracking_uri: str,
+    experiment_name: str,
+    checkpoint_path: Path,
+    split_filepath: Path,
+) -> dict[str, Any]:
+    """Build a minimal InferenceJobConfig payload pointed at a real checkpoint.
+
+    Args:
+        feature_path: Path to the feature .npy file.
+        target_path: Path to the target .npy file.
+        tracking_uri: Sqlite tracking URI shared across the sweep.
+        experiment_name: MLflow experiment name for this child.
+        checkpoint_path: Real, already-trained checkpoint file to evaluate.
+        split_filepath: Explicit split file — a run-based/external checkpoint
+            isn't colocated next to a `splits/` directory the way a local
+            training-output checkpoint is, so auto-location can't apply.
+
+    Returns:
+        Dict payload suitable for `InferenceJobConfig.model_validate()` or
+        `tomli_w.dump()`.
+    """
+    return {
+        "run": {"type": "predict"},
+        "experiment": {"name": experiment_name},
+        "model": {
+            "class": "FFNN",
+            "module_path": "dlkit.domain.nn",
+            "hidden_size": FEATURE_SIZE,
+            "num_layers": 0,
+            "checkpoint": str(checkpoint_path),
+        },
+        "data": {
+            "class": "FlexibleDataset",
+            "module_path": "dlkit.engine.data.datasets",
+            "batch_size": BATCH_SIZE,
+            "num_workers": 0,
+            "shuffle": False,
+            "pin_memory": False,
+            "persistent_workers": False,
+            "features": [{"name": "x", "path": str(feature_path), "format": "npy"}],
+            "targets": [{"name": "y", "path": str(target_path), "format": "npy"}],
+            "splits": {"filepath": str(split_filepath)},
+        },
+        "tracking": _tracking_dict(tracking_uri),
+    }
+
+
+@pytest.fixture
+def train_and_predict_child_paths(
+    minimal_dataset: dict[str, Path], sqlite_tracking_uri: str, tmp_path: Path
+) -> tuple[Path, Path]:
+    """One train-child and one predict-child TOML file on disk.
+
+    Unlike a search child (which needs no pre-existing state), a predict
+    child needs an already-trained checkpoint to point at — so this trains
+    one for real, outside the sweep, before writing the predict child's TOML.
+
+    Args:
+        minimal_dataset: Dataset path fixture.
+        sqlite_tracking_uri: Shared sqlite tracking URI fixture.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Tuple of (train_child_path, predict_child_path).
+    """
+    pretrain_root = tmp_path / "pretrain_output"
+    pretrain_root.mkdir(parents=True, exist_ok=True)
+    pretrain_payload = _train_payload(
+        feature_path=minimal_dataset["features"],
+        target_path=minimal_dataset["targets"],
+        tracking_uri=sqlite_tracking_uri,
+        experiment_name="pretrain-for-predict-child",
+    )
+    pretrain_payload["training"]["trainer"].update(
+        {
+            "fast_dev_run": False,
+            "enable_checkpointing": True,
+            "default_root_dir": str(pretrain_root),
+        }
+    )
+    pretrained = api_train(TrainingJobConfig.model_validate(pretrain_payload))
+    checkpoint_path = pretrained.checkpoint_path
+    assert checkpoint_path is not None and checkpoint_path.exists()
+    (split_filepath,) = pretrain_root.glob("splits/*.json")
+
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+
+    train_path = jobs_dir / "train_child.toml"
+    train_payload = _train_payload(
+        feature_path=minimal_dataset["features"],
+        target_path=minimal_dataset["targets"],
+        tracking_uri=sqlite_tracking_uri,
+        experiment_name="train-child",
+    )
+    train_path.write_bytes(tomli_w.dumps(train_payload).encode("utf-8"))
+
+    predict_path = jobs_dir / "predict_child.toml"
+    predict_payload = _predict_payload(
+        feature_path=minimal_dataset["features"],
+        target_path=minimal_dataset["targets"],
+        tracking_uri=sqlite_tracking_uri,
+        experiment_name="predict-child",
+        checkpoint_path=checkpoint_path,
+        split_filepath=split_filepath,
+    )
+    predict_path.write_bytes(tomli_w.dumps(predict_payload).encode("utf-8"))
+
+    return train_path, predict_path
 
 
 @pytest.fixture

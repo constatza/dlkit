@@ -12,9 +12,14 @@ from rich.table import Table
 from rich.text import Text
 
 from dlkit.common import EvaluationResult, InferenceResult, OptimizationResult, TrainingResult
-from dlkit.common.results import MultiRunResult
+from dlkit.common.results import (
+    ChildFailure,
+    ChildOutcome,
+    ChildSuccess,
+    MultiRunResult,
+    WorkflowResult,
+)
 from dlkit.interfaces.cli.presenters import summarize
-from dlkit.interfaces.inference import ChildEvaluation
 
 
 def present_training_result(result: TrainingResult, console: Console) -> None:
@@ -115,32 +120,56 @@ def present_evaluation_result(
         console.print(f"Figures saved to: {output_dir}", style="yellow")
 
 
-def present_multirun_evaluation_result(
-    result: MultiRunResult[ChildEvaluation], console: Console, output_dir: Path | None = None
+def present_multirun_result(
+    result: MultiRunResult[ChildOutcome[WorkflowResult]],
+    console: Console,
+    *,
+    output_dir: Path | None = None,
 ) -> None:
-    """Present a multirun evaluation result: one child evaluation per run.
+    """Present a multirun sweep result: one row per child outcome.
 
-    Loops `present_evaluation_result` per child under a run-id header — no new
-    rendering framework, matching `present_evaluation_result`'s own style.
+    Shared by `dlkit multirun run` and `dlkit evaluate-multirun` — a multirun
+    sweep's children are always `ChildOutcome[WorkflowResult]`, regardless of
+    which workflow kind produced them.
 
     Args:
-        result: Multirun evaluation result to display.
+        result: MultiRunResult to present.
         console: Rich console for output.
-        output_dir: If provided, save each child's figures as local PNG files
-            under `output_dir / child.run_id` (see `present_evaluation_result`).
+        output_dir: If provided, additionally save each successful
+            `EvaluationResult` child's figures as local PNG files under
+            `output_dir / child_id` (see `present_evaluation_result`).
     """
-    header_text = Text()
-    header_text.append("📊 Multirun Evaluation Results\n\n", style="bold blue")
-    header_text.append(f"Parent run: {result.parent_run_id}\n", style="yellow")
-    header_text.append(f"Children: {len(result.children)} evaluated\n", style="cyan")
+    console.print(f"\nParent run: {result.parent_run_id}")
+    if result.tracking_uri:
+        console.print(f"Tracking URI: {result.tracking_uri}")
 
-    header_panel = Panel.fit(header_text, title="Multirun Evaluation Summary", border_style="blue")
-    console.print(header_panel)
+    table = Table(title="Multirun Children")
+    table.add_column("child_id", style="cyan")
+    table.add_column("status", style="bold")
+    table.add_column("run_id", style="green")
+    table.add_column("detail", style="dim")
 
-    for child in result.children:
-        console.print(f"\n[bold]Run: {child.run_id}[/bold]")
-        child_output_dir = output_dir / child.run_id if output_dir is not None else None
-        present_evaluation_result(child.result, console, output_dir=child_output_dir)
+    for outcome in result.children:
+        match outcome:
+            case ChildSuccess():
+                table.add_row(outcome.child_id, "✅ success", outcome.run_id or "—", "")
+            case ChildFailure():
+                table.add_row(
+                    outcome.child_id,
+                    "❌ failure",
+                    outcome.run_id or "—",
+                    f"{outcome.exception_type}: {outcome.message}",
+                )
+
+    console.print(table)
+
+    if output_dir is None:
+        return
+    for outcome in result.children:
+        if isinstance(outcome, ChildSuccess) and isinstance(outcome.result, EvaluationResult):
+            present_evaluation_result(
+                outcome.result, console, output_dir=output_dir / outcome.child_id
+            )
 
 
 def present_optimization_result(result: OptimizationResult, console: Console) -> None:

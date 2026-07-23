@@ -2,12 +2,19 @@
 
 Pure guard-clause / resolution logic tests: no real MLflow backend, no real
 training. `find_latest_run_id`/`download_checkpoint_artifact` are
-monkeypatched at their point of use inside `dlkit.interfaces.inference.evaluate`
-(not at their definition module), so these tests only verify
-`_resolve_checkpoint_path`'s own branching and forwarding — the real,
-network-touching behavior of those two functions is covered by
-`tests/engine/tracking/test_run_queries.py` and
+monkeypatched at their point of use inside
+`dlkit.engine.workflows.entrypoints.evaluate` (not at their definition
+module), so these tests only verify `_resolve_checkpoint_path`'s own
+branching and forwarding — the real, network-touching behavior of those two
+functions is covered by `tests/engine/tracking/test_run_queries.py` and
 `tests/engine/tracking/test_checkpoint_recovery.py`.
+
+`checkpoint_path`/`run_checkpoint` are no longer two mutually exclusive
+kwargs — `settings.model.checkpoint` is a single `Path | str |
+CheckpointSource` field, so "conflicting checkpoint sources" is now
+structurally unreachable rather than a runtime validation error (see
+`tests/integration/test_evaluate_integration.py`'s
+`test_evaluate_checkpoint_field_accepts_either_a_path_or_a_run_checkpoint`).
 """
 
 from __future__ import annotations
@@ -18,53 +25,37 @@ from pathlib import Path
 import pytest
 from pytest import MonkeyPatch
 
-from dlkit.common import ConfigurationError
 from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
 from dlkit.infrastructure.config.job_config import InferenceJobConfig
-from dlkit.interfaces.inference.evaluate import _resolve_checkpoint_path
 
-# `dlkit.interfaces.inference`'s __init__ re-exports the `evaluate` *function*
-# under the `evaluate` attribute, shadowing the submodule on the package
-# object — `import dlkit.interfaces.inference.evaluate as ...` would bind
-# that function, not the module. `import_module` looks the submodule up in
-# `sys.modules` directly, sidestepping the shadowing, so monkeypatching
-# module-level names (`find_latest_run_id`, `download_checkpoint_artifact`)
-# at their point of use inside the module actually works.
-evaluate_module = import_module("dlkit.interfaces.inference.evaluate")
-
-
-@pytest.fixture
-def inference_settings() -> InferenceJobConfig:
-    """Minimal InferenceJobConfig with an experiment name, no tracking URI."""
-    return InferenceJobConfig.model_validate(
-        {
-            "run": {"type": "predict"},
-            "experiment": {"name": "unit-test-experiment"},
-            "model": {
-                "class": "FFNN",
-                "module_path": "dlkit.domain.nn",
-                # Placeholder: InferenceJobConfig requires a non-None checkpoint
-                # at construction time even though run_checkpoint resolution
-                # overrides it before it is ever read.
-                "checkpoint": "placeholder.ckpt",
-            },
-        }
-    )
+# `dlkit.engine.workflows.entrypoints`'s __init__ re-exports the `evaluate`
+# *function* under the `evaluate` attribute, shadowing the submodule on the
+# package object — `import dlkit.engine.workflows.entrypoints.evaluate as
+# ...` would bind that function, not the module. `import_module` looks the
+# submodule up in `sys.modules` directly, sidestepping the shadowing, so
+# monkeypatching module-level names (`find_latest_run_id`,
+# `download_checkpoint_artifact`) at their point of use inside the module
+# actually works.
+evaluate_module = import_module("dlkit.engine.workflows.entrypoints.evaluate")
+_resolve_checkpoint_path = evaluate_module._resolve_checkpoint_path
 
 
-@pytest.fixture
-def inference_settings_without_experiment() -> InferenceJobConfig:
-    """InferenceJobConfig with no experiment configured (exercises the fallback)."""
-    return InferenceJobConfig.model_validate(
-        {
-            "run": {"type": "predict"},
-            "model": {
-                "class": "FFNN",
-                "module_path": "dlkit.domain.nn",
-                "checkpoint": "placeholder.ckpt",
-            },
-        }
-    )
+def _inference_settings(checkpoint: object, *, experiment_name: str | None) -> InferenceJobConfig:
+    """Build a minimal InferenceJobConfig with the given checkpoint/experiment."""
+    payload: dict[str, object] = {
+        "run": {"type": "predict"},
+        "model": {
+            "class": "FFNN",
+            "module_path": "dlkit.domain.nn",
+            "checkpoint": checkpoint if isinstance(checkpoint, str) else "placeholder.ckpt",
+        },
+    }
+    if experiment_name is not None:
+        payload["experiment"] = {"name": experiment_name}
+    settings = InferenceJobConfig.model_validate(payload)
+    if not isinstance(checkpoint, str):
+        settings = settings.patch({"model": {"checkpoint": checkpoint}})
+    return settings
 
 
 @pytest.fixture
@@ -73,43 +64,15 @@ def downloaded_checkpoint_path(tmp_path: Path) -> Path:
     return tmp_path / "downloaded.ckpt"
 
 
-def test_rejects_checkpoint_path_and_run_checkpoint_together(
-    inference_settings: InferenceJobConfig,
-) -> None:
-    with pytest.raises(ConfigurationError, match="not both"):
-        _resolve_checkpoint_path(
-            checkpoint_path="explicit.ckpt",
-            run_checkpoint=RunCheckpoint(run_id="run-1"),
-            settings=inference_settings,
-        )
+def test_passes_literal_checkpoint_path_through_unchanged() -> None:
+    settings = _inference_settings("explicit.ckpt", experiment_name="unit-test-experiment")
 
-
-def test_passes_checkpoint_path_through_unchanged_when_run_checkpoint_is_none(
-    inference_settings: InferenceJobConfig,
-) -> None:
-    result = _resolve_checkpoint_path(
-        checkpoint_path="explicit.ckpt",
-        run_checkpoint=None,
-        settings=inference_settings,
-    )
+    result = _resolve_checkpoint_path(settings)
 
     assert result == "explicit.ckpt"
 
 
-def test_returns_none_when_neither_source_is_set(
-    inference_settings: InferenceJobConfig,
-) -> None:
-    result = _resolve_checkpoint_path(
-        checkpoint_path=None,
-        run_checkpoint=None,
-        settings=inference_settings,
-    )
-
-    assert result is None
-
-
 def test_run_checkpoint_forwards_run_id_to_download_checkpoint_artifact(
-    inference_settings: InferenceJobConfig,
     downloaded_checkpoint_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -123,18 +86,16 @@ def test_run_checkpoint_forwards_run_id_to_download_checkpoint_artifact(
 
     monkeypatch.setattr(evaluate_module, "download_checkpoint_artifact", fake_download)
 
-    result = _resolve_checkpoint_path(
-        checkpoint_path=None,
-        run_checkpoint=RunCheckpoint(run_id="run-42"),
-        settings=inference_settings,
+    settings = _inference_settings(
+        RunCheckpoint(run_id="run-42"), experiment_name="unit-test-experiment"
     )
+    result = _resolve_checkpoint_path(settings)
 
     assert captured["run_id"] == "run-42"
     assert result == downloaded_checkpoint_path
 
 
 def test_latest_run_checkpoint_resolves_via_find_latest_run_id_using_settings_experiment_name(
-    inference_settings: InferenceJobConfig,
     downloaded_checkpoint_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -151,11 +112,8 @@ def test_latest_run_checkpoint_resolves_via_find_latest_run_id_using_settings_ex
     monkeypatch.setattr(evaluate_module, "find_latest_run_id", fake_find_latest_run_id)
     monkeypatch.setattr(evaluate_module, "download_checkpoint_artifact", fake_download)
 
-    result = _resolve_checkpoint_path(
-        checkpoint_path=None,
-        run_checkpoint=LatestRunCheckpoint(),
-        settings=inference_settings,
-    )
+    settings = _inference_settings(LatestRunCheckpoint(), experiment_name="unit-test-experiment")
+    result = _resolve_checkpoint_path(settings)
 
     assert captured["experiment_name"] == "unit-test-experiment"
     assert captured["download_run_id"] == "resolved-run-id"
@@ -163,7 +121,6 @@ def test_latest_run_checkpoint_resolves_via_find_latest_run_id_using_settings_ex
 
 
 def test_latest_run_checkpoint_explicit_experiment_name_overrides_settings(
-    inference_settings: InferenceJobConfig,
     downloaded_checkpoint_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -180,17 +137,16 @@ def test_latest_run_checkpoint_explicit_experiment_name_overrides_settings(
         lambda *args, **kwargs: downloaded_checkpoint_path,
     )
 
-    _resolve_checkpoint_path(
-        checkpoint_path=None,
-        run_checkpoint=LatestRunCheckpoint(experiment_name="explicit-experiment"),
-        settings=inference_settings,
+    settings = _inference_settings(
+        LatestRunCheckpoint(experiment_name="explicit-experiment"),
+        experiment_name="unit-test-experiment",
     )
+    _resolve_checkpoint_path(settings)
 
     assert captured["experiment_name"] == "explicit-experiment"
 
 
 def test_latest_run_checkpoint_falls_back_to_dlkit_evaluate_when_no_experiment_configured(
-    inference_settings_without_experiment: InferenceJobConfig,
     downloaded_checkpoint_path: Path,
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -207,10 +163,7 @@ def test_latest_run_checkpoint_falls_back_to_dlkit_evaluate_when_no_experiment_c
         lambda *args, **kwargs: downloaded_checkpoint_path,
     )
 
-    _resolve_checkpoint_path(
-        checkpoint_path=None,
-        run_checkpoint=LatestRunCheckpoint(),
-        settings=inference_settings_without_experiment,
-    )
+    settings = _inference_settings(LatestRunCheckpoint(), experiment_name=None)
+    _resolve_checkpoint_path(settings)
 
     assert captured["experiment_name"] == "dlkit-evaluate"

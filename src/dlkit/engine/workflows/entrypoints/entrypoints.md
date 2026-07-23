@@ -18,12 +18,21 @@
 - `training.py`: training entrypoint
 - `optimization.py`: optimization entrypoint
 - `convergence.py`: sample-size convergence study entrypoint
+- `evaluate.py`: evaluation entrypoint — checkpoint + labeled dataset ->
+  metrics + figures, no training loop. A fourth peer of
+  training/optimization/convergence, not a special case: it fits the same
+  `ChildDispatcher` shape (`(settings, overrides=None, *, hooks=None) ->
+  result`) and is dispatched by `execute()`/`MultiRunOrchestrator` exactly
+  like the other three. Lives here (not `interfaces.inference`, where it
+  used to live) because it needs `engine.tracking` and
+  `engine.workflows.factories`, which only this package — not
+  `engine.inference` — is allowed to reach.
 - `multirun.py`: general multirun sweep entrypoint (`run_multirun()` from a
   `MultiRunJobConfig`, `run_multirun_spec()` from an already-built
   `MultiRunSpec`); also owns the `ChildEntryConfig -> ChildSource` conversion
   (`build_child_sources()`, glob-vs-explicit decided by whether `files`
   contains a glob metacharacter)
-- `execution.py`: training-vs-optimization routing
+- `execution.py`: routes settings to whichever of train/optimize/converge/evaluate applies
 - `validation.py`, `templates.py`, `convert.py`: validation/template/export helpers
 
 ## Design Rule
@@ -52,13 +61,17 @@ function body, not at module level) for the same reason: `execution.py`
 imports `converge` from this package at module level, so a module-level
 `from .execution import execute` here would risk the same cycle.
 
-This package also re-exports `MultiRunSpec`, `RunSpec`, and
-`expand_child_sources` from `engine.workflows.multi_run` — not because they
-belong here, but because `dlkit.interfaces.cli`/`dlkit.interfaces.api.*` are
-only allowed to depend on `engine.workflows.entrypoints`/`.factories` per
+This package also re-exports `MultiRunSpec`, `RunSpec`, `ExistingRunsSource`,
+and `expand_child_sources` from `engine.workflows.multi_run` — not because
+they belong here, but because `dlkit.interfaces.cli`/`dlkit.interfaces.api.*`
+are only allowed to depend on `engine.workflows.entrypoints`/`.factories` per
 `tach.toml`, not the general `engine.workflows.multi_run` bucket, so those
 upper layers get them through this package's re-export instead of importing
-`multi_run` directly.
+`multi_run` directly. `ExistingRunsSource` is a `ChildSource` variant that
+expands one evaluate `RunSpec` per active child of an existing parent run
+(via `find_child_run_ids()`), each pointed at that child's own checkpoint —
+this is what `interfaces.api.functions.core.evaluate_multirun()` composes to
+replace the old bespoke `evaluate_multirun()` fan-out.
 
 The parent tracker for a multirun sweep (`multirun.py`'s `_run_sweep()`) is
 configured from the **first child's own settings**, mlflow-flag-forced —

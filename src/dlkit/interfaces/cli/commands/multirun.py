@@ -15,18 +15,12 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from dlkit.common.results import (
-    ChildFailure,
-    ChildOutcome,
-    ChildSuccess,
-    MultiRunResult,
-    WorkflowResult,
-)
 from dlkit.engine.workflows.entrypoints import build_child_sources, expand_child_sources
 from dlkit.infrastructure.config.job_config import MultiRunJobConfig
 from dlkit.interfaces.api.functions.core import run_multirun_config as api_run_multirun_config
 
 from ..adapters.config_adapter import load_config
+from ..adapters.result_presenter import present_multirun_result
 from ..middleware.error_handler import handle_cli_errors
 from ..params import CONFIG_PATH_ARG, MLFLOW_FLAG
 
@@ -52,40 +46,6 @@ def _load_multirun_config(config_path: Path) -> MultiRunJobConfig:
     return load_config(config_path, run_type="multirun")
 
 
-def _present_multirun_result(
-    result: MultiRunResult[ChildOutcome[WorkflowResult]], console: Console
-) -> None:
-    """Print a formatted summary table for a multirun sweep result.
-
-    Args:
-        result: MultiRunResult to present.
-        console: Rich console for output.
-    """
-    console.print(f"\nParent run: {result.parent_run_id}")
-    if result.tracking_uri:
-        console.print(f"Tracking URI: {result.tracking_uri}")
-
-    table = Table(title="Multirun Children")
-    table.add_column("child_id", style="cyan")
-    table.add_column("status", style="bold")
-    table.add_column("run_id", style="green")
-    table.add_column("detail", style="dim")
-
-    for outcome in result.children:
-        match outcome:
-            case ChildSuccess():
-                table.add_row(outcome.child_id, "✅ success", outcome.run_id or "—", "")
-            case ChildFailure():
-                table.add_row(
-                    outcome.child_id,
-                    "❌ failure",
-                    outcome.run_id or "—",
-                    f"{outcome.exception_type}: {outcome.message}",
-                )
-
-    console.print(table)
-
-
 @app.command("run")
 @handle_cli_errors(console)
 def run_sweep(
@@ -103,7 +63,7 @@ def run_sweep(
     )
     result = api_run_multirun_config(job, mlflow=mlflow)
     console.print("🎉 Multirun sweep completed!")
-    _present_multirun_result(result, console)
+    present_multirun_result(result, console)
 
 
 @app.command("validate")

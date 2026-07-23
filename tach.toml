@@ -195,6 +195,7 @@ depends_on = [
     { path = "dlkit.domain" },
     { path = "dlkit.engine" },
     { path = "dlkit.engine.adapters.lightning" },
+    { path = "dlkit.engine.inference" },
     { path = "dlkit.engine.tracking" },
     { path = "dlkit.engine.training" },
     { path = "dlkit.engine.workflows" },
@@ -268,6 +269,7 @@ depends_on = [
     { path = "dlkit.infrastructure" },
     { path = "dlkit.engine.inference" },
     { path = "dlkit.engine.tracking" },
+    { path = "dlkit.engine.workflows.entrypoints" },
     { path = "dlkit.engine.workflows.factories" },
 ]
 

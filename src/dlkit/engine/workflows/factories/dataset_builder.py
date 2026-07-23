@@ -260,6 +260,13 @@ class DatasetBuilder:
                 "and no model.checkpoint is configured to auto-locate a colocated "
                 "splits/ directory. Set data.splits.filepath explicitly."
             )
+        if not isinstance(checkpoint, Path | str):
+            raise ConfigurationError(
+                "Cannot auto-locate a colocated splits/ directory: model.checkpoint "
+                "is a CheckpointSource (RunCheckpoint/LatestRunCheckpoint), not a local "
+                "path — its downloaded checkpoint isn't colocated with a splits/ "
+                "directory. Set data.splits.filepath explicitly."
+            )
 
         checkpoint_path = Path(checkpoint)
         if checkpoint_path.parent.name != "checkpoints":

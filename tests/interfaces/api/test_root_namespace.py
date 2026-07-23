@@ -97,10 +97,9 @@ class TestNamespacedShims:
         assert callable(find_child_run_ids)
         assert callable(download_checkpoint_artifact)
 
-    def test_inference_package_exposes_multirun_evaluation(self) -> None:
-        from dlkit.interfaces.inference import ChildEvaluation, evaluate_multirun
+    def test_api_functions_expose_multirun_evaluation(self) -> None:
+        from dlkit.interfaces.api.functions.core import evaluate_multirun
 
-        assert ChildEvaluation is not None
         assert callable(evaluate_multirun)
 
     def test_api_exposes_multirun_execution_functions(self) -> None:

@@ -14,8 +14,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dlkit.common.checkpoint_source import RunCheckpoint
 from dlkit.common.errors import ConfigValidationError
+from dlkit.engine.tracking.run_queries import find_child_run_ids
 from dlkit.engine.workflows.factories.build_strategy import WorkflowSettings
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
 
 from .spec import RunSpec
 
@@ -104,7 +107,41 @@ class LoadedSettingsSource:
     metadata: dict[str, object] = field(default_factory=dict)
 
 
-type ChildSource = ExplicitFileSource | GlobSource | LoadedSettingsSource
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExistingRunsSource:
+    """One child per already-completed run under an existing parent, each evaluated.
+
+    Replaces the old bespoke ``evaluate_multirun()`` fan-out: given a parent
+    run's id, resolves its active children via ``find_child_run_ids()`` (the
+    standard ``mlflow.parentRunId`` tag convention — matches both dlkit-native
+    sweeps and externally-linked runs), and expands into one evaluate
+    ``RunSpec`` per child, each pointed at that child's own checkpoint via
+    ``RunCheckpoint(run_id=...)``.
+
+    Args:
+        parent_run_id: MLflow run id whose active children each become one
+            evaluate child.
+        settings: Base inference job configuration shared by every child;
+            each child's ``model.checkpoint`` is overridden to that child's
+            own run.
+        tracking_uri: Tracking URI to resolve ``parent_run_id``'s children
+            against. Defaults to ``settings.tracking.uri`` when unset.
+        id_prefix: Prefix prepended to each resulting child's id/label.
+        tags: MLflow tags applied to every resulting child's run.
+        params: Opaque caller-supplied parameters applied to every child.
+        metadata: Opaque caller-supplied metadata applied to every child.
+    """
+
+    parent_run_id: str
+    settings: InferenceJobConfig
+    tracking_uri: str | None = None
+    id_prefix: str = ""
+    tags: dict[str, str] = field(default_factory=dict)
+    params: dict[str, object] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
+
+
+type ChildSource = ExplicitFileSource | GlobSource | LoadedSettingsSource | ExistingRunsSource
 
 
 def expand_child_sources(sources: Sequence[ChildSource]) -> tuple[RunSpec, ...]:
@@ -142,6 +179,8 @@ def expand_child_sources(sources: Sequence[ChildSource]) -> tuple[RunSpec, ...]:
                         metadata=source.metadata,
                     )
                 )
+            case ExistingRunsSource():
+                specs.extend(_expand_existing_runs_source(source))
 
     resolved = tuple(specs)
     _validate_specs(resolved)
@@ -211,6 +250,37 @@ def _expand_glob_source(source: GlobSource) -> tuple[RunSpec, ...]:
             )
         )
         for path in matches
+    )
+
+
+def _expand_existing_runs_source(source: ExistingRunsSource) -> tuple[RunSpec, ...]:
+    """Resolve an ExistingRunsSource's parent run and expand each child into a RunSpec.
+
+    Args:
+        source: Existing-runs-backed child source.
+
+    Returns:
+        One RunSpec per active child run, in ascending ``start_time`` order.
+
+    Raises:
+        WorkflowError: ``source.parent_run_id`` does not exist or has no
+            active child runs (propagated from ``find_child_run_ids``).
+    """
+    tracking_uri = source.tracking_uri or source.settings.tracking.uri
+    child_run_ids = find_child_run_ids(
+        parent_run_id=source.parent_run_id, tracking_uri=tracking_uri
+    )
+    return tuple(
+        RunSpec(
+            id=f"{source.id_prefix}{run_id}",
+            label=f"{source.id_prefix}{run_id}",
+            settings=source.settings.patch({"model": {"checkpoint": RunCheckpoint(run_id=run_id)}}),
+            run_name=f"{source.id_prefix}{run_id}",
+            tags=source.tags,
+            params=source.params,
+            metadata=source.metadata,
+        )
+        for run_id in child_run_ids
     )
 
 

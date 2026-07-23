@@ -22,15 +22,21 @@ implementations.
 - `evaluate()` — eval-only checkpoint stats/plots (see below)
 - `evaluate_checkpoint()`, `log_evaluation_result()` — lower-level building
   blocks `evaluate()` composes
-- `evaluate_multirun()`, `ChildEvaluation` — batch `evaluate()` over every
-  child run of a multirun/sweep parent (see below)
 
 `load_model()`, `load_model_from_settings()`, `validate_checkpoint()`,
 `get_checkpoint_info()`, `CheckpointPredictor`, `IPredictor`,
 `PredictionOutput`, `PredictorConfig`, `evaluate_checkpoint()`, and
 `log_evaluation_result()` are re-exported from `dlkit.engine.inference`.
-`evaluate()` and `evaluate_multirun()`/`ChildEvaluation` are defined in this
-package (`evaluate.py`, `evaluate_multirun.py`) — see below for why.
+`evaluate()` is re-exported from `dlkit.engine.workflows.entrypoints.evaluate`
+(`evaluate.py` here is a thin re-export, not the implementation — see below
+for why) to keep this package's public import path stable.
+
+Batch-evaluating every child run of a multirun/sweep parent is now
+`dlkit.interfaces.api.functions.core.evaluate_multirun()` — it composes an
+`ExistingRunsSource` (`engine.workflows.multi_run`) with the same
+`MultiRunOrchestrator` pipeline every other sweep uses, rather than living
+here as a bespoke mechanism. See
+`engine/workflows/entrypoints/entrypoints.md`.
 
 ## Usage
 
@@ -44,82 +50,81 @@ with load_model("model.ckpt", device="auto") as predictor:
 
 ### Eval-only stats/plots (`evaluate()`)
 
-`evaluate()` (defined in this package's `evaluate.py`, not `engine.inference`,
-because it also needs `engine.workflows.factories` for datamodule construction
-and `engine.tracking` for optional MLflow logging — a wider dependency set than
-`engine.inference` itself is allowed under the DAG) answers a different
-question than `load_model()`/`predict()`: given an *already-trained*
-checkpoint and a *labeled* dataset split, produce the same MAE/RMSE/R2 and
-parity/residual/error-histogram/residual-vs-index plots that training
-produces — without constructing a Lightning `Trainer` or updating weights.
+`evaluate()` answers a different question than `load_model()`/`predict()`:
+given an *already-trained* checkpoint and a *labeled* dataset split, produce
+the same MAE/RMSE/R2 and parity/residual/error-histogram/residual-vs-index
+plots that training produces — without constructing a Lightning `Trainer` or
+updating weights. It is a fourth workflow entrypoint, on equal footing with
+`train()`/`optimize()`/`converge()`: settings-driven, dispatchable through
+`execute()`, and usable as a multirun child.
 
 ```python
 from dlkit.interfaces.inference import evaluate
 
-result = evaluate(inference_settings, checkpoint_path="model.ckpt")
+result = evaluate(inference_settings)
 result.metrics      # {"mae": ..., "rmse": ..., "r2": ...}
 result.figures       # {"parity_plot": Figure, "residual_plot": Figure, ...}
 ```
 
 Requires `settings.data.targets` to be configured (there is no plot without
-ground truth). `split="test"` (default) or `split="predict"` selects which
-labeled partition to evaluate against — `predict_dataloader()` is a genuinely
-different partition from `test_dataloader()` for `GraphDataModule`-backed
-configs, so this is a real choice, not cosmetic. Pass `log_to_mlflow=True` to
-also open an MLflow run and log the metrics/figures as artifacts.
+ground truth). `settings.split` (`"test"` default, or `"predict"`) selects
+which labeled partition to evaluate against — `predict_dataloader()` is a
+genuinely different partition from `test_dataloader()` for
+`GraphDataModule`-backed configs, so this is a real choice, not cosmetic. Set
+`settings.tracking.backend = "mlflow"` (e.g. via `apply_mlflow_flag()`) to
+also open an MLflow run and log the metrics/figures as artifacts — the same
+convention `train()`/`optimize()` use, not a separate boolean kwarg.
 
-`checkpoint_path` and `run_checkpoint` are mutually exclusive; passing both
-raises `ConfigurationError`. `run_checkpoint` resolves the checkpoint from a
-previously trained MLflow run instead of a local path, downloading the run's
-checkpoint artifact to a temp directory first:
+`settings.model.checkpoint` accepts a literal path, or a `CheckpointSource`
+resolved from a previously trained MLflow run instead of a local path
+(downloading the run's checkpoint artifact to a temp directory first):
 
 ```python
 from dlkit.interfaces.inference import evaluate
 from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
 
 # Exact, caller-named run.
-result = evaluate(inference_settings, run_checkpoint=RunCheckpoint(run_id="abc123"))
+settings = inference_settings.patch({"model": {"checkpoint": RunCheckpoint(run_id="abc123")}})
+result = evaluate(settings)
 
 # Most recently started run in an experiment; experiment_name defaults to
 # settings.experiment.name (or "dlkit-evaluate" if that is also unset).
-result = evaluate(inference_settings, run_checkpoint=LatestRunCheckpoint())
-result = evaluate(inference_settings, run_checkpoint=LatestRunCheckpoint(experiment_name="exp"))
+settings = inference_settings.patch({"model": {"checkpoint": LatestRunCheckpoint()}})
+result = evaluate(settings)
 ```
+
+An `overrides: EvaluationOverrides | None` parameter (`checkpoint_path`,
+`experiment_name`, `run_name`, `tags`, `batch_size`, `split`, `device`) is
+also accepted for request-scoped overrides without hand-patching settings —
+see `dlkit.interfaces.api.domain.override_types.EvaluationOverrides`.
 
 ### Batch evaluation over a sweep (`evaluate_multirun()`)
 
-`evaluate_multirun()` and `ChildEvaluation` live in this package's
-`evaluate_multirun.py` and are importable as
-`from dlkit.interfaces.inference import evaluate_multirun, ChildEvaluation`.
-They are reachable at that path only — unlike `evaluate()`, they are not
-re-exported as `dlkit.evaluate_multirun` or
-`dlkit.interfaces.api.evaluate_multirun`.
-
-`evaluate_multirun()` fans a single `evaluate()` call out over every active
-child run of a multirun/sweep parent run, matching on the
-`mlflow.parentRunId` tag convention — this covers both dlkit-native nested
-sweeps (`MultiRunOrchestrator`) and externally-linked runs sharing the same
-convention:
+Moved to `dlkit.interfaces.api.functions.core.evaluate_multirun()`, next to
+its siblings `run_multirun_config()`/`run_multirun_spec()` — batch-evaluating
+a sweep's children is itself just another multirun sweep, not a bespoke
+mechanism:
 
 ```python
-from dlkit.interfaces.inference import evaluate_multirun
+from dlkit.interfaces.api.functions.core import evaluate_multirun
 
 batch = evaluate_multirun(inference_settings, parent_run_id="parent-run-id")
-batch.parent_run_id   # "parent-run-id"
-for child in batch.children:
-    child.run_id       # the child run the checkpoint was pulled from
-    child.result        # EvaluationResult for that child
+batch.parent_run_id   # the new evaluate-sweep's own parent run id
+for outcome in batch.children:
+    outcome.run_id       # the checkpoint-source child run, once tagged
+    outcome.result        # EvaluationResult for that child (on ChildSuccess)
 ```
 
-Returns a `MultiRunResult[ChildEvaluation]` (`dlkit.common.MultiRunResult`):
-`parent_run_id` plus one `ChildEvaluation` per active child run, in ascending
-`start_time` order. `ChildEvaluation.run_id` names the run the checkpoint was
-pulled from; this is distinct from `ChildEvaluation.result.mlflow_run_id`,
-which (only when `log_to_mlflow=True`) names the run created to log that eval
-result. `split`, `plots`, `log_to_mlflow`, `hooks`, `device`, and
-`batch_size` are forwarded unchanged to every child `evaluate()` call.
-Raises `WorkflowError` if `parent_run_id` does not exist or has no active
-child runs.
+Returns `MultiRunResult[ChildOutcome[WorkflowResult]]` — the same shape every
+other sweep returns, not a bespoke `ChildEvaluation` record. Internally
+builds an `ExistingRunsSource` (`engine.workflows.multi_run`): each active
+child of `parent_run_id` (found via the standard `mlflow.parentRunId` tag,
+covering both dlkit-native sweeps and externally-linked runs) becomes one
+evaluate `RunSpec`. Opens its own new "evaluate sweep" parent run, tagged
+`multirun.source_parent_run_id` back to the run being evaluated, so its
+children are discoverable the same way any sweep's are. `failure_policy`
+defaults to `"fail_fast"` (matching the old all-or-nothing behavior exactly);
+`"continue"`/`"continue_mark_parent_failed"` are also available.
 
 ## Dependency Direction
 
@@ -133,8 +138,10 @@ child runs.
   prediction
 
 ## Notes
-- Unified workflow execution no longer handles inference.
-- `execute()` rejects inference settings and points callers to `load_model()`.
+- `execute()` dispatches `InferenceJobConfig` to `evaluate()`, the same as
+  every other workflow settings type — evaluate is a full peer of
+  train/optimize/converge, not a special case. `load_model()` remains the
+  right choice for raw predictions with no ground truth/metrics/plots.
 - `load_model_from_settings()` resolves `model.checkpoint` from an
   `InferenceJobConfig` unless an explicit `checkpoint_path=` override is provided.
 - `CheckpointPredictor` exposes `feature_names` and `predict_target_key` as public

@@ -18,6 +18,7 @@ from dlkit.common.errors import ConfigValidationError
 from dlkit.common.hooks import ChildPlannedEvent, LifecycleHooks, RunCreatedEvent
 from dlkit.common.results import (
     ChildSuccess,
+    EvaluationResult,
     MultiRunResult,
     OptimizationResult,
     TrainingResult,
@@ -130,6 +131,41 @@ def test_run_multirun_config_heterogeneous_sweep_train_and_search(
     )
     assert train_outcome.run_id in child_run_ids
     assert search_outcome.run_id in child_run_ids
+
+
+def test_run_multirun_config_heterogeneous_sweep_train_and_predict(
+    train_and_predict_child_paths: tuple[Path, Path],
+) -> None:
+    """A train child and a predict (evaluate) child both succeed in one sweep.
+
+    Regression guard for the multirun/evaluate unification: `execute()` used
+    to reject `InferenceJobConfig` outright, so a `run_type = "predict"`
+    child could never appear in a multirun sweep at all.
+    """
+    train_path, predict_path = train_and_predict_child_paths
+    settings = _multirun_config(
+        experiment_name="sweep-train-and-predict",
+        parent_run_name="sweep-parent-train-and-predict",
+        runs=[
+            {"id": "train-child", "label": "Train Child", "files": [str(train_path)]},
+            {"id": "predict-child", "label": "Predict Child", "files": [str(predict_path)]},
+        ],
+    )
+
+    result = run_multirun(settings)
+
+    assert len(result.children) == 2
+    train_outcome, predict_outcome = result.children
+    assert isinstance(train_outcome, ChildSuccess)
+    assert isinstance(train_outcome.result, TrainingResult)
+    assert isinstance(predict_outcome, ChildSuccess)
+    assert isinstance(predict_outcome.result, EvaluationResult)
+
+    child_run_ids = find_child_run_ids(
+        parent_run_id=result.parent_run_id, tracking_uri=result.tracking_uri
+    )
+    assert train_outcome.run_id in child_run_ids
+    assert predict_outcome.run_id in child_run_ids
 
 
 def test_run_multirun_spec_train_only_sweep(

@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
-import pytest
-
-from dlkit.common import OptimizationResult, TrainingResult, WorkflowError
+from dlkit.common import EvaluationResult, OptimizationResult, TrainingResult
 from dlkit.engine.workflows.entrypoints.execution import execute as runtime_execute_impl
 from dlkit.infrastructure.config.job_config import (
     InferenceJobConfig,
@@ -61,8 +59,19 @@ class TestUnifiedExecuteFunction:
         assert isinstance(result, OptimizationResult)
         mock_executor_execute.assert_called_once()
 
-    def test_runtime_execution_rejects_inference_config(self) -> None:
+    @patch("dlkit.engine.workflows.entrypoints.execution.evaluate")
+    def test_inference_config_delegates_to_evaluate(self, mock_evaluate) -> None:
+        mock_evaluate.return_value = EvaluationResult(
+            predictions=None,
+            targets=None,
+            metrics={"mae": 0.1},
+            figures={},
+            duration_seconds=1.0,
+        )
+
         inference_config = Mock(spec=InferenceJobConfig)
 
-        with pytest.raises(WorkflowError, match="load_model"):
-            runtime_execute_impl(inference_config)
+        result = runtime_execute_impl(inference_config)
+
+        assert isinstance(result, EvaluationResult)
+        mock_evaluate.assert_called_once()

@@ -16,7 +16,6 @@ from dlkit.engine.inference import (
 )
 
 from .evaluate import evaluate
-from .evaluate_multirun import ChildEvaluation, evaluate_multirun
 
 __all__ = [
     # Main API
@@ -32,8 +31,6 @@ __all__ = [
     # Eval-only API
     "evaluate",
     "evaluate_checkpoint",
-    "evaluate_multirun",
-    "ChildEvaluation",
     "log_evaluation_result",
     # Exceptions
     "PredictorError",

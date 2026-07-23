@@ -19,6 +19,7 @@ from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
 from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
+from dlkit.interfaces.api.domain.override_types import EvaluationOverrides
 from dlkit.interfaces.api.functions import train as api_train
 from dlkit.interfaces.inference import evaluate as api_evaluate
 
@@ -232,8 +233,7 @@ def test_evaluate_fires_on_run_created_when_logging_to_mlflow(
 
     result = api_evaluate(
         inference_settings,
-        log_to_mlflow=True,
-        run_name="eval-run",
+        EvaluationOverrides(run_name="eval-run"),
         hooks=hooks,
     )
 
@@ -269,7 +269,7 @@ def test_evaluate_resolves_explicit_run_checkpoint(
     minimal_dataset: dict[str, Path],
     training_settings_with_checkpoint_and_mlflow: TrainingJobConfig,
 ) -> None:
-    """`run_checkpoint=RunCheckpoint(run_id=...)` downloads and evaluates that exact run."""
+    """A `RunCheckpoint(run_id=...)` model.checkpoint downloads and evaluates that exact run."""
     trained = api_train(training_settings_with_checkpoint_and_mlflow)
     assert trained.mlflow_run_id is not None
 
@@ -279,10 +279,11 @@ def test_evaluate_resolves_explicit_run_checkpoint(
     inference_settings = _with_split_filepath(
         inference_settings, _split_filepath(training_settings_with_checkpoint_and_mlflow)
     )
-
-    result = api_evaluate(
-        inference_settings, run_checkpoint=RunCheckpoint(run_id=trained.mlflow_run_id)
+    inference_settings = inference_settings.patch(
+        {"model": {"checkpoint": RunCheckpoint(run_id=trained.mlflow_run_id)}}
     )
+
+    result = api_evaluate(inference_settings)
 
     try:
         assert isinstance(result, EvaluationResult)
@@ -348,7 +349,8 @@ def test_evaluate_resolves_latest_run_checkpoint(
         minimal_dataset, _real_checkpoint_path(first_run)
     ).model_copy(update={"tracking": tracking})
 
-    latest_result = api_evaluate(latest_settings, run_checkpoint=LatestRunCheckpoint())
+    latest_settings = latest_settings.patch({"model": {"checkpoint": LatestRunCheckpoint()}})
+    latest_result = api_evaluate(latest_settings)
     second_direct_result = api_evaluate(second_direct_settings)
     first_direct_result = api_evaluate(first_direct_settings)
 
@@ -361,15 +363,18 @@ def test_evaluate_resolves_latest_run_checkpoint(
                 plt.close(fig)
 
 
-def test_evaluate_rejects_conflicting_checkpoint_sources(
+def test_evaluate_checkpoint_field_accepts_either_a_path_or_a_run_checkpoint(
     minimal_dataset: dict[str, Path],
     trained_checkpoint_path: Path,
 ) -> None:
+    """`model.checkpoint` is one field (`Path | str | CheckpointSource`), not two
+    mutually exclusive kwargs — passing a `RunCheckpoint` simply replaces
+    whatever path was there. "Conflicting checkpoint sources" is now
+    structurally unreachable rather than a runtime validation error.
+    """
     inference_settings = _build_inference_settings(minimal_dataset, trained_checkpoint_path)
 
-    with pytest.raises(ConfigurationError, match="not both"):
-        api_evaluate(
-            inference_settings,
-            checkpoint_path=trained_checkpoint_path,
-            run_checkpoint=RunCheckpoint(run_id="does-not-matter"),
-        )
+    repatched = inference_settings.patch(
+        {"model": {"checkpoint": RunCheckpoint(run_id="does-not-matter")}}
+    )
+    assert repatched.model.checkpoint == RunCheckpoint(run_id="does-not-matter")

@@ -192,7 +192,7 @@ class EngineWorkflowExecutor:
         *,
         mlflow: bool = False,
         hooks: LifecycleHooks | None = None,
-    ) -> TrainingResult | OptimizationResult | ConvergenceResult:
+    ) -> WorkflowResult:
         """Execute a workflow with intelligent routing via engine entrypoint.
 
         Args:
@@ -202,7 +202,8 @@ class EngineWorkflowExecutor:
             hooks: Optional lifecycle hooks for training events.
 
         Returns:
-            TrainingResult or OptimizationResult depending on workflow type.
+            TrainingResult, OptimizationResult, ConvergenceResult, or
+            EvaluationResult depending on workflow type.
         """
         settings_with_tracking = apply_mlflow_flag(settings, mlflow)
         return runtime_execute(settings_with_tracking, overrides=overrides, hooks=hooks)

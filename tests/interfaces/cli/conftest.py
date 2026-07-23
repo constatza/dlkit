@@ -311,14 +311,30 @@ def sample_settings() -> Any:
     """Create minimal inference-style settings for CLI tests.
 
     Returns:
-        Object with the current lowercase JobConfig attribute shape.
+        Object with the current lowercase JobConfig attribute shape, plus a
+        minimal ``.patch()`` (nested-dict merge, only as deep as CLI commands
+        actually patch: ``model.checkpoint``) so command code exercising
+        ``settings.patch({"model": {"checkpoint": ...}})`` works against this
+        fixture the same way it would against a real, frozen JobConfig.
     """
-    return SimpleNamespace(
+    settings = SimpleNamespace(
         run=SimpleNamespace(type="predict"),
         model=SimpleNamespace(checkpoint=Path("model.ckpt")),
         data=True,
         tracking=SimpleNamespace(backend="mlflow"),
+        experiment=None,
+        split="test",
     )
+
+    def _patch(updates: dict[str, Any]) -> Any:
+        patched = SimpleNamespace(**vars(settings))
+        model_updates = updates.get("model")
+        if model_updates:
+            patched.model = SimpleNamespace(**{**vars(settings.model), **model_updates})
+        return patched
+
+    settings.patch = _patch
+    return settings
 
 
 # Note: A single inference-result fixture is provided below that returns an

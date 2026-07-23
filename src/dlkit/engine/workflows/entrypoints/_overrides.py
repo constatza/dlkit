@@ -107,6 +107,11 @@ def _build_patch(settings: BasicSettings, overrides: dict[str, Any]) -> dict[str
     if (bs := overrides.get("batch_size")) is not None:
         patch["data"] = {"batch_size": bs}
 
+    if split := overrides.get("split"):
+        patch["split"] = split
+    if device := overrides.get("device"):
+        patch["device"] = device
+
     experiment: dict[str, Any] = {}
     if name := overrides.get("experiment_name"):
         experiment["name"] = name

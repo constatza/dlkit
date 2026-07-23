@@ -9,13 +9,16 @@ returns raw predictions with no ground truth, metrics, or plots.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, Literal, cast
+from typing import Annotated, cast
 
 import typer
 from rich.console import Console
 
 from dlkit.common import ConfigurationError
 from dlkit.common.checkpoint_source import CheckpointSource, LatestRunCheckpoint, RunCheckpoint
+from dlkit.engine.workflows.entrypoints import apply_mlflow_flag
+from dlkit.infrastructure.config.job_config import InferenceJobConfig
+from dlkit.interfaces.api.domain.override_types import EvaluationOverrides
 from dlkit.interfaces.inference import evaluate as evaluate_api
 
 from ..adapters.config_adapter import load_config
@@ -135,16 +138,21 @@ def _run_evaluate_impl(
         case None:
             console.print(f"📊 Evaluating checkpoint: {checkpoint_path}")
 
-    effective_batch_size = batch_size if batch_size is not None else 32
-    result = evaluate_api(
-        job,
+    if run_checkpoint is not None:
+        job = job.patch({"model": {"checkpoint": run_checkpoint}})
+    # apply_mlflow_flag() is generic over WorkflowSettings for reuse across every
+    # entrypoint, but never changes a settings object's concrete class — only
+    # `load_config(..., run_type="predict")`'s InferenceJobConfig narrowing is lost
+    # to the type checker, not the actual runtime type.
+    job = cast(InferenceJobConfig, apply_mlflow_flag(job, mlflow=mlflow))
+
+    overrides = EvaluationOverrides(
         checkpoint_path=checkpoint_path,
-        run_checkpoint=run_checkpoint,
-        split=cast(Literal["test", "predict"], split),
-        log_to_mlflow=mlflow,
         run_name=run_name,
-        batch_size=effective_batch_size,
+        split=split,
+        batch_size=batch_size,
     )
+    result = evaluate_api(job, overrides)
 
     console.print("🎉 Evaluation completed successfully!")
     present_evaluation_result(result, console, output_dir=output_dir)

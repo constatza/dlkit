@@ -17,6 +17,7 @@ from dlkit.common.results import (
     ChildOutcome,
     ChildSuccess,
     ConvergenceResult,
+    EvaluationResult,
     FailurePolicy,
     MultiRunResult,
     OptimizationResult,
@@ -73,7 +74,7 @@ class IMultiRunOrchestrator(Protocol):
     Callers supply child run specifications and (optionally) result
     aggregation; the executor owns the parent MLflow run lifecycle and
     dispatches each child to whichever workflow entrypoint applies to its
-    settings type (train/optimize/converge).
+    settings type (train/optimize/converge/evaluate).
     """
 
     def run_sweep(
@@ -385,8 +386,9 @@ def _wrap_on_run_created(
 def _extract_run_id(result: WorkflowResult) -> str | None:
     """Best-effort MLflow run id for a child's workflow result.
 
-    All three ``WorkflowResult`` variants (``TrainingResult``,
-    ``ConvergenceResult``, ``OptimizationResult``) carry ``mlflow_run_id``.
+    All four ``WorkflowResult`` variants (``TrainingResult``,
+    ``ConvergenceResult``, ``OptimizationResult``, ``EvaluationResult``) carry
+    ``mlflow_run_id``.
 
     Args:
         result: The child's workflow result.
@@ -399,6 +401,7 @@ def _extract_run_id(result: WorkflowResult) -> str | None:
             TrainingResult(mlflow_run_id=run_id)
             | ConvergenceResult(mlflow_run_id=run_id)
             | OptimizationResult(mlflow_run_id=run_id)
+            | EvaluationResult(mlflow_run_id=run_id)
         ):
             return run_id
         case _:

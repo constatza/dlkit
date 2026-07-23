@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .child_source import (
     ChildSource,
+    ExistingRunsSource,
     ExplicitFileSource,
     GlobSource,
     LoadedSettingsSource,
@@ -14,6 +15,7 @@ from .spec import MultiRunSpec, RunSpec
 
 __all__ = [
     "ChildSource",
+    "ExistingRunsSource",
     "ExplicitFileSource",
     "GlobSource",
     "IMultiRunOrchestrator",

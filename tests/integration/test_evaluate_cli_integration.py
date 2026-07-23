@@ -363,5 +363,5 @@ def test_evaluate_multirun_cli_evaluates_every_child_run(
 
     assert result.exit_code == 0, result.output
     assert "Multirun evaluation completed successfully" in result.output
-    assert result.output.count("Run:") == NUM_VARIANTS
-    assert f"Children: {NUM_VARIANTS} evaluated" in result.output
+    assert "Parent run:" in result.output
+    assert result.output.count("✅ success") == NUM_VARIANTS

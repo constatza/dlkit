@@ -11,8 +11,18 @@ from dlkit.common import (
     TrainingResult,
 )
 from dlkit.common.hooks import LifecycleHooks
-from dlkit.common.results import ChildOutcome, ConvergenceResult, MultiRunResult, WorkflowResult
-from dlkit.engine.workflows.entrypoints import MultiRunSpec
+from dlkit.common.results import (
+    ChildOutcome,
+    ConvergenceResult,
+    FailurePolicy,
+    MultiRunResult,
+    WorkflowResult,
+)
+from dlkit.engine.workflows.entrypoints import (
+    ExistingRunsSource,
+    MultiRunSpec,
+    expand_child_sources,
+)
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.engine.workflows.factories.inference_data_factory import (
     build_inference_datamodule as _build_inference_datamodule,
@@ -24,6 +34,8 @@ from dlkit.interfaces.api.domain.override_types import (
     OptimizationOverrides,
     TrainingOverrides,
 )
+
+_DEFAULT_EVALUATE_MULTIRUN_EXPERIMENT_NAME = "dlkit-evaluate"
 
 _executor: EngineWorkflowExecutor = EngineWorkflowExecutor()
 
@@ -154,6 +166,59 @@ def run_multirun_spec(
         ChildOutcome per child, in expansion order.
     """
     return _executor.run_multirun_spec(spec, mlflow=mlflow, hooks=hooks)
+
+
+def evaluate_multirun(
+    settings: InferenceJobConfig,
+    parent_run_id: str,
+    *,
+    failure_policy: FailurePolicy = "fail_fast",
+    hooks: LifecycleHooks | None = None,
+) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
+    """Batch-evaluate every active child run of an existing parent run.
+
+    Replaces the old bespoke ``evaluate_multirun()`` fan-out: builds an
+    ``ExistingRunsSource`` (one evaluate child per active child of
+    ``parent_run_id``, each pointed at that child's own checkpoint) and runs
+    it through the same ``run_multirun_spec()`` every other sweep uses — a
+    new "evaluate sweep" parent run is opened and tagged
+    ``multirun.source_parent_run_id`` for traceability back to the run being
+    evaluated, and every child is discoverable via the standard
+    ``mlflow.parentRunId`` mechanism, same as any other sweep.
+
+    Args:
+        settings: Inference job configuration shared across all children;
+            each child's ``model.checkpoint`` is overridden to that child's
+            own run.
+        parent_run_id: MLflow run id whose active children should each be
+            evaluated.
+        failure_policy: How to react when a child raises. ``"fail_fast"``
+            (default) propagates immediately, matching the old
+            ``evaluate_multirun()``'s all-or-nothing behavior exactly.
+            ``"continue"``/``"continue_mark_parent_failed"`` are also
+            available.
+        hooks: Optional lifecycle hooks fired around the parent run and
+            forwarded into every child's own evaluate() call.
+
+    Returns:
+        MultiRunResult with the new evaluate-sweep parent run id, tracking
+        URI, and one ChildOutcome per evaluated child, in expansion order.
+    """
+    source = ExistingRunsSource(parent_run_id=parent_run_id, settings=settings)
+    children = expand_child_sources([source])
+    experiment_name = (
+        settings.experiment.name
+        if settings.experiment
+        else _DEFAULT_EVALUATE_MULTIRUN_EXPERIMENT_NAME
+    )
+    spec = MultiRunSpec(
+        experiment_name=experiment_name,
+        parent_run_name=f"evaluate-{parent_run_id}",
+        parent_tags={"multirun.source_parent_run_id": parent_run_id},
+        failure_policy=failure_policy,
+        children=children,
+    )
+    return _executor.run_multirun_spec(spec, hooks=hooks)
 
 
 def optimize(

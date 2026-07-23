@@ -137,6 +137,14 @@ def load_model_from_settings(
     resolved_checkpoint = checkpoint_path or settings.model.checkpoint
     if resolved_checkpoint is None:
         raise ConfigurationError("No checkpoint path found in settings or override.")
+    if not isinstance(resolved_checkpoint, Path | str):
+        raise ConfigurationError(
+            "settings.model.checkpoint is a CheckpointSource "
+            "(RunCheckpoint/LatestRunCheckpoint), which load_model_from_settings() "
+            "cannot resolve on its own — pass an explicit checkpoint_path, or use "
+            "dlkit.interfaces.inference.evaluate(), which resolves it via MLflow "
+            "before calling this function."
+        )
 
     resolved_precision = precision
     if resolved_precision is None:

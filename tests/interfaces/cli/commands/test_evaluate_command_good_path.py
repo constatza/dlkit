@@ -49,9 +49,10 @@ class TestEvaluateCommandCheckpointSelection:
         )
 
         assert result.exit_code == 0
-        _, kwargs = mock_evaluate_api.call_args
-        assert kwargs["checkpoint_path"] == sample_checkpoint_path
-        assert kwargs["run_checkpoint"] is None
+        settings_arg, overrides_arg = mock_evaluate_api.call_args.args
+        # No --run-id/--latest-run, so settings.model.checkpoint is untouched.
+        assert settings_arg.model.checkpoint == sample_settings.model.checkpoint
+        assert overrides_arg.checkpoint_path == sample_checkpoint_path
         mock_present_result.assert_called_once()
 
     @patch("dlkit.interfaces.cli.commands.evaluate.load_config")
@@ -72,9 +73,9 @@ class TestEvaluateCommandCheckpointSelection:
         result = cli_runner.invoke(evaluate_app, [str(sample_config_path), "--run-id", "abc123"])
 
         assert result.exit_code == 0
-        _, kwargs = mock_evaluate_api.call_args
-        assert kwargs["checkpoint_path"] is None
-        assert kwargs["run_checkpoint"] == RunCheckpoint(run_id="abc123")
+        settings_arg, overrides_arg = mock_evaluate_api.call_args.args
+        assert settings_arg.model.checkpoint == RunCheckpoint(run_id="abc123")
+        assert overrides_arg.checkpoint_path is None
 
     @patch("dlkit.interfaces.cli.commands.evaluate.load_config")
     @patch("dlkit.interfaces.cli.commands.evaluate.evaluate_api")
@@ -94,9 +95,9 @@ class TestEvaluateCommandCheckpointSelection:
         result = cli_runner.invoke(evaluate_app, [str(sample_config_path), "--latest-run"])
 
         assert result.exit_code == 0
-        _, kwargs = mock_evaluate_api.call_args
-        assert kwargs["checkpoint_path"] is None
-        assert kwargs["run_checkpoint"] == LatestRunCheckpoint()
+        settings_arg, overrides_arg = mock_evaluate_api.call_args.args
+        assert settings_arg.model.checkpoint == LatestRunCheckpoint()
+        assert overrides_arg.checkpoint_path is None
 
     @patch("dlkit.interfaces.cli.commands.evaluate.load_config")
     def test_evaluate_with_run_id_and_latest_run_together_fails_cleanly(

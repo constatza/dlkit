@@ -23,6 +23,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from dlkit.common.checkpoint_source import CheckpointSource
+
 from .data_entries import PathBasedEntry, ValueBasedEntry
 from .entry_base import DataEntry
 
@@ -64,9 +66,15 @@ class ConfigValidationError(ValueError):
 # ============================================================================
 
 
-def _coerce_path(value: str | Path | None) -> Path | None:
-    """Coerce a string or Path to Path, returning None if input is None."""
-    if value is None:
+def _coerce_path(value: str | Path | CheckpointSource | None) -> Path | None:
+    """Coerce a string or Path to Path.
+
+    Returns None for None or an unresolved ``CheckpointSource`` (a
+    RunCheckpoint/LatestRunCheckpoint resolves to a local path lazily via
+    MLflow at evaluate time — there is no local path to check existence of
+    at config-validation time).
+    """
+    if not isinstance(value, str | Path):
         return None
     return Path(value) if isinstance(value, str) else value
 

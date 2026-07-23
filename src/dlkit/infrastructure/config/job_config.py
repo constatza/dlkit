@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -62,9 +62,14 @@ class InferenceJobConfig(JobConfig):
 
     Args:
         model: Model class selector and hyperparameters (required).
+        split: Which labeled split ``evaluate()`` compares predictions against.
+        device: Inference device (``"auto"``, ``"cpu"``, ``"cuda:0"``, ...). Free-form,
+            unlike ``training.trainer.accelerator``'s restricted Lightning literal.
     """
 
     model: ModelComponentSettings
+    split: Literal["test", "predict"] = "test"
+    device: str = "auto"
 
     @model_validator(mode="after")
     def _checkpoint_required(self) -> InferenceJobConfig:

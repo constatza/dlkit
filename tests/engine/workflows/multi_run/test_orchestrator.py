@@ -33,6 +33,7 @@ from dlkit.common.hooks import (
 from dlkit.common.results import (
     ChildFailure,
     ChildSuccess,
+    EvaluationResult,
     MultiRunResult,
     TrainingResult,
     WorkflowResult,
@@ -216,6 +217,43 @@ def test_run_sweep_tags_child_run_with_parent_run_id(
     )
     mock_tracker.set_run_tag.assert_called_once_with(
         mock_training_result.mlflow_run_id, "mlflow.parentRunId", "parent-run-id"
+    )
+
+
+def test_run_sweep_extracts_and_tags_run_id_for_evaluation_result(
+    orchestrator: MultiRunOrchestrator,
+    mock_tracker: MagicMock,
+    mock_execute: MagicMock,
+    spec_a: RunSpec,
+) -> None:
+    """A dispatched child returning EvaluationResult (evaluate as a multirun
+    child) has its run_id extracted and tagged exactly like the other three
+    WorkflowResult variants — the ``_extract_run_id`` match arm added for
+    ``EvaluationResult``.
+    """
+    evaluation_result = EvaluationResult(
+        predictions=None,
+        targets=None,
+        metrics={"mae": 0.1},
+        figures={},
+        duration_seconds=1.0,
+        mlflow_run_id="eval-child-run-id",
+    )
+    mock_execute.return_value = evaluation_result
+
+    result = orchestrator.run_sweep(
+        children=[spec_a],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    assert len(result.children) == 1
+    outcome = result.children[0]
+    assert isinstance(outcome, ChildSuccess)
+    assert outcome.run_id == "eval-child-run-id"
+    assert outcome.result is evaluation_result
+    mock_tracker.set_run_tag.assert_called_once_with(
+        "eval-child-run-id", "mlflow.parentRunId", "parent-run-id"
     )
 
 

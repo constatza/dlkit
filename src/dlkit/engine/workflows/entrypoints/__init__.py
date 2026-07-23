@@ -1,10 +1,16 @@
 """Runtime-owned workflow entrypoints."""
 
 from dlkit.engine.workflows.factories.tracking_flag import apply_mlflow_flag
-from dlkit.engine.workflows.multi_run import MultiRunSpec, RunSpec, expand_child_sources
+from dlkit.engine.workflows.multi_run import (
+    ExistingRunsSource,
+    MultiRunSpec,
+    RunSpec,
+    expand_child_sources,
+)
 
 from .convergence import converge
 from .convert import ConvertResult, convert_checkpoint_to_onnx
+from .evaluate import evaluate
 from .execution import execute
 from .multirun import build_child_sources, run_multirun, run_multirun_spec
 from .optimization import optimize
@@ -14,6 +20,7 @@ from .validation import validate_config
 
 __all__ = [
     "ConvertResult",
+    "ExistingRunsSource",
     "MultiRunSpec",
     "RunSpec",
     "TemplateKind",
@@ -21,6 +28,7 @@ __all__ = [
     "build_child_sources",
     "converge",
     "convert_checkpoint_to_onnx",
+    "evaluate",
     "execute",
     "expand_child_sources",
     "generate_template",

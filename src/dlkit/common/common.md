@@ -14,7 +14,7 @@ the codebase.
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
 - Results: `TrainingResult`, `InferenceResult`, `EvaluationResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`, `MultiRunResult[T]`
-- Multirun type algebra: `WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult`;
+- Multirun type algebra: `WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult | EvaluationResult`;
   `ChildSuccess[T]` / `ChildFailure` / `type ChildOutcome[T] = ChildSuccess[T] | ChildFailure`
   (a closed, `status`-discriminated sum type consumed via `match`/`case`, not nullable
   fields); `FailurePolicy = Literal["fail_fast", "continue", "continue_mark_parent_failed"]`
@@ -24,10 +24,12 @@ the codebase.
 - Protocols: `IDataModule`, `ITrainableModule`
 
 `MultiRunResult[T]` holds `parent_run_id`, `tracking_uri`, and `children: tuple[T, ...]` —
-the generic parent/children result shape shared by `evaluate_multirun()`
-(`MultiRunResult[ChildEvaluation]`) and `MultiRunOrchestrator.run_sweep()`
-(`MultiRunResult[ChildOutcome[WorkflowResult]]`), instead of each inventing its own
-container. `LifecycleHooks.on_child_planned` fires with a `ChildPlannedEvent`
+the generic parent/children result shape shared by every multirun consumer
+(`MultiRunOrchestrator.run_sweep()`, and `evaluate_multirun()` composed on top
+of it) as `MultiRunResult[ChildOutcome[WorkflowResult]]`, instead of each
+inventing its own container. `EvaluationResult` is a `WorkflowResult` member
+like any other, so a sweep can mix train/optimize/converge/evaluate children
+freely. `LifecycleHooks.on_child_planned` fires with a `ChildPlannedEvent`
 (`child_id`, `label`, `run_name`, `tags`, `params`, `metadata`) right before a multirun
 child is dispatched, once its settings are finalized but before any MLflow run is
 created. `LifecycleHooks.on_child_failed` fires with a `ChildFailure` record when a

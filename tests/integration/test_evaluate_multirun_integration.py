@@ -1,9 +1,11 @@
 """End-to-end test: train a real multirun sweep, then batch-evaluate its children.
 
-Verifies ``evaluate_multirun()`` fans a single ``evaluate()`` call out over
-every child run of a real ``MultiRunOrchestrator`` sweep, using genuine
-checkpoints/MLflow runs (not mocked), plus a focused unit-level test that
-``evaluate_multirun()`` fails loudly when the parent run has no children.
+Verifies ``evaluate_multirun()`` (``dlkit.interfaces.api.functions.core``)
+composes an ``ExistingRunsSource`` + the general ``MultiRunOrchestrator``
+pipeline to fan a single ``evaluate()`` call out over every child run of a
+real ``MultiRunOrchestrator`` sweep, using genuine checkpoints/MLflow runs
+(not mocked), plus a focused unit-level test that it fails loudly when the
+parent run has no children.
 """
 
 from __future__ import annotations
@@ -15,22 +17,14 @@ import matplotlib.pyplot as plt
 import pytest
 
 from dlkit.common.errors import WorkflowError
-from dlkit.common.results import MultiRunResult
+from dlkit.common.results import ChildFailure, ChildSuccess, EvaluationResult, MultiRunResult
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.tracking.run_queries import find_child_run_ids
 from dlkit.engine.workflows.entrypoints import execute
 from dlkit.engine.workflows.multi_run import MultiRunOrchestrator, RunSpec
 from dlkit.infrastructure.config.job_config import InferenceJobConfig, TrainingJobConfig
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
-from dlkit.interfaces.inference.evaluate_multirun import ChildEvaluation, evaluate_multirun
-
-# `dlkit.interfaces.inference`'s __init__ re-exports the `evaluate_multirun`
-# *function* under the `evaluate_multirun` attribute, shadowing the submodule
-# on the package object (same shadowing `evaluate`/`evaluate.py` already has,
-# see `tests/interfaces/inference/test_checkpoint_source.py`) — so
-# `import_module` looks the submodule up in `sys.modules` directly, sidestepping
-# the shadowing, letting us monkeypatch `find_child_run_ids` at its point of use.
-evaluate_multirun_module = import_module("dlkit.interfaces.inference.evaluate_multirun")
+from dlkit.interfaces.api.functions.core import evaluate_multirun
 
 # Same model/data shape as tests/integration/conftest.py's _make_training_job_config,
 # since InferenceJobConfig must describe the identical model + data the checkpoints
@@ -44,8 +38,8 @@ def _build_inference_settings(minimal_dataset: dict[str, Path]) -> InferenceJobC
     """Build an InferenceJobConfig matching the FFNN trained by the sweep variants.
 
     ``model.checkpoint`` is required by ``InferenceJobConfig`` but unused here: the
-    per-child checkpoint resolved via ``run_checkpoint`` always takes precedence over
-    ``settings.model.checkpoint`` inside ``evaluate()``.
+    per-child checkpoint resolved via ``ExistingRunsSource`` always overrides
+    ``settings.model.checkpoint`` before dispatch.
     """
     return InferenceJobConfig.model_validate(
         {
@@ -80,7 +74,7 @@ def _build_inference_settings(minimal_dataset: dict[str, Path]) -> InferenceJobC
 def _split_filepath(training_settings: TrainingJobConfig) -> Path:
     """The single `splits/*.json` file training persisted for this run.
 
-    A `run_checkpoint`-resolved checkpoint is downloaded to an arbitrary temp
+    A run-checkpoint-resolved checkpoint is downloaded to an arbitrary temp
     directory, not colocated next to a `splits/` directory the way a local
     training-output checkpoint is — so `evaluate()`'s default colocated-split
     auto-location (`DatasetBuilder._resolve_colocated_split_filepath`) can't
@@ -211,49 +205,54 @@ def test_evaluate_multirun_evaluates_every_child_run(
 
     try:
         assert isinstance(result, MultiRunResult)
-        assert result.parent_run_id == parent_run_id
+        # The evaluate sweep opens its own new parent run, distinct from the
+        # training sweep's parent it evaluated.
+        assert result.parent_run_id != parent_run_id
         assert len(result.children) == NUM_VARIANTS
-        assert all(isinstance(child, ChildEvaluation) for child in result.children)
-        assert {child.run_id for child in result.children} == expected_run_ids
+        assert all(isinstance(child, ChildSuccess) for child in result.children)
+        # child_id carries the source checkpoint's run identity.
+        assert {child.child_id for child in result.children} == expected_run_ids
         for child in result.children:
+            assert isinstance(child.result, EvaluationResult)
             assert child.result.metrics.keys() == {"mae", "rmse", "r2"}
             assert all(isinstance(v, float) for v in child.result.metrics.values())
             assert child.result.predictions.shape[0] == child.result.targets.shape[0] > 0
-            # Each ChildEvaluation wasn't itself logged to MLflow (log_to_mlflow
-            # defaults to False), so its own mlflow_run_id must stay unset —
-            # distinct from `child.run_id`, the source checkpoint's run.
-            assert child.result.mlflow_run_id is None
     finally:
         for child in result.children:
-            for fig in child.result.figures.values():
-                plt.close(fig)
+            if isinstance(child, ChildSuccess):
+                for fig in child.result.figures.values():
+                    plt.close(fig)
 
 
-def test_evaluate_multirun_with_log_to_mlflow_distinguishes_source_and_logging_runs(
+def test_evaluate_multirun_tags_children_and_logs_each_child(
     trained_sweep: tuple[str, tuple[TrainingJobConfig, ...]],
     multirun_inference_settings: InferenceJobConfig,
 ) -> None:
-    """`ChildEvaluation.run_id` (source checkpoint's run) and its own
-    `EvaluationResult.mlflow_run_id` (the run opened to *log* that evaluation, only
-    present when `log_to_mlflow=True`) must be two genuinely distinct, non-empty run
-    ids — not merely two fields that happen to both be unset.
+    """Every child is always logged to MLflow now (the orchestrator forces
+    tracking on for every dispatched child), and is a distinct run from its
+    own source checkpoint's run — `child_id` (source) and `run_id` (this
+    child's own new evaluate-logging run) must never collide.
     """
-    parent_run_id, _variant_settings = trained_sweep
+    parent_run_id, variant_settings = trained_sweep
 
-    result = evaluate_multirun(
-        multirun_inference_settings, parent_run_id=parent_run_id, log_to_mlflow=True
-    )
+    result = evaluate_multirun(multirun_inference_settings, parent_run_id=parent_run_id)
 
     try:
         assert len(result.children) == NUM_VARIANTS
         for child in result.children:
+            assert isinstance(child, ChildSuccess)
             assert child.run_id
-            assert child.result.mlflow_run_id
-            assert child.run_id != child.result.mlflow_run_id
+            assert child.result.mlflow_run_id == child.run_id
+            assert child.child_id != child.run_id
+        tagged_children = find_child_run_ids(
+            parent_run_id=result.parent_run_id, tracking_uri=variant_settings[0].tracking.uri
+        )
+        assert set(tagged_children) == {child.run_id for child in result.children}
     finally:
         for child in result.children:
-            for fig in child.result.figures.values():
-                plt.close(fig)
+            if isinstance(child, ChildSuccess):
+                for fig in child.result.figures.values():
+                    plt.close(fig)
 
 
 def test_evaluate_multirun_raises_when_parent_has_no_children(
@@ -276,9 +275,56 @@ def test_evaluate_multirun_raises_when_parent_has_no_children(
             {"parent_run_id": parent_run_id},
         )
 
-    monkeypatch.setattr(evaluate_multirun_module, "find_child_run_ids", _raise_no_children)
+    monkeypatch.setattr(
+        "dlkit.engine.workflows.multi_run.child_source.find_child_run_ids", _raise_no_children
+    )
 
     settings = _build_inference_settings(minimal_dataset)
 
     with pytest.raises(WorkflowError, match="no active child runs"):
         evaluate_multirun(settings, parent_run_id="lonely-parent")
+
+
+def test_evaluate_multirun_continue_policy_records_child_failures(
+    trained_sweep: tuple[str, tuple[TrainingJobConfig, ...]],
+    multirun_inference_settings: InferenceJobConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`failure_policy="continue"` records a `ChildFailure` per bad child
+    instead of aborting the whole batch — a capability the old bespoke
+    `evaluate_multirun()` never had (it was strictly all-or-nothing).
+    """
+    parent_run_id, _variant_settings = trained_sweep
+
+    # `dlkit.engine.workflows.entrypoints`'s __init__ re-exports the `evaluate`
+    # *function*, shadowing the `evaluate` submodule on the package object
+    # (same shadowing documented for `dlkit.interfaces.inference.evaluate`) —
+    # so `import_module` looks the submodule up in `sys.modules` directly.
+    evaluate_module = import_module("dlkit.engine.workflows.entrypoints.evaluate")
+
+    original = evaluate_module.download_checkpoint_artifact
+    calls = {"count": 0}
+
+    def _fail_first_then_delegate(*args: object, **kwargs: object) -> Path:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise RuntimeError("simulated checkpoint download failure")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(evaluate_module, "download_checkpoint_artifact", _fail_first_then_delegate)
+
+    result = evaluate_multirun(
+        multirun_inference_settings, parent_run_id=parent_run_id, failure_policy="continue"
+    )
+
+    try:
+        assert len(result.children) == NUM_VARIANTS
+        failures = [child for child in result.children if isinstance(child, ChildFailure)]
+        successes = [child for child in result.children if isinstance(child, ChildSuccess)]
+        assert len(failures) == 1
+        assert len(successes) == NUM_VARIANTS - 1
+    finally:
+        for child in result.children:
+            if isinstance(child, ChildSuccess):
+                for fig in child.result.figures.values():
+                    plt.close(fig)
