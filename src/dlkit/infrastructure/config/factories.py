@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 _PROFILE_KEYS: tuple[str, ...] = ("model", "data", "training", "tracking", "plots")
 
 
-def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """Recursive key-by-key merge; override wins at leaf values.
 
     Args:
@@ -38,7 +38,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     for key, val in override.items():
         existing = result.get(key)
         if isinstance(existing, dict) and isinstance(val, dict):
-            result[key] = _deep_merge(existing, val)
+            result[key] = deep_merge(existing, val)
         else:
             result[key] = val
     return result
@@ -177,7 +177,7 @@ def load_job(
     merged: dict[str, Any] = {}
     for path in paths:
         raw = DLKitTomlSource(path)()
-        merged = _deep_merge(merged, raw)
+        merged = deep_merge(merged, raw)
 
     # 2. Resolve typed profile references from run.*.
     run_raw = merged.get("run", {})
@@ -200,7 +200,7 @@ def load_job(
             profile_base[section_key] = profile_raw[section_key]
 
     # 3. Merge profiles as base; job-file sections win.
-    merged = _deep_merge(profile_base, merged)
+    merged = deep_merge(profile_base, merged)
 
     # 4. Remove profile path strings from run (they were references, not config).
     run_section = merged.get("run")
@@ -225,7 +225,7 @@ def load_job(
     # 6. Apply DLKIT_* env patches.
     patches = _read_env_patches("DLKIT")
     if patches:
-        merged = _deep_merge(merged, patches)
+        merged = deep_merge(merged, patches)
 
     # 6b. Resolve multirun child file/glob paths relative to job_dir.
     if resolved_type == "multirun":

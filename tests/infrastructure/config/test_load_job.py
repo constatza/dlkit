@@ -1,4 +1,4 @@
-"""Tests for load_job() and _deep_merge() in dlkit.infrastructure.config.factories."""
+"""Tests for load_job() and deep_merge() in dlkit.infrastructure.config.factories."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from dlkit.common.errors import ConfigValidationError
-from dlkit.infrastructure.config.factories import _deep_merge, load_job
+from dlkit.infrastructure.config.factories import deep_merge, load_job
 from dlkit.infrastructure.config.job_config import (
     ConvergenceJobConfig,
     MultiRunJobConfig,
@@ -213,7 +213,7 @@ def test_missing_run_type_raises(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Tests: _deep_merge
+# Tests: deep_merge
 # ---------------------------------------------------------------------------
 
 
@@ -221,7 +221,7 @@ def test_deep_merge_job_wins_over_profile() -> None:
     """Inline job keys override profile keys; non-conflicting keys are preserved."""
     base = {"training": {"optimizer": {"lr": 1e-3, "name": "Adam"}}}
     override = {"training": {"optimizer": {"lr": 5e-4}}}
-    merged = _deep_merge(base, override)
+    merged = deep_merge(base, override)
     training = merged.get("training")
     assert isinstance(training, dict)
     optimizer = training.get("optimizer")
@@ -231,10 +231,10 @@ def test_deep_merge_job_wins_over_profile() -> None:
 
 
 def test_deep_merge_does_not_mutate_inputs() -> None:
-    """_deep_merge must not mutate base or override."""
+    """deep_merge must not mutate base or override."""
     base = {"a": {"x": 1}}
     override = {"a": {"y": 2}}
-    _deep_merge(base, override)
+    deep_merge(base, override)
     assert base == {"a": {"x": 1}}
     assert override == {"a": {"y": 2}}
 
@@ -243,7 +243,7 @@ def test_deep_merge_leaf_override() -> None:
     """Non-dict values in override replace non-dict values in base."""
     base = {"key": "old"}
     override = {"key": "new"}
-    merged = _deep_merge(base, override)
+    merged = deep_merge(base, override)
     assert merged["key"] == "new"
 
 
@@ -251,5 +251,5 @@ def test_deep_merge_adds_missing_keys() -> None:
     """Keys present only in override are added to result."""
     base = {"a": 1}
     override = {"b": 2}
-    merged = _deep_merge(base, override)
+    merged = deep_merge(base, override)
     assert merged == {"a": 1, "b": 2}

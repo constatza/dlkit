@@ -285,6 +285,53 @@ def test_evaluate_multirun_raises_when_parent_has_no_children(
         evaluate_multirun(settings, parent_run_id="lonely-parent")
 
 
+def test_evaluate_multirun_callable_settings_resolves_per_child(
+    trained_sweep: tuple[str, tuple[TrainingJobConfig, ...]],
+    minimal_dataset: dict[str, Path],
+) -> None:
+    """A per-child settings resolver lets each child use its own settings.
+
+    Regression guard for gap 3 (`docs/general-multirun-api-requirements.md`):
+    before this, `evaluate_multirun()` could only vary `model.checkpoint`
+    per child, sharing one `data.splits.filepath` (and everything else)
+    across the whole sweep — structurally unable to give each child its own
+    dataset. This dispatches real per-child evaluate() calls, each pointed
+    at that child's own split file via the resolver, proving the callable
+    path drives real dispatch correctly rather than just accepting the type.
+    """
+    parent_run_id, variant_settings = trained_sweep
+    tracking_uri = variant_settings[0].tracking.uri
+    run_ids = find_child_run_ids(parent_run_id=parent_run_id, tracking_uri=tracking_uri)
+    assert len(run_ids) == NUM_VARIANTS
+
+    per_child_settings = {
+        run_id: _with_split_filepath(
+            _build_inference_settings(minimal_dataset).model_copy(
+                update={"tracking": variant.tracking}
+            ),
+            _split_filepath(variant),
+        )
+        for run_id, variant in zip(run_ids, variant_settings, strict=True)
+    }
+
+    result = evaluate_multirun(
+        lambda run_id: per_child_settings[run_id],
+        parent_run_id=parent_run_id,
+        tracking_uri=tracking_uri,
+    )
+
+    try:
+        assert isinstance(result, MultiRunResult)
+        assert len(result.children) == NUM_VARIANTS
+        assert all(isinstance(child, ChildSuccess) for child in result.children)
+        assert {child.child_id for child in result.children} == set(run_ids)
+    finally:
+        for child in result.children:
+            if isinstance(child, ChildSuccess):
+                for fig in child.result.figures.values():
+                    plt.close(fig)
+
+
 def test_evaluate_multirun_continue_policy_records_child_failures(
     trained_sweep: tuple[str, tuple[TrainingJobConfig, ...]],
     multirun_inference_settings: InferenceJobConfig,

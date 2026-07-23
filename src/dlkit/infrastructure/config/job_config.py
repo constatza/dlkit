@@ -173,6 +173,31 @@ class ChildEntryConfig(BasicSettings):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ChildDefaults(BasicSettings):
+    """Optional ``[multirun.defaults]`` table merged into every child entry.
+
+    Explicit, opt-in sharing: nothing here applies unless a sweep author
+    writes this table, and each ``ChildEntryConfig``'s own values always win
+    over these on conflict — same precedence direction
+    ``MultiRunOrchestrator._run_one`` already uses merging a child's tags
+    over its settings-baked ones.
+
+    Args:
+        patches: Default patch mapping merged under each child's own
+            ``patches`` (child keys win).
+        tags: Default MLflow tags merged under each child's own ``tags``.
+        params: Default opaque params merged under each child's own
+            ``params``.
+        metadata: Default opaque metadata merged under each child's own
+            ``metadata``.
+    """
+
+    patches: dict[str, Any] = Field(default_factory=dict)
+    tags: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class MultiRunJobConfig(BasicSettings):
     """Validated multirun sweep job: parent run identity plus child run sources.
 
@@ -189,6 +214,10 @@ class MultiRunJobConfig(BasicSettings):
         parent_run_name: MLflow name for the parent sweep run.
         parent_tags: MLflow tags applied to the parent sweep run.
         failure_policy: How the sweep reacts when a child run fails.
+        defaults: Optional ``[multirun.defaults]`` table merged into every
+            child entry (child values win). Unset by default — nothing is
+            shared across children unless a sweep author explicitly writes
+            this table.
         runs: Ordered child run sources.
     """
 
@@ -197,6 +226,7 @@ class MultiRunJobConfig(BasicSettings):
     parent_run_name: str
     parent_tags: dict[str, str] = Field(default_factory=dict)
     failure_policy: FailurePolicy = "fail_fast"
+    defaults: ChildDefaults = Field(default_factory=ChildDefaults)
     runs: list[ChildEntryConfig]
 
     @model_validator(mode="before")

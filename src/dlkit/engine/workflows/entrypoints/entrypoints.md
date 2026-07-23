@@ -31,7 +31,12 @@
   `MultiRunJobConfig`, `run_multirun_spec()` from an already-built
   `MultiRunSpec`); also owns the `ChildEntryConfig -> ChildSource` conversion
   (`build_child_sources()`, glob-vs-explicit decided by whether `files`
-  contains a glob metacharacter)
+  contains a glob metacharacter). `run_multirun()` first runs every entry
+  through `_apply_defaults()`, deep-merging `MultiRunJobConfig.defaults`
+  (the optional `[multirun.defaults]` TOML table) under each entry's own
+  `patches`/`tags`/`params`/`metadata`, child values winning — opt-in only,
+  empty by default, so nothing is shared across children unless a sweep
+  author explicitly writes that table.
 - `execution.py`: routes settings to whichever of train/optimize/converge/evaluate applies
 - `validation.py`, `templates.py`, `convert.py`: validation/template/export helpers
 
@@ -71,7 +76,15 @@ upper layers get them through this package's re-export instead of importing
 expands one evaluate `RunSpec` per active child of an existing parent run
 (via `find_child_run_ids()`), each pointed at that child's own checkpoint —
 this is what `interfaces.api.functions.core.evaluate_multirun()` composes to
-replace the old bespoke `evaluate_multirun()` fan-out.
+replace the old bespoke `evaluate_multirun()` fan-out. `ExistingRunsSource.settings`
+(and `evaluate_multirun()`'s `settings` param) accepts either a single
+`InferenceJobConfig` shared verbatim across every child, or a
+`Callable[[str], InferenceJobConfig]` keyed by each child's own run id for
+sweeps that need to vary more than the checkpoint (e.g. different
+datasets/models per child) — nothing beyond the checkpoint is shared unless
+a caller passes the plain-object form explicitly. The callable form
+requires `tracking_uri` to be set explicitly (there is no single settings
+object to default it from before child run ids are known).
 
 The parent tracker for a multirun sweep (`multirun.py`'s `_run_sweep()`) is
 configured from the **first child's own settings**, mlflow-flag-forced —

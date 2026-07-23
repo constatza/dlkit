@@ -152,6 +152,28 @@ optional `run_type`, optional `patches`, opaque `tags`/`params`/`metadata`).
 `patches` is rejected on a glob-sourced entry (`files` containing `*`/`?`/`[`)
 — a single patch dict can't sensibly apply to every glob match.
 
+An optional `[multirun.defaults]` table (`ChildDefaults`: `patches`, `tags`,
+`params`, `metadata`) is deep-merged under every `[[multirun.runs]]` entry's
+own matching field, child values winning on conflict — opt-in only, empty by
+default, so a sweep with no `[multirun.defaults]` table shares nothing
+implicitly across children:
+
+```toml
+[multirun.defaults]
+tags = { team = "platform" }
+patches = { "run.precision" = "float32" }
+
+[[multirun.runs]]
+id = "a"
+files = "jobs/a.toml"
+tags = { dataset = "ds-1" }   # merges with defaults.tags -> {team, dataset}
+```
+
+The merge (`engine.workflows.entrypoints.multirun._apply_defaults()`, using
+the same `deep_merge()` `load_job()` uses for TOML-file/profile/env-patch
+merging) happens before `ChildEntryConfig -> ChildSource` conversion, so
+`build_child_sources()` itself stays defaults-unaware.
+
 `load_job()` resolves every child entry's `files` (explicit list or glob
 pattern) to an absolute path/pattern relative to the multirun config file's
 own directory, the same convention profile references use — by the time a

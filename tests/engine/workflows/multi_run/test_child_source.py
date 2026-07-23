@@ -17,15 +17,17 @@ from typing import Any, cast
 
 import pytest
 
+from dlkit.common.checkpoint_source import RunCheckpoint
 from dlkit.common.errors import ConfigValidationError
 from dlkit.engine.workflows.multi_run import (
+    ExistingRunsSource,
     ExplicitFileSource,
     GlobSource,
     LoadedSettingsSource,
     RunSpec,
     expand_child_sources,
 )
-from dlkit.infrastructure.config.job_config import JobConfig, TrainingJobConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig, JobConfig, TrainingJobConfig
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -187,6 +189,109 @@ def test_loaded_settings_source_wraps_settings_directly(
 
     assert spec.settings is job_config_settings
     assert spec.run_name == "Loaded One"
+
+
+# ---------------------------------------------------------------------------
+# ExistingRunsSource
+# ---------------------------------------------------------------------------
+
+
+def _inference_settings(*, checkpoint: str, experiment_name: str) -> InferenceJobConfig:
+    """Minimal valid InferenceJobConfig, distinguishable by experiment name.
+
+    Args:
+        checkpoint: Placeholder checkpoint path; always overridden by
+            ExistingRunsSource expansion before dispatch, so its value here
+            is never actually read from disk.
+        experiment_name: Value used to prove which settings object a given
+            expanded RunSpec actually carries.
+
+    Returns:
+        Valid InferenceJobConfig with no `data` section (optional on
+        InferenceJobConfig, irrelevant to expansion-logic tests).
+    """
+    return InferenceJobConfig.model_validate(
+        {
+            "run": {"type": "predict"},
+            "experiment": {"name": experiment_name},
+            "model": {
+                "class": "FFNN",
+                "module_path": "dlkit.domain.nn",
+                "hidden_size": 4,
+                "num_layers": 0,
+                "checkpoint": checkpoint,
+            },
+        }
+    )
+
+
+def test_existing_runs_source_shared_settings_only_checkpoint_varies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A plain InferenceJobConfig is shared verbatim; only checkpoint varies per child."""
+    monkeypatch.setattr(
+        "dlkit.engine.workflows.multi_run.child_source.find_child_run_ids",
+        lambda *, parent_run_id, tracking_uri=None: ("run-a", "run-b"),
+    )
+    shared = _inference_settings(checkpoint="unused.ckpt", experiment_name="shared-exp")
+    source = ExistingRunsSource(parent_run_id="parent-1", settings=shared)
+
+    specs = expand_child_sources([source])
+
+    assert [s.settings.experiment.name for s in specs] == ["shared-exp", "shared-exp"]
+    assert [s.settings.model.checkpoint for s in specs] == [
+        RunCheckpoint(run_id="run-a"),
+        RunCheckpoint(run_id="run-b"),
+    ]
+
+
+def test_existing_runs_source_callable_settings_vary_per_child(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A per-child resolver callable produces distinct settings per run id.
+
+    Regression guard for gap 3 (`general-multirun-api-requirements.md`):
+    evaluate_multirun() used to be unable to vary anything but the checkpoint
+    per child, which silently evaluated heterogeneous sweeps against the
+    wrong dataset. Nothing is shared here unless the callable itself shares
+    it — an explicit choice, not dlkit's default.
+    """
+    monkeypatch.setattr(
+        "dlkit.engine.workflows.multi_run.child_source.find_child_run_ids",
+        lambda *, parent_run_id, tracking_uri=None: ("run-a", "run-b"),
+    )
+
+    def _resolver(run_id: str) -> InferenceJobConfig:
+        return _inference_settings(checkpoint="unused.ckpt", experiment_name=f"exp-{run_id}")
+
+    source = ExistingRunsSource(
+        parent_run_id="parent-1", settings=_resolver, tracking_uri="sqlite:///unused.db"
+    )
+
+    specs = expand_child_sources([source])
+
+    assert [s.settings.experiment.name for s in specs] == ["exp-run-a", "exp-run-b"]
+    assert [s.settings.model.checkpoint for s in specs] == [
+        RunCheckpoint(run_id="run-a"),
+        RunCheckpoint(run_id="run-b"),
+    ]
+
+
+def test_existing_runs_source_callable_settings_requires_explicit_tracking_uri() -> None:
+    """A callable `settings` with no `tracking_uri` fails loudly, not silently.
+
+    There is no single settings object to default `tracking.uri` from before
+    child run ids are known — sharing a tracking URI must be explicit.
+    """
+    source = ExistingRunsSource(
+        parent_run_id="parent-1",
+        settings=lambda run_id: _inference_settings(
+            checkpoint="unused.ckpt", experiment_name=run_id
+        ),
+    )
+
+    with pytest.raises(ConfigValidationError, match="tracking_uri"):
+        expand_child_sources([source])
 
 
 # ---------------------------------------------------------------------------

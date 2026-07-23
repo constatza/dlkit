@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from lightning.pytorch import LightningDataModule
@@ -168,10 +169,32 @@ def run_multirun_spec(
     return _executor.run_multirun_spec(spec, mlflow=mlflow, hooks=hooks)
 
 
+def _resolve_default_experiment_name(
+    settings: InferenceJobConfig | Callable[[str], InferenceJobConfig],
+) -> str:
+    """Fall back for `evaluate_multirun()`'s ``experiment_name`` when unset.
+
+    Args:
+        settings: The same settings object/resolver passed to
+            ``evaluate_multirun()``.
+
+    Returns:
+        ``settings.experiment.name`` when ``settings`` is a plain
+        ``InferenceJobConfig`` with an experiment section set, else
+        ``_DEFAULT_EVALUATE_MULTIRUN_EXPERIMENT_NAME`` — there is no single
+        settings object to read a name from when ``settings`` is a resolver.
+    """
+    if isinstance(settings, InferenceJobConfig) and settings.experiment:
+        return settings.experiment.name
+    return _DEFAULT_EVALUATE_MULTIRUN_EXPERIMENT_NAME
+
+
 def evaluate_multirun(
-    settings: InferenceJobConfig,
+    settings: InferenceJobConfig | Callable[[str], InferenceJobConfig],
     parent_run_id: str,
     *,
+    tracking_uri: str | None = None,
+    experiment_name: str | None = None,
     failure_policy: FailurePolicy = "fail_fast",
     hooks: LifecycleHooks | None = None,
 ) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
@@ -186,12 +209,37 @@ def evaluate_multirun(
     evaluated, and every child is discoverable via the standard
     ``mlflow.parentRunId`` mechanism, same as any other sweep.
 
+    Nothing about a child's settings is shared by default — pick one mode
+    explicitly:
+
+    - A single ``InferenceJobConfig``: shared verbatim across every child
+      (only ``model.checkpoint`` varies). Right for repeated variants of one
+      fixed (job, dataset) pair — a convergence study, an ensemble, an HPO
+      ablation.
+    - A ``Callable[[str], InferenceJobConfig]`` keyed by each child's own run
+      id: called once per child to build that child's settings from scratch
+      (e.g. re-resolving ``data``/``model`` per child). Right for a
+      heterogeneous batch — one job across several datasets, or several jobs
+      — where sharing ``settings.data`` across children would silently
+      evaluate most of them against the wrong split. ``tracking_uri`` must be
+      passed explicitly in this mode: there is no single settings object to
+      read a default from before child run ids are known.
+
     Args:
-        settings: Inference job configuration shared across all children;
+        settings: Inference job configuration shared across all children, or
+            a per-child resolver keyed by run id (see above). Either way,
             each child's ``model.checkpoint`` is overridden to that child's
             own run.
         parent_run_id: MLflow run id whose active children should each be
             evaluated.
+        tracking_uri: Tracking URI to resolve ``parent_run_id``'s children
+            against. Defaults to ``settings.tracking.uri`` when ``settings``
+            is a plain ``InferenceJobConfig``; required when ``settings`` is
+            a callable.
+        experiment_name: MLflow experiment name for the new evaluate-sweep
+            parent run. Defaults to ``settings.experiment.name`` when
+            ``settings`` is a plain ``InferenceJobConfig``, else
+            ``"dlkit-evaluate"``.
         failure_policy: How to react when a child raises. ``"fail_fast"``
             (default) propagates immediately, matching the old
             ``evaluate_multirun()``'s all-or-nothing behavior exactly.
@@ -203,16 +251,18 @@ def evaluate_multirun(
     Returns:
         MultiRunResult with the new evaluate-sweep parent run id, tracking
         URI, and one ChildOutcome per evaluated child, in expansion order.
+
+    Raises:
+        ConfigValidationError: ``settings`` is a callable and
+            ``tracking_uri`` was left unset.
     """
-    source = ExistingRunsSource(parent_run_id=parent_run_id, settings=settings)
-    children = expand_child_sources([source])
-    experiment_name = (
-        settings.experiment.name
-        if settings.experiment
-        else _DEFAULT_EVALUATE_MULTIRUN_EXPERIMENT_NAME
+    source = ExistingRunsSource(
+        parent_run_id=parent_run_id, settings=settings, tracking_uri=tracking_uri
     )
+    children = expand_child_sources([source])
+    resolved_experiment_name = experiment_name or _resolve_default_experiment_name(settings)
     spec = MultiRunSpec(
-        experiment_name=experiment_name,
+        experiment_name=resolved_experiment_name,
         parent_run_name=f"evaluate-{parent_run_id}",
         parent_tags={"multirun.source_parent_run_id": parent_run_id},
         failure_policy=failure_policy,

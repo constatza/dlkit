@@ -28,7 +28,12 @@ from dlkit.engine.workflows.multi_run import (
     RunSpec,
     expand_child_sources,
 )
-from dlkit.infrastructure.config.job_config import ChildEntryConfig, MultiRunJobConfig
+from dlkit.infrastructure.config.factories import deep_merge
+from dlkit.infrastructure.config.job_config import (
+    ChildDefaults,
+    ChildEntryConfig,
+    MultiRunJobConfig,
+)
 from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -122,6 +127,29 @@ def _child_source_from_entry(entry: ChildEntryConfig) -> ChildSource:
                 f"Child {entry.id!r}: files must be a string or list of strings, "
                 f"got {type(entry.files).__name__}"
             )
+
+
+def _apply_defaults(entry: ChildEntryConfig, defaults: ChildDefaults) -> ChildEntryConfig:
+    """Merge a ``[multirun.defaults]`` table under one child entry, child wins.
+
+    Args:
+        entry: Validated child entry.
+        defaults: Optional sweep-wide defaults; empty by default, so this is
+            a no-op unless a sweep author explicitly wrote ``[multirun.defaults]``.
+
+    Returns:
+        ``entry`` unchanged if ``defaults`` is empty, otherwise a copy with
+        each of ``patches``/``tags``/``params``/``metadata`` deep-merged over
+        the matching defaults field.
+    """
+    return entry.model_copy(
+        update={
+            "patches": deep_merge(defaults.patches, entry.patches),
+            "tags": deep_merge(defaults.tags, entry.tags),
+            "params": deep_merge(defaults.params, entry.params),
+            "metadata": deep_merge(defaults.metadata, entry.metadata),
+        }
+    )
 
 
 def build_child_sources(entries: Sequence[ChildEntryConfig]) -> tuple[ChildSource, ...]:
@@ -240,7 +268,8 @@ def run_multirun(
         settings.parent_run_name,
         len(settings.runs),
     )
-    sources = build_child_sources(settings.runs)
+    entries = tuple(_apply_defaults(entry, settings.defaults) for entry in settings.runs)
+    sources = build_child_sources(entries)
     try:
         children = expand_child_sources(sources)
     except ConfigValidationError:

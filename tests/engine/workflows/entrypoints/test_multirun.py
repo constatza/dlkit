@@ -26,6 +26,7 @@ from dlkit.common.results import (
 )
 from dlkit.engine.tracking.run_queries import find_child_run_ids
 from dlkit.engine.workflows.entrypoints.multirun import (
+    _apply_defaults,
     build_child_sources,
     run_multirun,
     run_multirun_spec,
@@ -37,6 +38,7 @@ from dlkit.engine.workflows.multi_run import (
     expand_child_sources,
 )
 from dlkit.infrastructure.config.job_config import (
+    ChildDefaults,
     ChildEntryConfig,
     MultiRunJobConfig,
     TrainingJobConfig,
@@ -272,6 +274,70 @@ def test_run_multirun_config_applies_parent_tags_to_parent_run(
     client = MLflowClientFactory.create_client(result.tracking_uri)
     parent_run = client.get_run(result.parent_run_id)
     assert parent_run.data.tags.get("team") == "platform"
+
+
+# ---------------------------------------------------------------------------
+# Tests: `[multirun.defaults]` merging (opt-in, child wins)
+# ---------------------------------------------------------------------------
+
+
+def test_multirun_job_config_hoists_defaults_table() -> None:
+    """`[multirun.defaults]` is parsed onto `MultiRunJobConfig.defaults`."""
+    settings = MultiRunJobConfig.model_validate(
+        {
+            "run": {"type": "multirun"},
+            "experiment_name": "sweep-defaults",
+            "parent_run_name": "sweep-defaults-parent",
+            "defaults": {"tags": {"team": "platform"}, "patches": {"run.seed": 1}},
+            "runs": [{"id": "child-a", "files": "child-a.toml"}],
+        }
+    )
+
+    assert settings.defaults.tags == {"team": "platform"}
+    assert settings.defaults.patches == {"run.seed": 1}
+
+
+def test_multirun_job_config_defaults_empty_by_default() -> None:
+    """No `[multirun.defaults]` table means nothing is shared — not an implicit default."""
+    settings = MultiRunJobConfig.model_validate(
+        {
+            "run": {"type": "multirun"},
+            "experiment_name": "sweep-no-defaults",
+            "parent_run_name": "sweep-no-defaults-parent",
+            "runs": [{"id": "child-a", "files": "child-a.toml"}],
+        }
+    )
+
+    assert settings.defaults == ChildDefaults()
+
+
+def test_apply_defaults_child_value_wins_on_conflict() -> None:
+    """A child's own tag overrides the same-keyed default tag."""
+    defaults = ChildDefaults(tags={"team": "platform", "stage": "dev"})
+    entry = ChildEntryConfig(id="child-a", files="child-a.toml", tags={"stage": "prod"})
+
+    merged = _apply_defaults(entry, defaults)
+
+    assert merged.tags == {"team": "platform", "stage": "prod"}
+
+
+def test_apply_defaults_merges_patches_deeply() -> None:
+    """Default patches and a child's own patches merge, child keys winning."""
+    defaults = ChildDefaults(patches={"run": {"seed": 1, "precision": "float32"}})
+    entry = ChildEntryConfig(id="child-a", files="child-a.toml", patches={"run": {"seed": 99}})
+
+    merged = _apply_defaults(entry, defaults)
+
+    assert merged.patches == {"run": {"seed": 99, "precision": "float32"}}
+
+
+def test_apply_defaults_noop_when_defaults_empty() -> None:
+    """An unset `[multirun.defaults]` table leaves child entries unchanged."""
+    entry = ChildEntryConfig(id="child-a", files="child-a.toml", tags={"stage": "prod"})
+
+    merged = _apply_defaults(entry, ChildDefaults())
+
+    assert merged == entry
 
 
 # ---------------------------------------------------------------------------

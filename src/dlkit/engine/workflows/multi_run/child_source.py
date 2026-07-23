@@ -10,7 +10,7 @@ source children means adding a new dataclass and one more ``match`` arm in
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -118,14 +118,34 @@ class ExistingRunsSource:
     ``RunSpec`` per child, each pointed at that child's own checkpoint via
     ``RunCheckpoint(run_id=...)``.
 
+    Nothing about a child's settings is shared by default — either mode below
+    is an explicit choice, never an implicit fallback:
+
+    - A single ``InferenceJobConfig``: that exact settings object is shared,
+      verbatim, across every child (only ``model.checkpoint`` varies). This
+      is the right choice for repeated variants of one fixed (job, dataset)
+      pair — a convergence study, an ensemble, an HPO ablation.
+    - A ``Callable[[str], InferenceJobConfig]`` keyed by each child's own
+      run id: called once per child to produce that child's base settings
+      (e.g. re-resolving ``data``/``model`` per child for a heterogeneous
+      job/dataset batch). Whatever the callable chooses to keep constant
+      across calls is *that caller's* explicit choice, not dlkit's.
+
+    Either way, ``model.checkpoint`` is always overridden to that child's own
+    run afterward — evaluating each child's own checkpoint is the one thing
+    that's never optional here.
+
     Args:
         parent_run_id: MLflow run id whose active children each become one
             evaluate child.
-        settings: Base inference job configuration shared by every child;
-            each child's ``model.checkpoint`` is overridden to that child's
-            own run.
+        settings: Base inference job configuration shared by every child, or
+            a per-child resolver keyed by run id. Either way, each child's
+            ``model.checkpoint`` is overridden to that child's own run.
         tracking_uri: Tracking URI to resolve ``parent_run_id``'s children
-            against. Defaults to ``settings.tracking.uri`` when unset.
+            against. Defaults to ``settings.tracking.uri`` when ``settings``
+            is a plain ``InferenceJobConfig``; must be set explicitly when
+            ``settings`` is a callable (there's no single settings object to
+            read it from before child run ids are known).
         id_prefix: Prefix prepended to each resulting child's id/label.
         tags: MLflow tags applied to every resulting child's run.
         params: Opaque caller-supplied parameters applied to every child.
@@ -133,7 +153,7 @@ class ExistingRunsSource:
     """
 
     parent_run_id: str
-    settings: InferenceJobConfig
+    settings: InferenceJobConfig | Callable[[str], InferenceJobConfig]
     tracking_uri: str | None = None
     id_prefix: str = ""
     tags: dict[str, str] = field(default_factory=dict)
@@ -253,6 +273,50 @@ def _expand_glob_source(source: GlobSource) -> tuple[RunSpec, ...]:
     )
 
 
+def _resolve_child_settings(source: ExistingRunsSource, run_id: str) -> InferenceJobConfig:
+    """Resolve one child's base settings: call the resolver, or use the shared object.
+
+    Args:
+        source: Existing-runs-backed child source.
+        run_id: The child's own MLflow run id.
+
+    Returns:
+        That child's base ``InferenceJobConfig``, before the checkpoint patch.
+    """
+    settings = source.settings
+    if isinstance(settings, InferenceJobConfig):
+        return settings
+    return settings(run_id)
+
+
+def _resolve_tracking_uri(source: ExistingRunsSource) -> str | None:
+    """Resolve the tracking URI to query ``source.parent_run_id``'s children against.
+
+    Args:
+        source: Existing-runs-backed child source.
+
+    Returns:
+        ``source.tracking_uri`` if set, else ``source.settings.tracking.uri``
+        when ``settings`` is a plain ``InferenceJobConfig`` (which may itself
+        be ``None``, meaning "use the current default tracking context").
+
+    Raises:
+        ConfigValidationError: ``source.tracking_uri`` is unset and
+            ``source.settings`` is a per-child resolver callable — there is
+            no single settings object to default a tracking URI from before
+            child run ids are known.
+    """
+    if source.tracking_uri is not None:
+        return source.tracking_uri
+    settings = source.settings
+    if not isinstance(settings, InferenceJobConfig):
+        raise ConfigValidationError(
+            "ExistingRunsSource.tracking_uri must be set explicitly when "
+            "`settings` is a per-child resolver callable."
+        )
+    return settings.tracking.uri
+
+
 def _expand_existing_runs_source(source: ExistingRunsSource) -> tuple[RunSpec, ...]:
     """Resolve an ExistingRunsSource's parent run and expand each child into a RunSpec.
 
@@ -263,10 +327,14 @@ def _expand_existing_runs_source(source: ExistingRunsSource) -> tuple[RunSpec, .
         One RunSpec per active child run, in ascending ``start_time`` order.
 
     Raises:
+        ConfigValidationError: ``source.settings`` is a per-child resolver
+            callable and ``source.tracking_uri`` was left unset — there is no
+            single settings object to read a default ``tracking.uri`` from
+            before child run ids are known.
         WorkflowError: ``source.parent_run_id`` does not exist or has no
             active child runs (propagated from ``find_child_run_ids``).
     """
-    tracking_uri = source.tracking_uri or source.settings.tracking.uri
+    tracking_uri = _resolve_tracking_uri(source)
     child_run_ids = find_child_run_ids(
         parent_run_id=source.parent_run_id, tracking_uri=tracking_uri
     )
@@ -274,7 +342,9 @@ def _expand_existing_runs_source(source: ExistingRunsSource) -> tuple[RunSpec, .
         RunSpec(
             id=f"{source.id_prefix}{run_id}",
             label=f"{source.id_prefix}{run_id}",
-            settings=source.settings.patch({"model": {"checkpoint": RunCheckpoint(run_id=run_id)}}),
+            settings=_resolve_child_settings(source, run_id).patch(
+                {"model": {"checkpoint": RunCheckpoint(run_id=run_id)}}
+            ),
             run_name=f"{source.id_prefix}{run_id}",
             tags=source.tags,
             params=source.params,
