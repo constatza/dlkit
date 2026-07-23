@@ -4,13 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from dlkit.common.errors import ConfigValidationError
 
 if TYPE_CHECKING:
     from dlkit.infrastructure.config.job_config import (
+        ConvergenceJobConfig,
         InferenceJobConfig,
+        MultiRunJobConfig,
         SearchJobConfig,
         TrainingJobConfig,
     )
@@ -42,11 +44,102 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
+def _resolve_multirun_file_paths(merged: dict[str, Any], job_dir: Path) -> dict[str, Any]:
+    """Resolve each ``[[multirun.runs]]`` entry's ``files`` relative to job_dir.
+
+    Mirrors the profile-path resolution above: relative strings become
+    absolute, resolved against the multirun config file's own directory.
+    Applies uniformly to explicit file lists and glob-shorthand strings alike
+    — ``Path.resolve()`` treats a trailing glob metacharacter as an ordinary
+    (nonexistent) path component, so it normalizes without raising.
+
+    Args:
+        merged: The fully job+profile merged config dict, prior to
+            ``MultiRunJobConfig`` validation.
+        job_dir: Directory of the first (base) config file passed to
+            ``load_job()``.
+
+    Returns:
+        New merged dict with every child entry's ``files`` resolved to
+        absolute path string(s). Returns ``merged`` unchanged if it carries
+        no ``[multirun].runs`` table.
+    """
+    multirun_raw = merged.get("multirun")
+    if not isinstance(multirun_raw, dict):
+        return merged
+    runs_raw = multirun_raw.get("runs")
+    if not isinstance(runs_raw, list):
+        return merged
+
+    def _resolve_one(value: str) -> str:
+        return value if Path(value).is_absolute() else str((job_dir / value).resolve())
+
+    resolved_runs: list[Any] = []
+    for entry in runs_raw:
+        if not isinstance(entry, dict) or "files" not in entry:
+            resolved_runs.append(entry)
+            continue
+        files = entry["files"]
+        match files:
+            case str():
+                resolved_files: Any = _resolve_one(files)
+            case list():
+                resolved_files = [_resolve_one(f) if isinstance(f, str) else f for f in files]
+            case _:
+                resolved_files = files
+        resolved_runs.append({**entry, "files": resolved_files})
+
+    return {**merged, "multirun": {**multirun_raw, "runs": resolved_runs}}
+
+
+@overload
+def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: Literal["train"]
+) -> TrainingJobConfig: ...
+@overload
+def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: Literal["predict"]
+) -> InferenceJobConfig: ...
+@overload
+def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: Literal["search"]
+) -> SearchJobConfig: ...
+@overload
+def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: Literal["convergence"]
+) -> ConvergenceJobConfig: ...
+@overload
+def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: Literal["multirun"]
+) -> MultiRunJobConfig: ...
+@overload
+def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: str | None = None
+) -> (
+    TrainingJobConfig
+    | InferenceJobConfig
+    | SearchJobConfig
+    | ConvergenceJobConfig
+    | MultiRunJobConfig
+): ...
 def load_job(
     config_paths: Path | str | Sequence[Path | str],
     run_type: str | None = None,
-) -> TrainingJobConfig | InferenceJobConfig | SearchJobConfig:
+) -> (
+    TrainingJobConfig
+    | InferenceJobConfig
+    | SearchJobConfig
+    | ConvergenceJobConfig
+    | MultiRunJobConfig
+):
     """Load and validate a job config from one or more TOML files.
+
+    Overloaded on the literal ``run_type`` so callers passing a known run type
+    (e.g. ``run_type="train"``) get the exact narrow config type back, instead
+    of the full five-member union — this is what lets `interfaces/cli/commands/
+    train.py`/`optimize.py`/`converge.py` pass the result straight to
+    `train()`/`optimize()`/`converge()` (each typed to accept only
+    `WorkflowSettings`, not `MultiRunJobConfig`) without a runtime type check.
 
     Multiple paths are merged left-to-right (later files win). Profile references
     in ``[run]`` (keys ``model``, ``data``, ``training``, ``tracking``, ``plots``) are
@@ -67,7 +160,9 @@ def load_job(
     """
     from dlkit.infrastructure.config.core.sources import DLKitTomlSource, _read_env_patches
     from dlkit.infrastructure.config.job_config import (
+        ConvergenceJobConfig,
         InferenceJobConfig,
+        MultiRunJobConfig,
         SearchJobConfig,
         TrainingJobConfig,
     )
@@ -132,6 +227,10 @@ def load_job(
     if patches:
         merged = _deep_merge(merged, patches)
 
+    # 6b. Resolve multirun child file/glob paths relative to job_dir.
+    if resolved_type == "multirun":
+        merged = _resolve_multirun_file_paths(merged, job_dir)
+
     # 7. Dispatch to typed subtype.
     try:
         match resolved_type:
@@ -141,9 +240,14 @@ def load_job(
                 return InferenceJobConfig.model_validate(merged)
             case "search":
                 return SearchJobConfig.model_validate(merged)
+            case "convergence":
+                return ConvergenceJobConfig.model_validate(merged)
+            case "multirun":
+                return MultiRunJobConfig.model_validate(merged)
             case _:
                 raise ConfigValidationError(
-                    f"Unknown run.type: {resolved_type!r}. Must be 'train', 'predict', or 'search'."
+                    f"Unknown run.type: {resolved_type!r}. "
+                    "Must be 'train', 'predict', 'search', 'convergence', or 'multirun'."
                 )
     except ConfigValidationError:
         raise

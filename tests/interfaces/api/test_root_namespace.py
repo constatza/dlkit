@@ -103,6 +103,18 @@ class TestNamespacedShims:
         assert ChildEvaluation is not None
         assert callable(evaluate_multirun)
 
+    def test_api_exposes_multirun_execution_functions(self) -> None:
+        from dlkit.interfaces.api import run_multirun_config, run_multirun_spec
+
+        assert callable(run_multirun_config)
+        assert callable(run_multirun_spec)
+
+    def test_api_functions_expose_multirun_execution_functions(self) -> None:
+        from dlkit.interfaces.api.functions import run_multirun_config, run_multirun_spec
+
+        assert callable(run_multirun_config)
+        assert callable(run_multirun_spec)
+
 
 class TestLifecycleHookTyping:
     """Verify the public hook contract carries concrete result types."""

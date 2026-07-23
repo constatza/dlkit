@@ -111,7 +111,7 @@ def _run_convergence_impl(
         dlkit converge config.toml --target 0.05 --mlflow
     """
     console.print(f"Loading configuration from: {config_path}")
-    job = load_config(config_path, run_type="converge")
+    job = load_config(config_path, run_type="convergence")
 
     console.print("Starting convergence study...")
 

@@ -232,6 +232,16 @@ class TestOptunaMLflowOptimization:
         experiment = client.get_experiment_by_name(combined_settings.experiment.name)
         assert experiment is not None
 
+        # The study's own MLflow run must be resolvable from the result alone —
+        # mlflow_run_id and mlflow_tracking_uri together, not the ambient client
+        # configured above from the settings the test happens to already have.
+        assert result.mlflow_run_id is not None
+        assert result.mlflow_tracking_uri == tracking.uri
+        study_run = MlflowClient(tracking_uri=result.mlflow_tracking_uri).get_run(
+            result.mlflow_run_id
+        )
+        assert study_run.info.experiment_id == experiment.experiment_id
+
         runs = client.search_runs(
             [experiment.experiment_id],
             order_by=["attributes.start_time DESC"],
@@ -265,6 +275,8 @@ class TestOptunaMLflowOptimization:
         assert hasattr(result, "duration_seconds")
         assert result.duration_seconds >= 0
         assert result.best_trial is not None
+        assert result.mlflow_run_id is None
+        assert result.mlflow_tracking_uri is None
 
     def test_no_optimization_raises_error(self, minimal_dataset: dict[str, Path]) -> None:
         """Test that optimize() raises TypeError when passed a non-SearchJobConfig."""

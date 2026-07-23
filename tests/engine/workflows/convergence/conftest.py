@@ -1,11 +1,17 @@
-"""Shared fixtures for convergence aggregation tests."""
+"""Shared fixtures for convergence aggregation and orchestrator tests."""
 
 from __future__ import annotations
+
+from pathlib import Path
+from typing import cast
 
 import pytest
 
 from dlkit.common.results import TrainingResult
 from dlkit.infrastructure.config.convergence_settings import ConvergenceSettings
+from dlkit.infrastructure.config.job_config import ConvergenceJobConfig
+
+FIXTURES = Path(__file__).parent.parent.parent.parent / "fixtures" / "jobs"
 
 # ---------------------------------------------------------------------------
 # Metric key constants
@@ -83,3 +89,24 @@ def cfg_with_target() -> ConvergenceSettings:
         ConvergenceSettings: 1 repeat, target=0.05.
     """
     return ConvergenceSettings(sizes=(100, 200), repeats=1, target=0.05, c=2.0)
+
+
+# ---------------------------------------------------------------------------
+# ConvergenceJobConfig fixture (orchestrator tests)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def convergence_job_settings() -> ConvergenceJobConfig:
+    """Real ConvergenceJobConfig loaded from the shared fixture TOML, trimmed to 2 sizes.
+
+    Returns:
+        ConvergenceJobConfig: sizes=(10, 20), repeats=1 — 2 total children,
+        so ConvergenceOrchestrator._build_children() produces ids
+        "n=10_r=0" and "n=20_r=0".
+    """
+    from dlkit.infrastructure.config.factories import load_job
+
+    settings = load_job(FIXTURES / "convergence.toml")
+    patched = settings.patch({"convergence": {"sizes": [10, 20], "repeats": 1}})
+    return cast(ConvergenceJobConfig, patched)

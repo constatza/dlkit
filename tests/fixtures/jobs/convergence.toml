@@ -1,0 +1,14 @@
+[run]
+type = "convergence"
+seed = 42
+model = "./profiles/model.toml"
+data = "./profiles/data.toml"
+training = "./profiles/training.toml"
+
+[experiment]
+name = "test-convergence"
+
+[convergence]
+sizes = [100, 500, 1000]
+repeats = 2
+target = 0.05

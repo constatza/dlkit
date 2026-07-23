@@ -166,21 +166,30 @@ class _RecordingRunContext:
     calls the module-level logging functions in
     ``optimization.infrastructure.tracking`` (and ``fire_post_training_hooks``)
     actually make: ``log_params``, ``log_metrics``, ``log_artifact_content``,
-    ``log_artifact``, plus ``is_active``/``tracking_uri`` for the best-retrain
-    dispatch in ``OptimizationOrchestrator._retrain_best_trial``.
+    ``log_artifact``, plus ``is_active``/``tracking_uri``/``run_id`` for the
+    best-retrain dispatch in ``OptimizationOrchestrator._retrain_best_trial``
+    and for populating ``OptimizationResult.mlflow_run_id``/``.mlflow_tracking_uri``
+    from the study run context in ``_execute_with_tracking``.
 
     ``ITrialRunContext``/``IStudyRunContext`` (which this used to subclass) no
     longer exist — production code now logs against the plain object a tracker
     yields, so this fake mirrors that plain shape instead.
     """
 
-    def __init__(self, *, active: bool = True, tracking_uri: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        active: bool = True,
+        tracking_uri: str | None = None,
+        run_id: str = "recorded-run",
+    ) -> None:
         self.logged_params: dict[str, Any] = {}
         self.logged_metrics: dict[str, Any] = {}
         self.artifact_content_calls: list[tuple[Any, str]] = []
         self.artifact_calls: list[tuple[Any, str]] = []
         self._active = active
         self._tracking_uri = tracking_uri
+        self._run_id = run_id
 
     def log_params(self, params: dict[str, Any]) -> None:
         self.logged_params.update(params)
@@ -203,6 +212,10 @@ class _RecordingRunContext:
     @property
     def tracking_uri(self) -> str | None:
         return self._tracking_uri
+
+    @property
+    def run_id(self) -> str:
+        return self._run_id
 
 
 class _TrackingAdapter(IExperimentTracker):

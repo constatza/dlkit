@@ -124,6 +124,19 @@ training and optimization flows.
   that's allowed to fail shouldn't burn the wider budget sized for
   `log_model`. `TrackingSettings.max_retries` still governs `log_model`'s
   budget (and the process default) untouched.
+- `MLflowTracker.set_run_tag(run_id, key, value)` and `.get_run_context(run_id)` are
+  non-activating, client-backed (`MlflowClient.set_tag(...)` / a read-only
+  `ClientBasedRunContext`) — neither calls `mlflow.start_run()`, so both are safe to use
+  on a run that isn't the tracker's currently-active one. `MultiRunOrchestrator` uses
+  `set_run_tag` to tag a heterogeneous sweep child's already-closed, independently-opened
+  run with `mlflow.parentRunId` after the fact (each child workflow — `train`/`optimize`/
+  `converge` — opens and closes its own top-level run via `engine.workflows.entrypoints.execute()`;
+  holding the sweep's parent run open across all of them is not possible since
+  `mlflow.start_run()` is process-global, not per-tracker-instance, and two concurrently
+  "active" runs raise). The same mechanism tags the parent run
+  `"multirun.status" = "failed"` under `FailurePolicy = "continue_mark_parent_failed"`
+  once any child fails. See `dlkit.engine.workflows.entrypoints.entrypoints.md` for the
+  sweep orchestration this supports.
 - Metric stage identifiers (`dlkit.common.metric_stages.MetricStage`) flow as
   the enum end-to-end, from the Lightning wrapper's step logger through
   `MLflowEpochLogger` and `MetricLogger` — there is no string-typed stage

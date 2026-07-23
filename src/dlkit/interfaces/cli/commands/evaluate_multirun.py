@@ -13,7 +13,6 @@ from typing import Annotated, Literal, cast
 import typer
 from rich.console import Console
 
-from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.inference import evaluate_multirun as evaluate_multirun_api
 
 from ..adapters.config_adapter import load_config
@@ -52,7 +51,7 @@ def _run_evaluate_multirun_impl(
     - Override: `--split`, `--output-dir`, `--mlflow`.
     """
     console.print(f"📖 Loading configuration from: {config_path}")
-    job = cast(InferenceJobConfig, load_config(config_path, run_type="predict"))
+    job = load_config(config_path, run_type="predict")
 
     console.print(f"📊 Evaluating children of parent run: {parent_run_id}")
     result = evaluate_multirun_api(

@@ -13,11 +13,24 @@ the codebase.
 
 ## Current Contracts
 - Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
-- Results: `TrainingResult`, `InferenceResult`, `EvaluationResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`
+- Results: `TrainingResult`, `InferenceResult`, `EvaluationResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`, `MultiRunResult[T]`
+- Multirun type algebra: `WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult`;
+  `ChildSuccess[T]` / `ChildFailure` / `type ChildOutcome[T] = ChildSuccess[T] | ChildFailure`
+  (a closed, `status`-discriminated sum type consumed via `match`/`case`, not nullable
+  fields); `FailurePolicy = Literal["fail_fast", "continue", "continue_mark_parent_failed"]`
 - Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
 - Hooks: `LifecycleHooks`
 - Hook param scalars: `ParamValue = str | int | float | bool`
 - Protocols: `IDataModule`, `ITrainableModule`
+
+`MultiRunResult[T]` holds `parent_run_id`, `tracking_uri`, and `children: tuple[T, ...]` —
+the generic parent/children result shape shared by `evaluate_multirun()`
+(`MultiRunResult[ChildEvaluation]`) and `MultiRunOrchestrator.run_sweep()`
+(`MultiRunResult[ChildOutcome[WorkflowResult]]`), instead of each inventing its own
+container. `LifecycleHooks.on_child_failed` fires with a `ChildFailure` record when a
+multirun child fails under a continuing `FailurePolicy` — see
+`dlkit.engine.workflows.entrypoints.entrypoints.md` for the sweep entrypoints that
+produce these.
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:
 - `stacked`

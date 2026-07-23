@@ -13,6 +13,8 @@
 - `optimize()`
 - `converge()`
 - `execute()`
+- `run_multirun_config()` — general multirun sweep from a `MultiRunJobConfig`
+- `run_multirun_spec()` — general multirun sweep from an already-built `MultiRunSpec`
 - `validate_config()`
 - `generate_template()`
 - `validate_template()`

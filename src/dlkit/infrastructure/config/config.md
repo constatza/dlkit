@@ -6,7 +6,7 @@ workflow-specific config views, and component-setting models.
 ## Responsibilities
 
 - immutable Pydantic settings models (`frozen=True`)
-- `JobConfig` top-level discriminated union (training / inference / search / convergence)
+- `JobConfig` top-level discriminated union (training / inference / search / convergence / multirun)
 - TOML loading via `load_job()` with deep-merge and profile references
 - patch application and runtime override support
 - component settings and factory support
@@ -20,7 +20,7 @@ Seeding is documented in [`../seeding/seeding.md`](../seeding/seeding.md).
 
 - `core/`: base settings, patching, factories, build context, TOML source
 - `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
-- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `ConvergenceJobConfig`
+- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `ConvergenceJobConfig`, `MultiRunJobConfig`, `ChildEntryConfig`
 - `run_settings.py`: `RunSettings` (type, seed, precision, profile references);
   `RunSettings.resolve_seed()` (pure seed defaulting) and the module-level
   `apply_run_context(run)` context manager (seeds global RNG state and
@@ -116,6 +116,46 @@ mutually exclusive modes:
 `max_train_samples` and `train_subset_seed` optionally cap/re-permute the
 resolved train split afterward (both modes), for convergence studies that
 need nested training subsets — see `engine/data/data.md`.
+
+## Multirun Settings
+
+`run.type = "multirun"` selects `MultiRunJobConfig`. Authored in TOML under a
+single `[multirun]` table:
+
+```toml
+[run]
+type = "multirun"
+
+[multirun]
+experiment_name = "sweep"
+parent_run_name = "sweep-parent"
+failure_policy = "continue_mark_parent_failed"   # optional, default "fail_fast"
+
+[[multirun.runs]]
+id = "a"
+label = "Run A"
+files = ["jobs/base.toml", "jobs/variant_a.toml"]   # merged left-to-right
+
+[[multirun.runs]]
+id = "variants"
+files = "jobs/variants/*.toml"   # a string containing *, ?, or [ is glob shorthand
+```
+
+`MultiRunJobConfig` hoists the `[multirun]` table's keys onto itself (a
+`model_validator(mode="before")`) so callers read `settings.experiment_name`,
+`settings.parent_run_name`, `settings.failure_policy`, and `settings.runs`
+directly — no `.multirun` indirection. Each `[[multirun.runs]]` entry is a
+`ChildEntryConfig` (`id`, `label`, `files`, optional `run_type`, opaque
+`tags`/`params`/`metadata`).
+
+`load_job()` resolves every child entry's `files` (explicit list or glob
+pattern) to an absolute path/pattern relative to the multirun config file's
+own directory, the same convention profile references use — by the time a
+`ChildEntryConfig` is validated, `files` holds only absolute values. The
+`ChildEntryConfig -> ChildSource` conversion (glob-vs-explicit dispatch,
+`GlobSource`/`ExplicitFileSource` construction) lives in the engine layer
+(`engine.workflows.entrypoints.multirun.build_child_sources()`), not here —
+infrastructure must not import engine per the DAG.
 
 ## Convergence Settings
 

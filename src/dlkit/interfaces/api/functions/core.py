@@ -10,12 +10,13 @@ from dlkit.common import (
     OptimizationResult,
     TrainingResult,
 )
-from dlkit.common.results import ConvergenceResult
+from dlkit.common.results import ChildOutcome, ConvergenceResult, MultiRunResult, WorkflowResult
+from dlkit.engine.workflows.entrypoints import MultiRunSpec
 from dlkit.engine.workflows.entrypoints._settings import WorkflowSettings
 from dlkit.engine.workflows.factories.inference_data_factory import (
     build_inference_datamodule as _build_inference_datamodule,
 )
-from dlkit.infrastructure.config.job_config import InferenceJobConfig
+from dlkit.infrastructure.config.job_config import InferenceJobConfig, MultiRunJobConfig
 from dlkit.interfaces.api.adapters import EngineWorkflowExecutor
 from dlkit.interfaces.api.domain.override_types import (
     ConvergenceOverrides,
@@ -106,6 +107,46 @@ def converge(
         overrides=overrides,
         mlflow=mlflow,
     )
+
+
+def run_multirun_config(
+    settings: MultiRunJobConfig,
+    *,
+    mlflow: bool = False,
+) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
+    """Run a multirun sweep from a validated MultiRunJobConfig.
+
+    Args:
+        settings: Validated multirun job configuration.
+        mlflow: Accepted for signature symmetry with other workflow functions;
+            has no effect — a multirun sweep always configures MLflow tracking
+            (parent/child linkage is the point of a sweep). See
+            ``EngineWorkflowExecutor.run_multirun_config``'s docstring.
+
+    Returns:
+        MultiRunResult with the parent run id, tracking URI, and one
+        ChildOutcome per child, in expansion order.
+    """
+    return _executor.run_multirun_config(settings, mlflow=mlflow)
+
+
+def run_multirun_spec(
+    spec: MultiRunSpec,
+    *,
+    mlflow: bool = False,
+) -> MultiRunResult[ChildOutcome[WorkflowResult]]:
+    """Run a multirun sweep from an already-built MultiRunSpec.
+
+    Args:
+        spec: Fully-specified sweep: parent identity plus expanded children.
+        mlflow: Accepted for signature symmetry with other workflow functions;
+            has no effect — see ``run_multirun_config``'s docstring.
+
+    Returns:
+        MultiRunResult with the parent run id, tracking URI, and one
+        ChildOutcome per child, in expansion order.
+    """
+    return _executor.run_multirun_spec(spec, mlflow=mlflow)
 
 
 def optimize(

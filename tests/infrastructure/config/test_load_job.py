@@ -8,7 +8,12 @@ import pytest
 
 from dlkit.common.errors import ConfigValidationError
 from dlkit.infrastructure.config.factories import _deep_merge, load_job
-from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
+from dlkit.infrastructure.config.job_config import (
+    ConvergenceJobConfig,
+    MultiRunJobConfig,
+    SearchJobConfig,
+    TrainingJobConfig,
+)
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "jobs"
 
@@ -46,6 +51,26 @@ def search_path() -> Path:
         Absolute path to tests/fixtures/jobs/search.toml.
     """
     return FIXTURES / "search.toml"
+
+
+@pytest.fixture
+def convergence_path() -> Path:
+    """Path to the sample-size convergence TOML fixture.
+
+    Returns:
+        Absolute path to tests/fixtures/jobs/convergence.toml.
+    """
+    return FIXTURES / "convergence.toml"
+
+
+@pytest.fixture
+def multirun_path() -> Path:
+    """Path to the multirun sweep TOML fixture.
+
+    Returns:
+        Absolute path to tests/fixtures/jobs/multirun.toml.
+    """
+    return FIXTURES / "multirun.toml"
 
 
 @pytest.fixture
@@ -95,6 +120,40 @@ def test_load_search(search_path: Path) -> None:
     assert isinstance(cfg, SearchJobConfig)
     assert isinstance(cfg.search.space["training.optimizer.lr"], LogFloatParam)
     assert isinstance(cfg.search.space["model.hidden_size"], CategoricalParam)
+
+
+def test_load_convergence(convergence_path: Path) -> None:
+    """load_job() returns a ConvergenceJobConfig for run.type = 'convergence'."""
+    cfg = load_job(convergence_path)
+    assert isinstance(cfg, ConvergenceJobConfig)
+    assert cfg.run.type == "convergence"
+    assert cfg.convergence.sizes == (100, 500, 1000)
+    assert cfg.convergence.repeats == 2
+    assert cfg.convergence.target == 0.05
+
+
+def test_load_multirun(multirun_path: Path) -> None:
+    """load_job() returns a MultiRunJobConfig for run.type = 'multirun'.
+
+    The `[multirun]` table's keys are hoisted onto the top-level model, and
+    each child entry's `files` is resolved to an absolute path/pattern
+    relative to the multirun config file's own directory.
+    """
+    cfg = load_job(multirun_path)
+    assert isinstance(cfg, MultiRunJobConfig)
+    assert cfg.run.type == "multirun"
+    assert cfg.experiment_name == "test-multirun"
+    assert cfg.parent_run_name == "sweep-parent"
+    assert cfg.failure_policy == "continue_mark_parent_failed"
+    assert len(cfg.runs) == 2
+
+    explicit_child, glob_child = cfg.runs
+    assert explicit_child.id == "explicit"
+    assert explicit_child.label == "Explicit Child"
+    assert explicit_child.files == [str(multirun_path.parent / "simple_train.toml")]
+
+    assert glob_child.id == "variants"
+    assert glob_child.files == str(multirun_path.parent / "multirun_variants" / "*.toml")
 
 
 # ---------------------------------------------------------------------------

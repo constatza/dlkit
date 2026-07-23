@@ -7,6 +7,8 @@
 - `optimize()`
 - `converge()`
 - `execute()`
+- `run_multirun_config()` / `run_multirun_spec()` — general multirun sweeps
+  (config-driven vs. already-built `MultiRunSpec`)
 - config/template validation helpers
 - MLflow model-registry helpers
 
@@ -41,7 +43,18 @@ training_result = train(settings, overrides=TrainingOverrides(epochs=50, batch_s
 optimization_result = optimize(settings, overrides=OptimizationOverrides(trials=25, study_name="search"))
 convergence_result = converge(settings, overrides=ConvergenceOverrides(repeats=3))
 result = execute(settings, overrides=ExecutionOverrides(run_name="baseline"))
+
+from dlkit.interfaces.api import run_multirun_config
+
+sweep_result = run_multirun_config(multirun_settings)  # MultiRunResult[ChildOutcome[WorkflowResult]]
 ```
+
+`run_multirun_config()`/`run_multirun_spec()` accept an `mlflow: bool = False`
+kwarg for signature symmetry with the other workflow functions, but it has no
+effect: a multirun sweep's entire purpose is parent/child MLflow linkage, so
+the engine entrypoint always configures tracking from the first child's own
+settings regardless of this flag — see
+`engine/workflows/entrypoints/entrypoints.md`.
 
 ## Design Rule
 The API layer stays thin: no workflow orchestration, no command objects, and no

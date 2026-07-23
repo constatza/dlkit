@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .results import TrainingResult
+from .results import ChildFailure, TrainingResult
 
 # Extensible scalar parameter value for runtime metadata surfaces.
 # This is a sum type, not a renaming alias.
@@ -37,10 +37,22 @@ class RunCreatedEvent:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class LifecycleHooks:
-    """Functional extension points for lifecycle events."""
+    """Functional extension points for lifecycle events.
+
+    Attributes:
+        on_run_created: Fires when a new MLflow run opens.
+        on_training_complete: Fires when a training workflow finishes.
+        extra_tags: Supplies additional MLflow tags for a completed training run.
+        extra_params: Supplies additional MLflow params for a completed training run.
+        extra_artifacts: Supplies additional artifact paths to log for a completed
+            training run.
+        on_child_failed: Fires with a ``ChildFailure`` record when a multirun
+            child fails under a continuing failure policy.
+    """
 
     on_run_created: Callable[[RunCreatedEvent], None] | None = field(default=None)
     on_training_complete: Callable[[TrainingResult], None] | None = field(default=None)
     extra_tags: Callable[[TrainingResult], dict[str, str]] | None = field(default=None)
     extra_params: Callable[[TrainingResult], dict[str, ParamValue]] | None = field(default=None)
     extra_artifacts: Callable[[TrainingResult], Sequence[Path]] | None = field(default=None)
+    on_child_failed: Callable[[ChildFailure], None] | None = field(default=None)

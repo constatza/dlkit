@@ -1,0 +1,9 @@
+[run]
+type = "train"
+seed = 1
+model = "../profiles/model.toml"
+data = "../profiles/data.toml"
+training = "../profiles/training.toml"
+
+[experiment]
+name = "variant-a"

@@ -112,17 +112,33 @@ fields. `.training_result` is `None` when every trial failed or was pruned
 (no retrain ran); accessing a delegated attribute in that case raises
 `AttributeError` rather than silently returning `None`.
 
+`.mlflow_run_id`/`.mlflow_tracking_uri` identify the study's own MLflow run
+(same pair `TrainingResult`/`ConvergenceResult`/`EvaluationResult` carry, same
+reason: a caller needs both to independently locate the run afterward via
+`MlflowClient(tracking_uri=...)`, not just the run id alone). Populated in
+`OptimizationOrchestrationService._execute_with_tracking` from the study
+`IRunContext`, guarded on `is_active()` — the study run context is a real
+object even when MLflow tracking isn't configured (Null Object Pattern), so
+both fields are `None` rather than the null context's `run_id=""` sentinel
+leaking through.
+
 ## Known Limitations
 
-- There is no built-in batch orchestrator for multiple independent searches
-  (several `SearchJobConfig`s) in one invocation. `MultiRunOrchestrator`
-  (`engine.workflows.multi_run`) only dispatches plain training jobs through
-  `ITrainingExecutor`; there is no equivalent dispatch path for `optimize()`.
-  Callers that need to sweep several `SearchJobConfig`s must loop and call
-  `optimize()` themselves. Sequential `optimize()` calls in the same process
-  are safe to do this way: each call's `MLflowResourceManager` fully drains
-  MLflow's active-run state (Study, every Trial, and any Best-retrain run)
-  on exit regardless of nesting depth, so a later call never inherits a
+- Multiple independent searches (several `SearchJobConfig`s) as children of one
+  general multirun sweep are supported via `MultiRunOrchestrator`
+  (`engine.workflows.multi_run`), which dispatches each child through
+  `engine.workflows.entrypoints.execute()` — the same type-based routing
+  `optimize()`/`train()`/`converge()` already use, not a training-only path.
+  `OptimizationResult` carries `mlflow_run_id`/`mlflow_tracking_uri` (populated
+  from the study run's own `IRunContext` in `_execute_with_tracking`), so a
+  search child's study run is tagged `mlflow.parentRunId` under the sweep's
+  parent exactly like a train or convergence child — see
+  `engine.workflows.entrypoints.entrypoints.md`. Callers that need to sweep
+  several `SearchJobConfig`s outside of a multirun config can still loop and
+  call `optimize()` directly; sequential `optimize()` calls in the same process
+  are safe to do this way regardless: each call's `MLflowResourceManager` fully
+  drains MLflow's active-run state (Study, every Trial, and any Best-retrain
+  run) on exit regardless of nesting depth, so a later call never inherits a
   leftover active run from an earlier one.
 
 - **Concurrency model: trials execute strictly sequentially, in-process.**

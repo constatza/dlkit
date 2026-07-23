@@ -137,4 +137,6 @@ class OptimizationStrategy(IOptimizationStrategy):
             training_result=domain_result.best_training_result,
             study_summary=domain_result.study_summary,
             duration_seconds=total_duration,
+            mlflow_run_id=domain_result.mlflow_run_id,
+            mlflow_tracking_uri=domain_result.mlflow_tracking_uri,
         )

@@ -16,9 +16,8 @@ import pytest
 from typer.testing import CliRunner
 
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
-from dlkit.engine.training.vanilla_executor import VanillaExecutor
-from dlkit.engine.workflows.factories.build_factory import BuildFactory
-from dlkit.engine.workflows.multi_run import MultiRunOrchestrator, RunVariant
+from dlkit.engine.workflows.entrypoints import execute
+from dlkit.engine.workflows.multi_run import MultiRunOrchestrator, RunSpec
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.interfaces.api.functions import train as api_train
@@ -304,22 +303,25 @@ def trained_cli_sweep(
     """
     tracker = MLflowTracker()
     tracker.configure(sweep_variant_settings[0].tracking)
-    orchestrator = MultiRunOrchestrator(BuildFactory(), VanillaExecutor(), tracker)
+    orchestrator = MultiRunOrchestrator(tracker, execute)
 
-    variants = [
-        RunVariant(settings=settings, run_name=f"cli-variant-{i}")
+    children = [
+        RunSpec(
+            id=f"cli-variant-{i}",
+            label=f"cli-variant-{i}",
+            settings=settings,
+            run_name=f"cli-variant-{i}",
+        )
         for i, settings in enumerate(sweep_variant_settings)
     ]
 
-    parent_run_ids: list[str] = []
-    orchestrator.run_sweep(
-        variants=variants,
+    result = orchestrator.run_sweep(
+        children=children,
         experiment_name="cli_sweep_experiment",
         parent_run_name="cli_sweep_parent",
-        on_sweep_complete=lambda parent_run, _results: parent_run_ids.append(parent_run.run_id),
     )
 
-    return parent_run_ids[0], sweep_variant_settings
+    return result.parent_run_id, sweep_variant_settings
 
 
 @pytest.fixture

@@ -195,6 +195,62 @@ class MLflowTracker(IExperimentTracker):
             return False
         return self._resource_manager.has_active_parent_run()
 
+    def set_run_tag(self, run_id: str, key: str, value: str) -> None:
+        """Set a tag on a run by id, without requiring it to be the active run.
+
+        Unlike ``IRunContext.set_tag``, which only tags the run its context
+        wraps, this reaches an arbitrary run — active, already closed, or
+        never opened by this tracker instance — via a fresh client handle.
+        Used for post-hoc tagging, e.g. a multirun orchestrator tagging a
+        child run with its sweep's parent run id after the child's own
+        train()/optimize()/converge() call has already opened and closed
+        that run independently.
+
+        Args:
+            run_id: MLflow run id to tag.
+            key: Tag name/key.
+            value: Tag value.
+
+        Raises:
+            RuntimeError: If MLflow not configured (configure not called).
+        """
+        if not self._resource_manager:
+            raise RuntimeError("MLflow not configured - call configure() before entering context")
+        self._resource_manager.get_client().set_tag(run_id, key, value)
+
+    def get_run_context(self, run_id: str) -> IRunContext:
+        """Return a post-hoc run context for an existing run, without activating it.
+
+        Unlike ``create_run()``, this never calls ``mlflow.start_run()`` and
+        never touches MLflow's global active-run state — it wraps ``run_id``
+        in a client-backed run context that logs via direct ``MlflowClient``
+        calls. Safe to use on a run that's already finished (e.g. a multirun
+        sweep's own parent run, deliberately closed before children run so
+        each child's own top-level run doesn't collide with it) or on any
+        run this tracker instance didn't itself open.
+
+        Args:
+            run_id: MLflow run id to wrap.
+
+        Returns:
+            IRunContext: A run context backed by run_id.
+
+        Raises:
+            RuntimeError: If MLflow not configured (configure not called).
+        """
+        if not self._resource_manager:
+            raise RuntimeError("MLflow not configured - call configure() before entering context")
+        from .mlflow_run_context import ClientBasedRunContext
+
+        client = self._resource_manager.get_client()
+        experiment_id = client.get_run(run_id).info.experiment_id
+        return ClientBasedRunContext(
+            client,
+            run_id,
+            tracking_uri=self.get_tracking_uri() or "",
+            experiment_id=experiment_id,
+        )
+
     def configure(self, config: TrackingSettings) -> None:
         """Store tracking config with no side effects."""
         self._mlflow_config = config

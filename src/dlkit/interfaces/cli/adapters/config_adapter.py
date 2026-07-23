@@ -3,28 +3,58 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal, overload
 
 from dlkit.common import ConfigurationError
 from dlkit.infrastructure.config.factories import load_job
 from dlkit.infrastructure.config.job_config import (
+    ConvergenceJobConfig,
     InferenceJobConfig,
+    MultiRunJobConfig,
     SearchJobConfig,
     TrainingJobConfig,
 )
 
 
+@overload
+def load_config(config_path: Path, run_type: Literal["train"]) -> TrainingJobConfig: ...
+@overload
+def load_config(config_path: Path, run_type: Literal["predict"]) -> InferenceJobConfig: ...
+@overload
+def load_config(config_path: Path, run_type: Literal["search"]) -> SearchJobConfig: ...
+@overload
+def load_config(config_path: Path, run_type: Literal["convergence"]) -> ConvergenceJobConfig: ...
+@overload
+def load_config(config_path: Path, run_type: Literal["multirun"]) -> MultiRunJobConfig: ...
+@overload
+def load_config(
+    config_path: Path, run_type: str | None = None
+) -> (
+    TrainingJobConfig
+    | InferenceJobConfig
+    | SearchJobConfig
+    | ConvergenceJobConfig
+    | MultiRunJobConfig
+): ...
 def load_config(
     config_path: Path,
     run_type: str | None = None,
-) -> TrainingJobConfig | InferenceJobConfig | SearchJobConfig:
+) -> (
+    TrainingJobConfig
+    | InferenceJobConfig
+    | SearchJobConfig
+    | ConvergenceJobConfig
+    | MultiRunJobConfig
+):
     """Load configuration from file with CLI-specific error handling.
 
     Uses the new JobConfig hierarchy with ``load_job()`` as the primary loader.
 
     Args:
         config_path: Path to configuration file.
-        run_type: Optional run type override (``"train"``, ``"predict"``, ``"search"``).
-            Required when the TOML file does not include a ``[run] type`` key.
+        run_type: Optional run type override (``"train"``, ``"predict"``, ``"search"``,
+            ``"convergence"``, ``"multirun"``). Required when the TOML file does not
+            include a ``[run] type`` key.
 
     Returns:
         Typed job config matched to the resolved ``run.type``.

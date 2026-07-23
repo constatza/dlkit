@@ -16,7 +16,6 @@ from rich.console import Console
 
 from dlkit.common import ConfigurationError
 from dlkit.common.checkpoint_source import CheckpointSource, LatestRunCheckpoint, RunCheckpoint
-from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.inference import evaluate as evaluate_api
 
 from ..adapters.config_adapter import load_config
@@ -124,7 +123,7 @@ def _run_evaluate_impl(
       `--output-dir`, `--mlflow`, `--run-name`.
     """
     console.print(f"📖 Loading configuration from: {config_path}")
-    job = cast(InferenceJobConfig, load_config(config_path, run_type="predict"))
+    job = load_config(config_path, run_type="predict")
 
     checkpoint_path, run_checkpoint = _resolve_checkpoint_selection(checkpoint, run_id, latest_run)
 

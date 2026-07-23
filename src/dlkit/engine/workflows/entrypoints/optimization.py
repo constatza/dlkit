@@ -62,6 +62,8 @@ def optimize(
             training_result=result.training_result,
             study_summary=result.study_summary,
             duration_seconds=context.elapsed(),
+            mlflow_run_id=result.mlflow_run_id,
+            mlflow_tracking_uri=result.mlflow_tracking_uri,
         )
     except Exception as exc:
         if isinstance(exc, WorkflowError):

@@ -28,6 +28,8 @@ Key architectural decisions:
 | `evaluate.app` | Typer | Eval-only checkpoint stats/plots commands | N/A |
 | `optimize.app` | Typer | Hyperparameter optimization commands | N/A |
 | `converge.app` | Typer | Sample-size convergence study commands | N/A |
+| `multirun.app` | Typer | General multirun sweeps (`run`/`validate`) | N/A |
+| `evaluate_multirun.app` | Typer | Batch-evaluate every child run of a sweep | N/A |
 | `server.app` | Typer | MLflow server management commands | N/A |
 | `config.app` | Typer | Configuration utilities | N/A |
 | `convert.app` | Typer | Checkpoint conversion to ONNX | N/A |
@@ -192,6 +194,51 @@ dlkit evaluate config.toml model.ckpt --mlflow --run-name eval-baseline
   command is presentation-only (progress/console output, `--output-dir`
   figure export), no orchestration logic lives here.
 - Results presented via `present_evaluation_result()`.
+
+---
+
+### Component 2.6: `multirun.py` - General Multirun Sweep Commands
+
+**Purpose**: Batch-runs a set of child configs (explicit file lists or glob
+shorthand) under one parent MLflow run. Distinct from `evaluate_multirun.py`:
+this command *executes* a sweep; `evaluate-multirun` only evaluates the
+children of an already-completed one.
+
+**Subcommands**:
+- `dlkit multirun run CONFIG.toml [--mlflow]` — execute the sweep.
+- `dlkit multirun validate CONFIG.toml` — expand child sources (glob
+  matching, duplicate-id/nested-multirun checks) without opening any MLflow
+  run or executing anything; surfaces sweep-definition mistakes early.
+
+**Parameters** (`run`):
+- `config_path: Path` - Path to a `[run] type = "multirun"` TOML file
+- `mlflow: bool = False` - accepted for CLI-flag symmetry; has no effect (see
+  `engine/workflows/entrypoints/entrypoints.md`)
+
+**Returns**: `None` (exits with status code)
+
+**Raises**:
+- `typer.Exit`: On validation failures or errors
+- `DLKitError`: Sweep expansion/execution errors (handled by middleware)
+
+**Example**:
+```bash
+# Dry-run: expand children, no execution
+dlkit multirun validate sweep.toml
+
+# Execute the sweep
+dlkit multirun run sweep.toml
+```
+
+**Implementation Notes**:
+- Loads config via `load_config(path, run_type="multirun")`.
+- `run` delegates to `dlkit.interfaces.api.functions.core.run_multirun_config()`.
+- `validate` calls `build_child_sources()` + `expand_child_sources()` directly
+  (both re-exported from `dlkit.engine.workflows.entrypoints`, since
+  `dlkit.interfaces.cli` isn't allowed to depend on the general
+  `engine.workflows.multi_run` bucket per `tach.toml`) — no MLflow run opened.
+- Presents results with a local `_present_multirun_result()` table
+  (child id / status / run id), matching each `ChildOutcome` via `match`.
 
 ---
 

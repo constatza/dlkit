@@ -2,8 +2,8 @@
 
 `dlkit.interfaces.cli.app` owns the top-level Typer application: global
 options, logging bootstrap, and command-group registration. Individual
-command groups (`train`, `predict`, `evaluate`, `optimize`, `convert`,
-`config`, `converge`) are documented in
+command groups (`train`, `predict`, `evaluate`, `evaluate-multirun`,
+`optimize`, `convert`, `config`, `converge`, `multirun`) are documented in
 [`commands/commands.md`](commands/commands.md).
 
 ## Global Options

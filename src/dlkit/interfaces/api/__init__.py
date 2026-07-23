@@ -37,6 +37,8 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "load_registered_model": ("dlkit.interfaces.api.functions", "load_registered_model"),
     "optimize": ("dlkit.interfaces.api.functions", "optimize"),
     "register_logged_model": ("dlkit.interfaces.api.functions", "register_logged_model"),
+    "run_multirun_config": ("dlkit.interfaces.api.functions", "run_multirun_config"),
+    "run_multirun_spec": ("dlkit.interfaces.api.functions", "run_multirun_spec"),
     "search_logged_models": ("dlkit.interfaces.api.functions", "search_logged_models"),
     "search_registered_models": ("dlkit.interfaces.api.functions", "search_registered_models"),
     "set_registered_model_alias": (

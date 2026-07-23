@@ -59,7 +59,7 @@ Key architectural decisions:
 
 **Parameters**:
 - `config_path: Path` - Path to configuration file (must exist)
-- `run_type: str | None = None` - Optional workflow override (`train`, `predict`, `search`)
+- `run_type: str | None = None` - Optional workflow override (`train`, `predict`, `search`, `convergence`, `multirun`)
 
 **Returns**: `JobConfig` - Loaded settings object appropriate for workflow type
 

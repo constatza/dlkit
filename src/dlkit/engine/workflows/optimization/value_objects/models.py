@@ -186,6 +186,8 @@ class OptimizationResult:
     best_trial: Trial | None
     best_training_result: TrainingResult | None
     total_duration_seconds: float
+    mlflow_run_id: str | None = None
+    mlflow_tracking_uri: str | None = None
 
     @property
     def best_hyperparameters(self) -> dict[str, Any]:

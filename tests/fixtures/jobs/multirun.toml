@@ -1,0 +1,16 @@
+[run]
+type = "multirun"
+
+[multirun]
+experiment_name = "test-multirun"
+parent_run_name = "sweep-parent"
+failure_policy = "continue_mark_parent_failed"
+
+[[multirun.runs]]
+id = "explicit"
+label = "Explicit Child"
+files = ["simple_train.toml"]
+
+[[multirun.runs]]
+id = "variants"
+files = "multirun_variants/*.toml"

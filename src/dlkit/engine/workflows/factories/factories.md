@@ -26,6 +26,11 @@
   `DatasetBuilder` and `datamodule_resolution.py` rather than duplicating them
 - `feature_pipeline.py`: feature/target transform assembly
 - `execution_strategy_factory.py`: training executor composition with tracking activation
+- `tracking_flag.py`: `apply_mlflow_flag()` — ensures MLflow tracking is configured
+  on settings before dispatch. Lives here (not in `entrypoints`, its main caller)
+  so `engine.workflows.multi_run.orchestrator` can depend on it too without a
+  disallowed `engine.workflows -> entrypoints` edge (`tach.toml` only allows the
+  reverse); re-exported from `entrypoints/__init__.py` for its other callers.
 
 ## Notes
 - Dataset-family selection delegates to `runtime.data.families.resolve_family`.

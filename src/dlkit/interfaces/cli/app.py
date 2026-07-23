@@ -24,6 +24,7 @@ from .commands import config, convert, optimize
 from .commands import converge as converge
 from .commands import evaluate as evaluate
 from .commands import evaluate_multirun as evaluate_multirun
+from .commands import multirun as multirun
 from .commands import predict as predict
 from .commands import train as train
 
@@ -76,6 +77,11 @@ app.add_typer(
 app.add_typer(optimize.app, name="optimize", help="⚡ Hyperparameter optimization commands")
 app.add_typer(config.app, name="config", help="⚙️ Configuration validation and utilities")
 app.add_typer(converge.app, name="converge", help="📈 Sample-size convergence study")
+app.add_typer(
+    multirun.app,
+    name="multirun",
+    help="🧪 Multirun sweeps — batch-run a set of child configs under one parent MLflow run",
+)
 
 console = Console()
 

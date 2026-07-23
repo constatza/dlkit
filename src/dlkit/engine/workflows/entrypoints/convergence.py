@@ -6,9 +6,7 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.common.results import ConvergenceResult
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
-from dlkit.engine.training.vanilla_executor import VanillaExecutor
 from dlkit.engine.workflows.convergence.orchestrator import ConvergenceOrchestrator
-from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.engine.workflows.multi_run import MultiRunOrchestrator
 from dlkit.infrastructure.config.job_config import ConvergenceJobConfig
 from dlkit.infrastructure.utils.error_handling import raise_error
@@ -107,12 +105,16 @@ def converge(
                 convergence_settings, validated_overrides
             )
 
+        # Deferred import: `execution.py` imports `converge` from this module
+        # at module level, so importing `.execution` back here at module
+        # level would cycle. By the time converge() actually runs, both
+        # modules are already fully loaded.
+        from .execution import execute as dispatch_execute
+
         tracker = MLflowTracker()
         tracker.configure(convergence_settings.tracking)
 
-        build_factory = BuildFactory()
-        executor = VanillaExecutor()
-        multi_run = MultiRunOrchestrator(build_factory, executor, tracker, hooks=hooks)
+        multi_run = MultiRunOrchestrator(tracker, dispatch_execute, hooks=hooks)
         orchestrator = ConvergenceOrchestrator(multi_run)
 
         return context.run_with_path_context(lambda: orchestrator.execute(convergence_settings))

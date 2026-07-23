@@ -4,7 +4,14 @@ from dlkit.common import MultiRunResult
 from dlkit.common.checkpoint_source import LatestRunCheckpoint, RunCheckpoint
 
 from .config import generate_template, validate_config, validate_template
-from .core import build_inference_datamodule, converge, optimize, train
+from .core import (
+    build_inference_datamodule,
+    converge,
+    optimize,
+    run_multirun_config,
+    run_multirun_spec,
+    train,
+)
 from .execution import execute
 from .model_logged import (
     LoggedModelRecord,
@@ -34,6 +41,8 @@ __all__ = [
     "converge",
     "train",
     "optimize",
+    "run_multirun_config",
+    "run_multirun_spec",
     "build_inference_datamodule",
     # Configuration functions
     "validate_config",

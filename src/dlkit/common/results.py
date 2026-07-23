@@ -4,13 +4,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from .errors import WorkflowError
 from .result_accessors import NestedKey, TrainingResultAccessor
 
 if TYPE_CHECKING:
     from dlkit.common.state import ModelState
+
+# How a multirun sweep should react when one child run fails: stop immediately,
+# keep going and report failures alongside successes, or keep going but mark
+# the parent run as failed once all children have finished.
+FailurePolicy = Literal["fail_fast", "continue", "continue_mark_parent_failed"]
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -107,10 +112,64 @@ class MultiRunResult[T]:
     separate follow-up) MultiRunOrchestrator.run_sweep()'s currently-bare
     tuple[TrainingResult, ...] can share one container shape instead of
     each inventing its own.
+
+    Args:
+        parent_run_id: MLflow run id of the parent sweep run.
+        children: One record per child run, in execution order.
+        tracking_uri: MLflow tracking URI the parent and children were
+            recorded under, if tracked. Defaults to ``None`` for callers
+            that predate this field.
     """
 
     parent_run_id: str
     children: tuple[T, ...]
+    tracking_uri: str | None = None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChildFailure:
+    """Serializable failure record for one child of a multirun sweep.
+
+    Deliberately holds no raw exception object (which may be unpicklable or
+    reference process-local state) so it can be logged, returned across
+    process boundaries, and pattern-matched via ``status`` alongside
+    :class:`ChildSuccess` as part of :data:`ChildOutcome`.
+
+    Args:
+        child_id: Identifier of the child run within the sweep.
+        exception_type: Name of the exception type that caused the failure.
+        message: Human-readable failure message.
+        run_id: MLflow run id of the failed child, if one was created.
+        stage: Workflow stage the failure occurred in, if known.
+        status: Discriminant literal, always ``"failure"``.
+    """
+
+    child_id: str
+    exception_type: str
+    message: str
+    run_id: str | None
+    stage: str | None
+    status: Literal["failure"] = "failure"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChildSuccess[T]:
+    """Successful outcome for one child of a multirun sweep.
+
+    Args:
+        child_id: Identifier of the child run within the sweep.
+        run_id: MLflow run id of the successful child, if one was created.
+        result: The child's workflow result.
+        status: Discriminant literal, always ``"success"``.
+    """
+
+    child_id: str
+    run_id: str | None
+    result: T
+    status: Literal["success"] = "success"
+
+
+type ChildOutcome[T] = ChildSuccess[T] | ChildFailure
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -121,6 +180,8 @@ class OptimizationResult:
     training_result: TrainingResult | None
     study_summary: dict[str, Any]
     duration_seconds: float
+    mlflow_run_id: str | None = field(default=None)
+    mlflow_tracking_uri: str | None = field(default=None)
 
     def as_training_result(self) -> TrainingResult:
         """Return the best trial's training result.
@@ -175,3 +236,8 @@ class ConvergenceResult:
     duration_seconds: float
     mlflow_run_id: str | None = field(default=None)
     mlflow_tracking_uri: str | None = field(default=None)
+
+
+# Closed union of DLKit's per-workflow result types, used as multirun's generic
+# child result type since a single sweep can mix workflow kinds.
+WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult

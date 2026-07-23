@@ -607,13 +607,21 @@ class OptimizationOrchestrator:
             study = study.complete_study()
             self._study_manager.save_study(study)
 
-            # Create final result
+            # Create final result. `study_context` is a real IRunContext even when
+            # MLflow tracking isn't configured (Null Object Pattern) — its `run_id`
+            # is `""`, not `None`, in that case, so guard on `is_active()` the same
+            # way `ResultEnricher._resolve_run_id` does for TrainingResult, instead
+            # of leaking the null-context sentinel into the public result.
             total_duration = time.time() - start_time
             result = OptimizationResult(
                 study=study,
                 best_trial=best_trial,
                 best_training_result=best_training_result,
                 total_duration_seconds=total_duration,
+                mlflow_run_id=study_context.run_id if study_context.is_active() else None,
+                mlflow_tracking_uri=(
+                    study_context.tracking_uri if study_context.is_active() else None
+                ),
             )
 
             # Log study summary and best trial configuration

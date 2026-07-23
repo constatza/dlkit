@@ -15,15 +15,12 @@ Notes:
 
 from __future__ import annotations
 
-from typing import cast
-
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from dlkit.common import InferenceResult
 from dlkit.engine.inference import run_batched_prediction
-from dlkit.infrastructure.config.job_config import InferenceJobConfig
 from dlkit.interfaces.api import build_inference_datamodule
 from dlkit.interfaces.inference import load_model_from_settings
 
@@ -67,7 +64,7 @@ def _run_inference_impl(
     - Override: `--batch-size`.
     """
     console.print(f"📖 Loading configuration from: {config_path}")
-    job = cast(InferenceJobConfig, load_config(config_path, run_type="predict"))
+    job = load_config(config_path, run_type="predict")
 
     # Show applied overrides
     override_messages = []

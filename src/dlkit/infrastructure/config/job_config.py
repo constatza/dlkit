@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import Field, model_validator
 
+from dlkit.common.results import FailurePolicy
 from dlkit.infrastructure.config.convergence_settings import ConvergenceSettings
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.config.data_settings import DataSettings
@@ -122,3 +125,87 @@ class ConvergenceJobConfig(JobConfig):
     data: DataSettings
     training: TrainingSettings
     convergence: ConvergenceSettings
+
+
+class ChildEntryConfig(BasicSettings):
+    """One ``[[multirun.runs]]`` entry: a child run source plus opaque metadata.
+
+    ``files`` is either an explicit list of TOML paths merged left-to-right
+    (job-file-wins order, matching ``load_job()``'s merge semantics) or a
+    single glob-pattern string (containing ``*``, ``?``, or ``[``) matched
+    against files under the multirun config's own directory. Relative paths
+    in either form are resolved by ``load_job()`` before this model is
+    validated — by the time a ``ChildEntryConfig`` exists, ``files`` holds
+    only absolute path(s)/pattern.
+
+    Args:
+        id: Stable identifier for this child within the sweep. Must be
+            unique across the sweep (enforced at expansion time, not here).
+        label: Human-readable label; also used as the child's MLflow run
+            name. Defaults to ``id`` when left blank.
+        files: Explicit TOML file path(s) merged left-to-right, or a single
+            glob pattern string.
+        run_type: Optional ``run.type`` override for the child's own
+            settings, same semantics as ``load_job()``'s ``run_type`` param.
+        tags: MLflow tags applied to the child's run.
+        params: Opaque caller-supplied parameters threaded onto the
+            resulting ``RunSpec`` — never interpreted by DLKit.
+        metadata: Opaque caller-supplied metadata threaded onto the
+            resulting ``RunSpec`` — never interpreted by DLKit.
+    """
+
+    id: str
+    label: str = ""
+    files: str | list[str]
+    run_type: str | None = None
+    tags: dict[str, str] = Field(default_factory=dict)
+    params: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MultiRunJobConfig(BasicSettings):
+    """Validated multirun sweep job: parent run identity plus child run sources.
+
+    Authored in TOML under a single ``[multirun]`` table (parent identity
+    fields plus ``[[multirun.runs]]`` child entries); this model hoists that
+    table's keys onto itself so callers read ``settings.experiment_name``,
+    ``settings.parent_run_name``, ``settings.failure_policy``, and
+    ``settings.runs`` directly, without an extra ``.multirun`` indirection.
+
+    Args:
+        run: Execution control (``run.type`` must be ``"multirun"``).
+        experiment_name: MLflow experiment name shared by the parent and
+            every child run.
+        parent_run_name: MLflow name for the parent sweep run.
+        failure_policy: How the sweep reacts when a child run fails.
+        runs: Ordered child run sources.
+    """
+
+    run: RunSettings
+    experiment_name: str
+    parent_run_name: str
+    failure_policy: FailurePolicy = "fail_fast"
+    runs: list[ChildEntryConfig]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _hoist_multirun_section(cls, data: Any) -> Any:
+        """Lift ``[multirun]`` table keys onto the top-level payload.
+
+        Args:
+            data: Raw payload, typically the ``load_job()``-merged dict with
+                a nested ``"multirun"`` table.
+
+        Returns:
+            Payload with ``multirun``'s keys merged at the top level (top-level
+            keys win on conflict), or the original payload unchanged if it is
+            not a dict or carries no ``"multirun"`` table.
+        """
+        if not isinstance(data, dict):
+            return data
+        multirun_section = data.get("multirun")
+        if not isinstance(multirun_section, dict):
+            return data
+        merged: dict[str, Any] = dict(multirun_section)
+        merged.update({k: v for k, v in data.items() if k != "multirun"})
+        return merged
