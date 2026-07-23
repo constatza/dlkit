@@ -137,18 +137,26 @@ class ChildFailure:
 
     Args:
         child_id: Identifier of the child run within the sweep.
+        label: Human-readable label for this child (mirrors ``RunSpec.label``).
         exception_type: Name of the exception type that caused the failure.
         message: Human-readable failure message.
         run_id: MLflow run id of the failed child, if one was created.
         stage: Workflow stage the failure occurred in, if known.
+        params: Opaque caller-supplied payload echoed back from the child's
+            ``RunSpec``, never interpreted by DLKit.
+        metadata: Opaque caller-supplied payload echoed back from the child's
+            ``RunSpec``, never interpreted by DLKit.
         status: Discriminant literal, always ``"failure"``.
     """
 
     child_id: str
+    label: str
     exception_type: str
     message: str
     run_id: str | None
     stage: str | None
+    params: dict[str, object] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
     status: Literal["failure"] = "failure"
 
 
@@ -158,14 +166,22 @@ class ChildSuccess[T]:
 
     Args:
         child_id: Identifier of the child run within the sweep.
+        label: Human-readable label for this child (mirrors ``RunSpec.label``).
         run_id: MLflow run id of the successful child, if one was created.
         result: The child's workflow result.
+        params: Opaque caller-supplied payload echoed back from the child's
+            ``RunSpec``, never interpreted by DLKit.
+        metadata: Opaque caller-supplied payload echoed back from the child's
+            ``RunSpec``, never interpreted by DLKit.
         status: Discriminant literal, always ``"success"``.
     """
 
     child_id: str
+    label: str
     run_id: str | None
     result: T
+    params: dict[str, object] = field(default_factory=dict)
+    metadata: dict[str, object] = field(default_factory=dict)
     status: Literal["success"] = "success"
 
 

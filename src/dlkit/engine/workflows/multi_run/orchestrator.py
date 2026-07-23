@@ -6,7 +6,12 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent, SweepCompletedEvent
+from dlkit.common.hooks import (
+    ChildPlannedEvent,
+    LifecycleHooks,
+    RunCreatedEvent,
+    SweepCompletedEvent,
+)
 from dlkit.common.results import (
     ChildFailure,
     ChildOutcome,
@@ -264,6 +269,14 @@ class MultiRunOrchestrator:
         Raises:
             Exception: Whatever the dispatched workflow raises, when
                 ``failure_policy == "fail_fast"``.
+
+        Note:
+            Fires ``hooks.on_child_planned`` right before dispatch (settings
+            finalized, no MLflow run created yet), then either
+            ``hooks.on_child_failed`` (on exception, under a continuing
+            failure policy) or ``hooks.on_child_completed`` (on success,
+            after the child's own run has been tagged with the parent run
+            id).
         """
         existing_tags = (
             dict(spec.settings.experiment.tags) if spec.settings.experiment is not None else {}
@@ -281,6 +294,18 @@ class MultiRunOrchestrator:
             ),
             mlflow=True,
         )
+
+        if self._hooks and self._hooks.on_child_planned:
+            self._hooks.on_child_planned(
+                ChildPlannedEvent(
+                    child_id=spec.id,
+                    label=spec.label,
+                    run_name=spec.run_name,
+                    tags=existing_tags,
+                    params=spec.params,
+                    metadata=spec.metadata,
+                )
+            )
 
         # Capture the child's own run id as soon as it opens, so a
         # ChildFailure can carry a best-effort run_id even though dispatch()
@@ -300,10 +325,13 @@ class MultiRunOrchestrator:
                 raise
             failure = ChildFailure(
                 child_id=spec.id,
+                label=spec.label,
                 exception_type=type(exc).__name__,
                 message=str(exc),
                 run_id=captured_run_id[0],
                 stage="execute",
+                params=spec.params,
+                metadata=spec.metadata,
             )
             if self._hooks and self._hooks.on_child_failed:
                 self._hooks.on_child_failed(failure)
@@ -313,7 +341,17 @@ class MultiRunOrchestrator:
         if run_id is not None:
             self._tracker.set_run_tag(run_id, _PARENT_RUN_ID_TAG, parent_run_id)
 
-        return ChildSuccess(child_id=spec.id, run_id=run_id, result=result)
+        success = ChildSuccess(
+            child_id=spec.id,
+            label=spec.label,
+            run_id=run_id,
+            result=result,
+            params=spec.params,
+            metadata=spec.metadata,
+        )
+        if self._hooks and self._hooks.on_child_completed:
+            self._hooks.on_child_completed(success)
+        return success
 
 
 def _wrap_on_run_created(

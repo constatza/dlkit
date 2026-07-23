@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
-from dlkit.common.results import ChildFailure, TrainingResult
+from dlkit.common.hooks import ChildPlannedEvent, LifecycleHooks, RunCreatedEvent
+from dlkit.common.results import ChildFailure, ChildSuccess, TrainingResult, WorkflowResult
 from dlkit.engine.workflows.multi_run import MultiRunOrchestrator, RunSpec
 from dlkit.infrastructure.config.experiment_settings import ExperimentSettings
 from dlkit.infrastructure.config.job_config import JobConfig
@@ -145,14 +145,31 @@ def recorded_child_failures() -> list[ChildFailure]:
 
 
 @pytest.fixture
+def recorded_child_planned() -> list[ChildPlannedEvent]:
+    """Events recorded by the ``hooks`` fixture's ``on_child_planned`` callable."""
+    return []
+
+
+@pytest.fixture
+def recorded_child_completed() -> list[ChildSuccess[WorkflowResult]]:
+    """Successes recorded by the ``hooks`` fixture's ``on_child_completed`` callable."""
+    return []
+
+
+@pytest.fixture
 def hooks(
     recorded_run_creations: list[RunCreatedEvent],
     recorded_child_failures: list[ChildFailure],
+    recorded_child_planned: list[ChildPlannedEvent],
+    recorded_child_completed: list[ChildSuccess[WorkflowResult]],
 ) -> LifecycleHooks:
-    """LifecycleHooks recording every on_run_created/on_child_failed firing."""
+    """LifecycleHooks recording every on_run_created/on_child_failed/on_child_planned/
+    on_child_completed firing."""
     return LifecycleHooks(
         on_run_created=recorded_run_creations.append,
         on_child_failed=recorded_child_failures.append,
+        on_child_planned=recorded_child_planned.append,
+        on_child_completed=recorded_child_completed.append,
     )
 
 
@@ -194,13 +211,14 @@ def spec_b(job_config_settings: JobConfig) -> RunSpec:
 
 @pytest.fixture
 def spec_with_tags(job_config_settings: JobConfig) -> RunSpec:
-    """RunSpec carrying child-level MLflow tags, for tag-propagation tests.
+    """RunSpec carrying child-level MLflow tags, params, and metadata.
 
     Args:
         job_config_settings: Real JobConfig shared across specs.
 
     Returns:
-        RunSpec: Spec with tags={"assignment_id": "42", "dataset_id": "ds-1"}.
+        RunSpec: Spec with tags={"assignment_id": "42", "dataset_id": "ds-1"},
+        params={"lr": 0.01}, metadata={"note": "x"}.
     """
     return RunSpec(
         id="tagged",
@@ -208,4 +226,6 @@ def spec_with_tags(job_config_settings: JobConfig) -> RunSpec:
         settings=job_config_settings,
         run_name="variant_tagged",
         tags={"assignment_id": "42", "dataset_id": "ds-1"},
+        params={"lr": 0.01},
+        metadata={"note": "x"},
     )

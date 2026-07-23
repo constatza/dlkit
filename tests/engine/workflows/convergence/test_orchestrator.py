@@ -80,6 +80,7 @@ class _FakeMultiRunOrchestrator:
         outcomes: tuple[ChildOutcome[WorkflowResult], ...] = tuple(
             ChildSuccess(
                 child_id=spec.id,
+                label=spec.id,
                 run_id=None,
                 result=TrainingResult(
                     model_state=None, metrics={}, artifacts={}, duration_seconds=0.1

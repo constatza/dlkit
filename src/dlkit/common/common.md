@@ -19,7 +19,7 @@ the codebase.
   (a closed, `status`-discriminated sum type consumed via `match`/`case`, not nullable
   fields); `FailurePolicy = Literal["fail_fast", "continue", "continue_mark_parent_failed"]`
 - Geometry: `FieldRole`, `GeometryKind`, `TopologyKind`, `FieldSpec`, `GeometrySpec`
-- Hooks: `LifecycleHooks`
+- Hooks: `LifecycleHooks`, `RunCreatedEvent`, `SweepCompletedEvent`, `ChildPlannedEvent`
 - Hook param scalars: `ParamValue = str | int | float | bool`
 - Protocols: `IDataModule`, `ITrainableModule`
 
@@ -27,13 +27,22 @@ the codebase.
 the generic parent/children result shape shared by `evaluate_multirun()`
 (`MultiRunResult[ChildEvaluation]`) and `MultiRunOrchestrator.run_sweep()`
 (`MultiRunResult[ChildOutcome[WorkflowResult]]`), instead of each inventing its own
-container. `LifecycleHooks.on_child_failed` fires with a `ChildFailure` record when a
-multirun child fails under a continuing `FailurePolicy`; `LifecycleHooks.on_sweep_complete`
+container. `LifecycleHooks.on_child_planned` fires with a `ChildPlannedEvent`
+(`child_id`, `label`, `run_name`, `tags`, `params`, `metadata`) right before a multirun
+child is dispatched, once its settings are finalized but before any MLflow run is
+created. `LifecycleHooks.on_child_failed` fires with a `ChildFailure` record when a
+multirun child fails under a continuing `FailurePolicy`; `LifecycleHooks.on_child_completed`
+fires with the same `ChildSuccess` record on the success path, symmetric with
+`on_child_failed`. `LifecycleHooks.on_sweep_complete`
 fires with a `SweepCompletedEvent` (`run_id`, `tracking_uri`, `outcomes`) once a sweep's
 children have all finished, after the parent run has closed — it carries plain
 `run_id`/`tracking_uri` rather than an engine-layer run-context object, since `common`
 must not import `engine`. See `dlkit.engine.workflows.entrypoints.entrypoints.md` for
 the sweep entrypoints that produce these.
+
+`ChildSuccess`/`ChildFailure` also carry `label`/`params`/`metadata`, echoed from the
+originating `RunSpec` and never interpreted by DLKit, so callers can recover a child's
+caller-supplied identity/payload directly from the outcome record.
 
 `TrainingResult` includes lazy derived accessors for prediction payloads through:
 - `stacked`

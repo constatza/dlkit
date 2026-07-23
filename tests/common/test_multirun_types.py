@@ -14,7 +14,9 @@ def _describe(outcome: ChildOutcome[int]) -> str:
 
 
 def test_match_discriminates_child_success_by_status() -> None:
-    outcome: ChildOutcome[int] = ChildSuccess(child_id="child-0", run_id="run-1", result=42)
+    outcome: ChildOutcome[int] = ChildSuccess(
+        child_id="child-0", label="child-0", run_id="run-1", result=42
+    )
 
     assert _describe(outcome) == "ok:42"
 
@@ -22,6 +24,7 @@ def test_match_discriminates_child_success_by_status() -> None:
 def test_match_discriminates_child_failure_by_status() -> None:
     outcome: ChildOutcome[int] = ChildFailure(
         child_id="child-1",
+        label="child-1",
         exception_type="ValueError",
         message="bad hyperparameter",
         run_id="run-2",

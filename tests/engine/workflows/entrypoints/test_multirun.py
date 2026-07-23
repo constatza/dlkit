@@ -15,8 +15,14 @@ from pathlib import Path
 import pytest
 
 from dlkit.common.errors import ConfigValidationError
-from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
-from dlkit.common.results import ChildSuccess, MultiRunResult, OptimizationResult, TrainingResult
+from dlkit.common.hooks import ChildPlannedEvent, LifecycleHooks, RunCreatedEvent
+from dlkit.common.results import (
+    ChildSuccess,
+    MultiRunResult,
+    OptimizationResult,
+    TrainingResult,
+    WorkflowResult,
+)
 from dlkit.engine.tracking.run_queries import find_child_run_ids
 from dlkit.engine.workflows.entrypoints.multirun import (
     build_child_sources,
@@ -264,3 +270,39 @@ def test_run_multirun_forwards_hooks_to_children(
     kinds = [event.kind for event in recorded]
     assert kinds.count("sweep") == 1
     assert kinds.count("train") == 2
+
+
+def test_run_multirun_forwards_child_planned_and_completed_hooks(
+    train_child_paths: tuple[Path, Path],
+) -> None:
+    """`run_multirun(settings, hooks=...)` fires on_child_planned/on_child_completed per child.
+
+    Proves the whole hooks chain works end to end through the real public
+    entrypoint (`run_multirun` -> `MultiRunOrchestrator._run_one`), not just
+    the orchestrator unit tests with a mocked dispatcher.
+    """
+    child_a, child_b = train_child_paths
+    settings = _multirun_config(
+        experiment_name="sweep-child-hooks",
+        parent_run_name="sweep-child-hooks-parent",
+        runs=[
+            {"id": "child-a", "label": "Child A", "files": [str(child_a)]},
+            {"id": "child-b", "label": "Child B", "files": [str(child_b)]},
+        ],
+    )
+    recorded_planned: list[ChildPlannedEvent] = []
+    recorded_completed: list[ChildSuccess[WorkflowResult]] = []
+    hooks = LifecycleHooks(
+        on_child_planned=recorded_planned.append,
+        on_child_completed=recorded_completed.append,
+    )
+
+    result = run_multirun(settings, hooks=hooks)
+
+    assert isinstance(result, MultiRunResult)
+    assert len(recorded_planned) == 2
+    assert [event.child_id for event in recorded_planned] == ["child-a", "child-b"]
+
+    assert len(recorded_completed) == 2
+    assert [success.child_id for success in recorded_completed] == ["child-a", "child-b"]
+    assert all(isinstance(success, ChildSuccess) for success in recorded_completed)

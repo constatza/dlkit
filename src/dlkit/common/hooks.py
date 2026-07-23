@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from .results import ChildFailure, ChildOutcome, TrainingResult, WorkflowResult
+from .results import ChildFailure, ChildOutcome, ChildSuccess, TrainingResult, WorkflowResult
 
 # Extensible scalar parameter value for runtime metadata surfaces.
 # This is a sum type, not a renaming alias.
@@ -52,6 +52,21 @@ class SweepCompletedEvent:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ChildPlannedEvent:
+    """Fired via ``LifecycleHooks.on_child_planned`` right before a multirun
+    child is dispatched — its settings are finalized (tags already merged)
+    but no MLflow run has been created yet.
+    """
+
+    child_id: str
+    label: str
+    run_name: str
+    tags: dict[str, str]
+    params: dict[str, object]
+    metadata: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class LifecycleHooks:
     """Functional extension points for lifecycle events.
 
@@ -66,6 +81,10 @@ class LifecycleHooks:
             child fails under a continuing failure policy.
         on_sweep_complete: Fires once a multirun sweep's children have all
             finished, after the parent run has closed.
+        on_child_planned: Fires right before a multirun child is dispatched.
+        on_child_completed: Fires when a multirun child succeeds, with the same
+            ``ChildSuccess`` record returned in the sweep result. Symmetric with
+            ``on_child_failed``, which already fires on the failure path.
     """
 
     on_run_created: Callable[[RunCreatedEvent], None] | None = field(default=None)
@@ -75,3 +94,5 @@ class LifecycleHooks:
     extra_artifacts: Callable[[TrainingResult], Sequence[Path]] | None = field(default=None)
     on_child_failed: Callable[[ChildFailure], None] | None = field(default=None)
     on_sweep_complete: Callable[[SweepCompletedEvent], None] | None = field(default=None)
+    on_child_planned: Callable[[ChildPlannedEvent], None] | None = field(default=None)
+    on_child_completed: Callable[[ChildSuccess[WorkflowResult]], None] | None = field(default=None)

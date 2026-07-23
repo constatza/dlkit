@@ -81,7 +81,14 @@ children. `MultiRunJobConfig.parent_tags` / `MultiRunSpec.parent_tags` reach
 the parent run the same way. A `ChildFailure`'s `run_id` is a best-effort
 capture of whatever run the child opened before it raised (via a wrapped
 `on_run_created`), not guaranteed — a child that fails before opening any
-run still reports `run_id=None`.
+run still reports `run_id=None`. `on_child_planned` fires right before each
+child dispatches (settings finalized, no MLflow run created yet);
+`on_child_completed` fires with the child's `ChildSuccess` right after it
+succeeds, paired with `on_child_failed` on the failure path. Both hooks, and
+the `label`/`params`/`metadata` fields on `ChildSuccess`/`ChildFailure`,
+require zero changes anywhere in this file's own code — `LifecycleHooks`
+already flows through opaquely end to end, so new fields on it are
+automatically reachable from the public API with no plumbing changes.
 
 ## Two-phase dispatch pattern (no dispatch injection seam)
 

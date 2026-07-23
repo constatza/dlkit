@@ -15,14 +15,28 @@ Covers:
 - failure_policy="fail_fast" (default) propagates a child's exception immediately
 - failure_policy="continue" records a ChildFailure and still runs later children
 - failure_policy="continue_mark_parent_failed" additionally tags the parent run
+- ChildSuccess/ChildFailure carry label/params/metadata from their RunSpec
+- on_child_planned fires once per child, before dispatch, with the correct payload
+- on_child_completed fires with the exact ChildSuccess on success, not on failure
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent, SweepCompletedEvent
-from dlkit.common.results import ChildFailure, ChildSuccess, MultiRunResult, TrainingResult
+from dlkit.common.hooks import (
+    ChildPlannedEvent,
+    LifecycleHooks,
+    RunCreatedEvent,
+    SweepCompletedEvent,
+)
+from dlkit.common.results import (
+    ChildFailure,
+    ChildSuccess,
+    MultiRunResult,
+    TrainingResult,
+    WorkflowResult,
+)
 from dlkit.engine.workflows.multi_run import IMultiRunOrchestrator, MultiRunOrchestrator, RunSpec
 
 # ---------------------------------------------------------------------------
@@ -357,6 +371,186 @@ def test_run_sweep_fires_on_run_created_for_parent(
 
     assert [event.kind for event in recorded_run_creations] == ["sweep"]
     assert [event.is_outermost for event in recorded_run_creations] == [True]
+
+
+# ---------------------------------------------------------------------------
+# label/params/metadata propagation
+# ---------------------------------------------------------------------------
+
+
+def test_child_success_carries_label_params_metadata(
+    orchestrator: MultiRunOrchestrator,
+    spec_with_tags: RunSpec,
+) -> None:
+    """ChildSuccess carries label/params/metadata matching the input RunSpec.
+
+    Args:
+        orchestrator: Orchestrator fixture.
+        spec_with_tags: Single child spec with params={"lr": 0.01},
+            metadata={"note": "x"}.
+    """
+    result = orchestrator.run_sweep(
+        children=[spec_with_tags],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    success = result.children[0]
+    assert isinstance(success, ChildSuccess)
+    assert success.label == spec_with_tags.label
+    assert success.params == spec_with_tags.params
+    assert success.metadata == spec_with_tags.metadata
+
+
+def test_child_failure_carries_label_params_metadata(
+    orchestrator: MultiRunOrchestrator,
+    mock_execute: MagicMock,
+    spec_with_tags: RunSpec,
+) -> None:
+    """ChildFailure carries label/params/metadata from its RunSpec when the child raises.
+
+    Args:
+        orchestrator: Orchestrator fixture.
+        mock_execute: Patched execute(), raises.
+        spec_with_tags: Single failing child spec with params={"lr": 0.01},
+            metadata={"note": "x"}.
+    """
+    mock_execute.side_effect = ValueError("boom")
+
+    result = orchestrator.run_sweep(
+        children=[spec_with_tags],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+        failure_policy="continue",
+    )
+
+    failure = result.children[0]
+    assert isinstance(failure, ChildFailure)
+    assert failure.label == spec_with_tags.label
+    assert failure.params == spec_with_tags.params
+    assert failure.metadata == spec_with_tags.metadata
+
+
+# ---------------------------------------------------------------------------
+# on_child_planned / on_child_completed hooks
+# ---------------------------------------------------------------------------
+
+
+def test_on_child_planned_fires_once_per_child_with_correct_payload(
+    orchestrator_with_hooks: MultiRunOrchestrator,
+    recorded_child_planned: list[ChildPlannedEvent],
+    spec_a: RunSpec,
+    spec_b: RunSpec,
+) -> None:
+    """on_child_planned fires exactly once per child with the correct payload.
+
+    Args:
+        orchestrator_with_hooks: Orchestrator fixture wired with hooks.
+        recorded_child_planned: Events recorded by the hooks fixture.
+        spec_a: First child spec.
+        spec_b: Second child spec.
+    """
+    orchestrator_with_hooks.run_sweep(
+        children=[spec_a, spec_b],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    assert len(recorded_child_planned) == 2
+    for event, spec in zip(recorded_child_planned, [spec_a, spec_b], strict=True):
+        assert event.child_id == spec.id
+        assert event.label == spec.label
+        assert event.run_name == spec.run_name
+        assert event.tags == spec.tags
+        assert event.params == spec.params
+        assert event.metadata == spec.metadata
+
+
+def test_on_child_planned_fires_before_dispatch(
+    orchestrator_with_hooks: MultiRunOrchestrator,
+    mock_execute: MagicMock,
+    recorded_child_planned: list[ChildPlannedEvent],
+    spec_a: RunSpec,
+) -> None:
+    """on_child_planned fires before the child is dispatched.
+
+    mock_execute's side_effect asserts the planned event was already
+    recorded by the time execute() is called, proving dispatch-order rather
+    than merely that both fire at some point.
+
+    Args:
+        orchestrator_with_hooks: Orchestrator fixture wired with hooks.
+        mock_execute: Patched execute(); asserts on_child_planned already fired.
+        recorded_child_planned: Events recorded by the hooks fixture.
+        spec_a: Single child spec.
+    """
+
+    def _assert_planned_already_recorded(
+        settings: object, *, hooks: LifecycleHooks
+    ) -> TrainingResult:
+        assert len(recorded_child_planned) == 1
+        return TrainingResult(model_state=None, metrics={}, artifacts={}, duration_seconds=0.1)
+
+    mock_execute.side_effect = _assert_planned_already_recorded
+
+    orchestrator_with_hooks.run_sweep(
+        children=[spec_a],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    assert len(recorded_child_planned) == 1
+
+
+def test_on_child_completed_fires_with_returned_child_success(
+    orchestrator_with_hooks: MultiRunOrchestrator,
+    recorded_child_completed: list[ChildSuccess[WorkflowResult]],
+    spec_a: RunSpec,
+) -> None:
+    """on_child_completed fires on success with the exact ChildSuccess returned in the result.
+
+    Args:
+        orchestrator_with_hooks: Orchestrator fixture wired with hooks.
+        recorded_child_completed: Successes recorded by the hooks fixture.
+        spec_a: Single child spec.
+    """
+    result = orchestrator_with_hooks.run_sweep(
+        children=[spec_a],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+    )
+
+    assert len(recorded_child_completed) == 1
+    assert recorded_child_completed[0] is result.children[0]
+
+
+def test_on_child_completed_does_not_fire_for_failing_child(
+    orchestrator_with_hooks: MultiRunOrchestrator,
+    mock_execute: MagicMock,
+    recorded_child_completed: list[ChildSuccess[WorkflowResult]],
+    recorded_child_failures: list[ChildFailure],
+    spec_a: RunSpec,
+) -> None:
+    """on_child_completed does not fire for a failing child; only on_child_failed does.
+
+    Args:
+        orchestrator_with_hooks: Orchestrator fixture wired with hooks.
+        mock_execute: Patched execute(), raises.
+        recorded_child_completed: Successes recorded by the hooks fixture.
+        recorded_child_failures: Failures recorded by the hooks fixture.
+        spec_a: Single failing child spec.
+    """
+    mock_execute.side_effect = ValueError("boom")
+
+    orchestrator_with_hooks.run_sweep(
+        children=[spec_a],
+        experiment_name="test_experiment",
+        parent_run_name="parent",
+        failure_policy="continue",
+    )
+
+    assert recorded_child_completed == []
+    assert len(recorded_child_failures) == 1
 
 
 # ---------------------------------------------------------------------------

@@ -47,11 +47,13 @@ def mock_multirun_result() -> MultiRunResult:  # type: ignore[type-arg]
     """
     success = ChildSuccess(
         child_id="a",
+        label="a",
         run_id="run-a",
         result=TrainingResult(model_state=None, metrics={}, artifacts={}, duration_seconds=0.1),
     )
     failure = ChildFailure(
         child_id="b",
+        label="b",
         exception_type="ValueError",
         message="boom",
         run_id=None,
