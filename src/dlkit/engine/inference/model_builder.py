@@ -76,6 +76,17 @@ def build_model_from_checkpoint(
     )
     logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)
+    # Fittable models (torchalg's PODCoarseningStrategy, etc.) may register a
+    # buffer only inside fit(), never in __init__ — its shape depends on data
+    # seen at fit time, not on any static constructor kwarg. A freshly built
+    # instance is missing that key entirely, and load_state_dict(strict=True)
+    # rejects it as "unexpected" rather than filling it in. Pre-register any
+    # checkpoint-only parameter/buffer key at the checkpoint's own shape/dtype
+    # before loading, so the strict load has something to copy into.
+    existing = {*dict(model.named_parameters()), *dict(model.named_buffers())}
+    for key, tensor in state_dict.items():
+        if key not in existing:
+            model.register_buffer(key, torch.empty_like(tensor))
     try:
         model.load_state_dict(state_dict, strict=True)
         logger.debug("Successfully loaded model weights from checkpoint")

@@ -18,7 +18,7 @@ from dlkit.engine.training.one_shot_fit_executor import OneShotFitExecutor
 from dlkit.infrastructure.config.job_config import FitJobConfig
 from dlkit.infrastructure.io.path_context import path_override_context
 
-from .conftest import MeanBufferFittable
+from .conftest import LazyBufferFittable, MeanBufferFittable
 
 
 @pytest.fixture
@@ -121,6 +121,57 @@ def test_execute_checkpoint_reconstructs_a_working_model_via_build_model_from_ch
 
     assert isinstance(rebuilt, MeanBufferFittable)
     assert torch.equal(rebuilt.mean, torch.tensor([2.5]))
+
+
+@pytest.fixture
+def lazy_fit_settings() -> FitJobConfig:
+    return FitJobConfig.model_validate(
+        {
+            "run": {"type": "fit", "seed": 0},
+            "model": {
+                "class": "LazyBufferFittable",
+                "module_path": "tests.engine.training.conftest",
+                "rank": 2,
+            },
+            "data": {"batch_size": 4, "num_workers": 0},
+        }
+    )
+
+
+@pytest.fixture
+def lazy_components(
+    lazy_buffer_model: LazyBufferFittable, lazy_buffer_dataloader: DataLoader
+) -> RuntimeComponents:
+    return RuntimeComponents(
+        model=lazy_buffer_model,
+        datamodule=cast(Any, _StubDataModule(lazy_buffer_dataloader)),
+        trainer=None,
+        meta={},
+    )
+
+
+def test_execute_reconstructs_a_model_whose_buffer_is_registered_only_in_fit(
+    lazy_components: RuntimeComponents, lazy_fit_settings: FitJobConfig, tmp_path: Path
+) -> None:
+    """Regression test for a gap MeanBufferFittable's fixed (1,)-shaped
+    buffer can't catch: a Fittable (like torchalg's PODCoarseningStrategy)
+    that registers no buffer at all in __init__, only inside fit(), at a
+    shape resolved from real data. build_model_from_checkpoint() must
+    pre-register such checkpoint-only keys before load_state_dict(strict=True),
+    or a freshly-constructed instance rejects the checkpoint with
+    "Unexpected key(s) in state_dict"."""
+    with path_override_context({"root_dir": tmp_path}):
+        OneShotFitExecutor().execute(lazy_components, lazy_fit_settings)
+
+    checkpoint_files = list(tmp_path.rglob("fitted.ckpt"))
+    checkpoint = torch.load(checkpoint_files[0], weights_only=False)
+
+    rebuilt = build_model_from_checkpoint(checkpoint)
+
+    assert isinstance(rebuilt, LazyBufferFittable)
+    assert rebuilt.is_fitted()
+    original = cast(LazyBufferFittable, lazy_components.model)
+    assert torch.equal(rebuilt.basis, original.basis)
 
 
 def test_execute_raises_when_model_not_fittable(
