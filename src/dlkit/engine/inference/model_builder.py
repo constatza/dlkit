@@ -77,16 +77,29 @@ def build_model_from_checkpoint(
     logger.debug("Converting model to checkpoint dtype: {}", checkpoint_dtype)
     model = model.to(dtype=checkpoint_dtype)
     # Fittable models (torchalg's PODCoarseningStrategy, etc.) may register a
-    # buffer only inside fit(), never in __init__ — its shape depends on data
-    # seen at fit time, not on any static constructor kwarg. A freshly built
-    # instance is missing that key entirely, and load_state_dict(strict=True)
-    # rejects it as "unexpected" rather than filling it in. Pre-register any
-    # checkpoint-only parameter/buffer key at the checkpoint's own shape/dtype
-    # before loading, so the strict load has something to copy into.
-    existing = {*dict(model.named_parameters()), *dict(model.named_buffers())}
-    for key, tensor in state_dict.items():
-        if key not in existing:
-            model.register_buffer(key, torch.empty_like(tensor))
+    # top-level buffer only inside fit(), never in __init__ — its shape
+    # depends on data seen at fit time, not on any static constructor kwarg.
+    # A freshly built instance is missing that key entirely, and
+    # load_state_dict(strict=True) rejects it as "unexpected" rather than
+    # filling it in. Pre-register any checkpoint-only top-level buffer key at
+    # the checkpoint's own shape/dtype before loading, so the strict load has
+    # something to copy into.
+    #
+    # Scoped narrowly on purpose, via duck typing rather than
+    # isinstance(model, Fittable) — engine.inference must not depend on
+    # engine.training (see tach.toml) — so strict=True keeps its real
+    # meaning for every other (non-Fittable, gradient-trained) model: an
+    # unexpected key there still means what it says. Dotted keys (nested
+    # submodule state, e.g. "encoder.norm.weight") are skipped rather than
+    # pre-registered: nn.Module.register_buffer rejects any name containing
+    # "." outright, and those keys belong to PyTorch's own prefix-scoped
+    # state-dict machinery anyway, not something a flat pre-registration loop
+    # should touch — an unexpected one still correctly fails strict loading.
+    if hasattr(model, "fit") and hasattr(model, "is_fitted"):
+        existing = {*dict(model.named_parameters()), *dict(model.named_buffers())}
+        for key, tensor in state_dict.items():
+            if key not in existing and "." not in key:
+                model.register_buffer(key, torch.empty_like(tensor))
     try:
         model.load_state_dict(state_dict, strict=True)
         logger.debug("Successfully loaded model weights from checkpoint")
