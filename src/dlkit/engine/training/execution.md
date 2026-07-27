@@ -204,7 +204,7 @@ def run_optimization(optimizer: IOptimizationStrategy, settings: SearchJobConfig
 **Purpose**: Sibling `ITrainingExecutor` for models whose entire "training" is a single deterministic, non-gradient call (e.g. a thin-SVD basis fit into a `register_buffer`) — no epochs, optimizer, or loss. Selected via `FitJobConfig` instead of `TrainingJobConfig`; `VanillaExecutor` and the gradient-training path are unmodified.
 
 **Key Methods**:
-- `execute(components: RuntimeComponents, settings: FitJobConfig) -> TrainingResult` — calls `components.model.fit(components.datamodule.train_dataloader())` directly (`components.trainer` is `None`), then writes a Lightning-checkpoint-shaped file itself (reusing `DLKitCheckpointSerializer` for the `dlkit_metadata` block) since there is no `Trainer`/`ModelCheckpoint` callback to produce one.
+- `execute(components: RuntimeComponents, settings: FitJobConfig) -> TrainingResult` — calls `components.model.fit(components.datamodule.train_dataloader())` directly (`components.trainer` is `None`), then writes a Lightning-checkpoint-shaped file itself (mirroring, not importing, `DLKitCheckpointSerializer`'s `dlkit_metadata` shape — `engine.training` must not depend on `engine.adapters.lightning`) since there is no `Trainer`/`ModelCheckpoint` callback to produce one.
 
 **Implementation Notes**:
 - `components.model` must implement `Fittable` (checked via `isinstance`, raises `WorkflowError` otherwise) and must already be a `LightningModule` — a model-side contract (see `torchalg`'s `PODCoarseningStrategy`), not something the executor or `FitBuildStrategy` enforces or wraps.

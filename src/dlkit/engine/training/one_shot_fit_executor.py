@@ -38,14 +38,23 @@ _CHECKPOINT_FILENAME = "fitted.ckpt"
 def _resolve_checkpoint_path() -> Path:
     """Resolve where this run's fitted checkpoint should be written locally.
 
-    Uses the general-purpose ``PathResolver`` precedence (explicit path
-    override context > ``DLKIT_ROOT_DIR`` > ``run.root_dir`` > cwd) rather
-    than the ``training.trainer.default_root_dir`` convention the trainer
-    path uses: ``FitJobConfig`` has no ``training`` section by design (that's
-    the entire point of the job kind), so a checkpoint-write location must
-    not depend on one being configured. Always resolves to something (falls
-    back to cwd), so unlike the trainer path this never raises for a missing
-    root.
+    Uses the general-purpose ``PathResolver`` precedence via
+    ``resolve_with_context`` (explicit path override context >
+    ``DLKIT_ROOT_DIR`` > cwd — ``PathResolver.from_defaults()`` never
+    supplies a ``config_root``, so that precedence tier is unreachable from
+    here) rather than the ``training.trainer.default_root_dir`` convention
+    the trainer path uses: ``FitJobConfig`` has no ``training`` section by
+    design (that's the entire point of the job kind), so a checkpoint-write
+    location must not depend on one being configured. Always resolves to
+    something (falls back to cwd), so unlike the trainer path this never
+    raises for a missing root.
+
+    Without an explicit override, concurrent runs from the same cwd resolve
+    to the identical path and overwrite each other — the same fixed-filename
+    collision risk the trainer path's ``ModelCheckpoint`` callback already
+    has (see ``_default_checkpoint_callback_settings`` in
+    ``engine.workflows.factories.build_strategy``), just with no config knob
+    to opt out of it yet.
 
     Returns:
         Local path the fitted checkpoint should be written to.
@@ -99,10 +108,15 @@ def _build_checkpoint(model: Fittable, model_settings: ModelComponentSettings) -
         the same shape ``build_model_from_checkpoint()``/
         ``extract_model_settings()`` already know how to read.
     """
-    state_dict = cast("torch.nn.Module", model).state_dict()
-    checkpoint: dict[str, Any] = {
-        "state_dict": {f"model.{key}": value for key, value in state_dict.items()}
-    }
+    # No "model." prefix: that convention exists because CoreLightningWrapper
+    # wraps a raw model as `self.model = <inner nn.Module>`, so its own
+    # state_dict() naturally produces "model.<key>" entries. A Fittable model
+    # has no such wrapper — it IS the top-level LightningModule (see the
+    # class docstring) — so its state_dict() keys are used as-is;
+    # build_model_from_checkpoint()'s prefix-stripping already handles both
+    # shapes, but writing an unearned "model." prefix here would corrupt the
+    # keys load_state_dict() expects on reload.
+    checkpoint: dict[str, Any] = {"state_dict": cast("torch.nn.Module", model).state_dict()}
     checkpoint["dlkit_metadata"] = {
         "wrapper_type": type(model).__name__,
         "model_settings": _serialize_model_settings(model_settings),
@@ -198,7 +212,9 @@ class OneShotFitExecutor(ITrainingExecutor):
                 settings=settings,
             ),
             metrics={},
-            artifacts={},
+            # "best_checkpoint" matches VanillaExecutor's key so
+            # TrainingResult.checkpoint_path resolves for either path.
+            artifacts={"best_checkpoint": checkpoint_path},
             duration_seconds=0.0,
             predictions=None,
         )

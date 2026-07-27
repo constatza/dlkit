@@ -73,7 +73,6 @@ _ALLOWED_OVERRIDE_KEYS: Mapping[type[JobConfig], frozenset[str]] = {
     ),
     FitJobConfig: frozenset(
         {
-            "checkpoint_path",
             "experiment_name",
             "run_name",
             "tags",

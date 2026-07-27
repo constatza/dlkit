@@ -104,7 +104,7 @@ training and optimization flows.
   `ProducedArtifact`s attached directly to `components.model` via
   `engine.artifacts.attach_checkpoint_artifacts`/`read_checkpoint_artifacts`
   (the trainer-free one-shot fit path — see
-  `engine.training.execution.execution.md`'s `OneShotFitExecutor` section).
+  `engine.training.execution.md`'s `OneShotFitExecutor` section).
   The model-attached channel exists because `TrackingDecorator` snapshots
   `RuntimeComponents` *before* `ITrainingExecutor.execute()` runs, so a
   checkpoint produced during `execute()` can't reach `ArtifactLogger` through

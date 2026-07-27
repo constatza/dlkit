@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from dlkit.common.errors import WorkflowError
 from dlkit.engine.artifacts import read_checkpoint_artifacts
 from dlkit.engine.inference.checkpoint_reader import extract_model_settings
+from dlkit.engine.inference.model_builder import build_model_from_checkpoint
 from dlkit.engine.training.components import RuntimeComponents
 from dlkit.engine.training.one_shot_fit_executor import OneShotFitExecutor
 from dlkit.infrastructure.config.job_config import FitJobConfig
@@ -61,7 +62,7 @@ def test_execute_calls_fit_exactly_once(
     model = cast(MeanBufferFittable, components.model)
     assert model.fit_call_count == 1
     assert model.is_fitted()
-    assert torch.equal(model.mean, torch.tensor([[2.5]]))
+    assert torch.equal(model.mean, torch.tensor([2.5]))
 
 
 def test_execute_writes_checkpoint_file_under_resolved_root(
@@ -73,8 +74,10 @@ def test_execute_writes_checkpoint_file_under_resolved_root(
     checkpoint_files = list(tmp_path.rglob("fitted.ckpt"))
     assert len(checkpoint_files) == 1
     checkpoint = torch.load(checkpoint_files[0], weights_only=False)
-    assert "model.mean" in checkpoint["state_dict"]
-    assert torch.equal(checkpoint["state_dict"]["model.mean"], torch.tensor([[2.5]]))
+    # No "model." prefix: a Fittable model IS the top-level LightningModule,
+    # unlike CoreLightningWrapper-wrapped models (see _build_checkpoint).
+    assert "mean" in checkpoint["state_dict"]
+    assert torch.equal(checkpoint["state_dict"]["mean"], torch.tensor([2.5]))
 
 
 def test_execute_attaches_checkpoint_artifact_to_model(
@@ -101,6 +104,23 @@ def test_execute_checkpoint_model_settings_round_trip_through_extract_model_sett
 
     assert reconstructed.name == "MeanBufferFittable"
     assert reconstructed.module_path == "tests.engine.training.conftest"
+
+
+def test_execute_checkpoint_reconstructs_a_working_model_via_build_model_from_checkpoint(
+    components: RuntimeComponents, fit_settings: FitJobConfig, tmp_path: Path
+) -> None:
+    """The actual claim the feature rests on: build_model_from_checkpoint()
+    (real importlib resolution + load_state_dict), not just metadata parsing."""
+    with path_override_context({"root_dir": tmp_path}):
+        OneShotFitExecutor().execute(components, fit_settings)
+
+    checkpoint_files = list(tmp_path.rglob("fitted.ckpt"))
+    checkpoint = torch.load(checkpoint_files[0], weights_only=False)
+
+    rebuilt = build_model_from_checkpoint(checkpoint)
+
+    assert isinstance(rebuilt, MeanBufferFittable)
+    assert torch.equal(rebuilt.mean, torch.tensor([2.5]))
 
 
 def test_execute_raises_when_model_not_fittable(

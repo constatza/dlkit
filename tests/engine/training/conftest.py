@@ -31,7 +31,10 @@ class MeanBufferFittable(LightningModule):
     def fit(self, dataloader: Iterable[Any]) -> None:
         self.fit_call_count += 1
         batches = [batch[0] if isinstance(batch, list | tuple) else batch for batch in dataloader]
-        self.mean = torch.cat(batches).mean(dim=0, keepdim=True)
+        # No keepdim: must match the (1,)-shaped buffer declared in
+        # __init__, or a freshly-constructed model's load_state_dict(strict=True)
+        # rejects the checkpoint on reload (shape mismatch).
+        self.mean = torch.cat(batches).mean(dim=0)
         self._fitted = True
 
     def is_fitted(self) -> bool:
