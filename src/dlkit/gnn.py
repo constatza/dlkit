@@ -2,6 +2,8 @@
 
 from dlkit.domain.nn.graph import (
     EmbeddedGraphNetwork,
+    EmbeddedHyperGraphNetwork,
+    EmbeddedMoEGraphNetwork,
     GATv2Message,
     GATv2Projection,
     GraphConvKind,
@@ -34,6 +36,8 @@ __all__ = [
     "SimpleGraphMessage",
     "EmbeddedGraphNetwork",
     "ScaledEmbeddedGraphNetwork",
+    "EmbeddedHyperGraphNetwork",
+    "EmbeddedMoEGraphNetwork",
     "GraphHyperConnection",
     "GraphHyperSequential",
     "SparseMoE",

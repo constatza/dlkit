@@ -1,3 +1,4 @@
+from .composites import EmbeddedHyperGraphNetwork, EmbeddedMoEGraphNetwork
 from .conv import GraphConvKind, resolve_graph_conv_factory
 from .embedded import EmbeddedGraphNetwork, ScaledEmbeddedGraphNetwork
 from .gatv2_presets import (
@@ -27,6 +28,8 @@ __all__ = [
     "SimpleGATv2Message",
     "EmbeddedGraphNetwork",
     "ScaledEmbeddedGraphNetwork",
+    "EmbeddedHyperGraphNetwork",
+    "EmbeddedMoEGraphNetwork",
     "LinearProjection",
     "StackedProjection",
     "SkipProjection",
