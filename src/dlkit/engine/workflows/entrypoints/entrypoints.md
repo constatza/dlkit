@@ -16,6 +16,14 @@
 - `_override_types.py`: strict override payload models
 - `_entrypoint_context.py`: shared setup for override application, path context, and timing
 - `training.py`: training entrypoint
+- `fit.py`: one-shot, non-gradient fit entrypoint (`FitJobConfig`). Unlike
+  trainer-backed jobs, `FitJobConfig` has no `training.trainer.default_root_dir`
+  knob, so `FitOverrides.checkpoints_dir` gives callers running many fit jobs
+  from the same cwd (e.g. a batch of assignments) a way to isolate each
+  call's checkpoint write path: when set, `fit()` wraps the orchestrated
+  execution in `path_override_context({"checkpoints_dir": ...})` so
+  `OneShotFitExecutor`'s fixed `checkpoints/fitted.ckpt` path resolves under
+  a distinct directory per call instead of colliding.
 - `optimization.py`: optimization entrypoint
 - `convergence.py`: sample-size convergence study entrypoint
 - `evaluate.py`: evaluation entrypoint — checkpoint + labeled dataset ->

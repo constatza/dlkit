@@ -9,6 +9,7 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.orchestrator import Orchestrator
 from dlkit.infrastructure.config.job_config import FitJobConfig
+from dlkit.infrastructure.io.path_context import path_override_context
 from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -34,12 +35,20 @@ def fit(
     validated_overrides = require_override_model(overrides, FitOverrides)
     context = EntrypointContext.prepare(settings, validated_overrides, workflow_name="fit")
 
-    try:
+    def run_fit() -> TrainingResult:
         orchestrator = Orchestrator()
         fit_settings = cast(FitJobConfig, context.settings)
-        execution_result = context.run_with_path_context(
+        return context.run_with_path_context(
             lambda: orchestrator.execute_training(fit_settings, hooks=hooks)
         )
+
+    try:
+        checkpoints_dir = validated_overrides.checkpoints_dir if validated_overrides else None
+        if checkpoints_dir is not None:
+            with path_override_context({"checkpoints_dir": checkpoints_dir}):
+                execution_result = run_fit()
+        else:
+            execution_result = run_fit()
         duration = context.elapsed()
         if duration <= 0:
             duration = getattr(execution_result, "duration_seconds", 0.0)

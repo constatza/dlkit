@@ -76,11 +76,19 @@ class FitOverrides(RuntimeOverrideModel):
     No ``checkpoint_path``: a one-shot fit always refits from data (there is
     no resume/reload semantics to override), and neither ``FitBuildStrategy``
     nor ``OneShotFitExecutor`` reads ``model.checkpoint``.
+
+    ``checkpoints_dir`` exists because ``FitJobConfig`` has no ``training``
+    section (by design), so there is no ``training.trainer.default_root_dir``
+    knob to give concurrent fit runs distinct output locations the way
+    trainer-backed jobs do. Setting it makes ``fit()`` isolate
+    ``OneShotFitExecutor``'s fixed ``checkpoints/fitted.ckpt`` write path
+    (see its docstring) per call instead of colliding on cwd.
     """
 
     experiment_name: str | None = None
     run_name: str | None = None
     tags: dict[str, str] | None = None
+    checkpoints_dir: Path | None = None
 
 
 class EvaluationOverrides(RuntimeOverrideModel):
