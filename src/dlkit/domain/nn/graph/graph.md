@@ -12,6 +12,20 @@ know which aggregation algorithm is behind the module they're calling.
 Adding a new conv kind means one new adapter class plus one new `match` arm
 in `resolve_graph_conv_factory` — nothing else in the graph package changes.
 
+### Module layout
+
+| File | Purpose |
+|---|---|
+| `conv.py` | PyG-normalization layer only: `GraphConvKind`, `resolve_graph_conv_factory`, the per-kind adapter classes |
+| `message.py` | Message-stack composition layer built on `conv.py`: `GraphMessage`/`SimpleGraphMessage`/`GATv2Message`/`SimpleGATv2Message` |
+| `embedded.py` | `EmbeddedGraphNetwork`/`ScaledEmbeddedGraphNetwork` — the conv-kind-generic composites |
+| `gatv2_presets.py` | GATv2-only convenience presets (`GATv2Projection` family) over the generic embedded classes |
+| `projection_networks.py` | `ProjectionNetwork`/`GProjection`/`ScaledGProjection` — the injected-`message_module` base classes |
+
+This mirrors the split used by the FFNN family: `primitives/dense.py` (block-strategy
+factory) is a separate file from `ffnn/hyper_moe.py` (the composition layer built on
+top of it).
+
 ### Supported kinds
 
 | `conv_kind` | Underlying PyG conv | Edge features | Residual mechanism |

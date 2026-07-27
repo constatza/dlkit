@@ -14,7 +14,8 @@ from torch import Tensor, nn
 
 from dlkit.domain.nn.types import ActivationName
 
-from .conv import GraphConvKind, GraphMessage, SimpleGraphMessage
+from .conv import GraphConvKind
+from .message import GraphMessage, SimpleGraphMessage
 from .projection_networks import GProjection, ScaledGProjection
 
 __all__ = ["EmbeddedGraphNetwork", "ScaledEmbeddedGraphNetwork"]

@@ -1,23 +1,21 @@
-"""Tests for the pluggable graph-convolution Strategy layer (``graph/conv.py``)."""
+"""Tests for the graph-convolution adapter/factory layer (``graph/conv.py``)."""
 
 from __future__ import annotations
-
-import inspect
 
 import pytest
 import torch
 
 from dlkit.domain.nn.graph.conv import (
-    GATv2Message,
     GraphConvKind,
-    GraphMessage,
-    SimpleGATv2Message,
-    SimpleGraphMessage,
     _GATv2ConvAdapter,
     _GCNConvAdapter,
     _SAGEConvAdapter,
     resolve_graph_conv_factory,
 )
+
+
+def _param_count(module: torch.nn.Module) -> int:
+    return sum(p.numel() for p in module.parameters())
 
 
 def test_resolve_graph_conv_factory_rejects_unsupported_kind() -> None:
@@ -35,14 +33,19 @@ def test_resolve_graph_conv_factory_builds_module_of_requested_shape(
     assert out.shape == (node_features.shape[0], 4)
 
 
-class TestGATv2ConvAdapter:
-    def test_residual_true_builds_native_res_projection(self) -> None:
-        adapter = _GATv2ConvAdapter(3, 4, heads=1, residual=True)
-        assert adapter.res is not None
+def test_resolve_graph_conv_factory_rejects_kwarg_from_a_different_conv_kind() -> None:
+    """GCN has no `heads` knob (that's GATv2-specific) -- must fail as a clear TypeError
+    naming the adapter, not an opaque error from deep inside PyTorch Geometric."""
+    factory = resolve_graph_conv_factory("gcn", heads=4)
+    with pytest.raises(TypeError, match="_GCNConvAdapter"):
+        factory(3, 4)
 
-    def test_residual_false_has_no_res_projection(self) -> None:
-        adapter = _GATv2ConvAdapter(3, 4, heads=1, residual=False)
-        assert adapter.res is None
+
+class TestGATv2ConvAdapter:
+    def test_residual_true_adds_a_learned_residual_projection(self) -> None:
+        plain = _GATv2ConvAdapter(3, 4, heads=1, residual=False)
+        residual = _GATv2ConvAdapter(3, 4, heads=1, residual=True)
+        assert _param_count(residual) > _param_count(plain)
 
     def test_concat_requires_out_channels_divisible_by_heads(self) -> None:
         with pytest.raises(ValueError, match="divisible by heads"):
@@ -113,43 +116,3 @@ class TestSAGEConvAdapter:
         residual_out = residual(node_features, edge_index)
 
         assert torch.allclose(residual_out, node_features + plain_out, atol=1e-6)
-
-
-@pytest.mark.parametrize("conv_kind", ["gatv2", "gcn", "sage"])
-def test_graph_message_forward_shape_across_conv_kinds(
-    conv_kind: GraphConvKind, node_features: torch.Tensor, edge_index: torch.Tensor
-) -> None:
-    module = GraphMessage(conv_kind=conv_kind, hidden_size=3, num_layers=2)
-    out = module(node_features, edge_index)
-    assert out.shape == node_features.shape
-
-
-def test_graph_message_has_no_public_residual_param() -> None:
-    assert "residual" not in inspect.signature(GraphMessage.__init__).parameters
-
-
-def test_simple_graph_message_has_no_public_residual_param() -> None:
-    assert "residual" not in inspect.signature(SimpleGraphMessage.__init__).parameters
-
-
-def test_gatv2_message_has_no_public_residual_param() -> None:
-    assert "residual" not in inspect.signature(GATv2Message.__init__).parameters
-
-
-def test_simple_gatv2_message_has_no_public_residual_param() -> None:
-    assert "residual" not in inspect.signature(SimpleGATv2Message.__init__).parameters
-
-
-def test_gatv2_message_passes_residual_true_to_conv() -> None:
-    module = GATv2Message(hidden_size=8, num_layers=1, heads=1)
-    assert module.layers[0].res is not None
-
-
-def test_simple_gatv2_message_passes_residual_false_to_conv() -> None:
-    module = SimpleGATv2Message(hidden_size=8, num_layers=1, heads=1)
-    assert module.layers[0].res is None
-
-
-def test_gatv2_message_is_conv_kind_gatv2_preset() -> None:
-    assert issubclass(GATv2Message, GraphMessage)
-    assert issubclass(SimpleGATv2Message, SimpleGraphMessage)

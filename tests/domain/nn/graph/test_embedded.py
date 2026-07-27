@@ -8,15 +8,16 @@ from typing import Any, cast
 import pytest
 import torch
 
-from dlkit.domain.nn.graph.conv import GraphConvKind, GraphMessage, SimpleGraphMessage
+from dlkit.domain.nn.graph.conv import GraphConvKind
 from dlkit.domain.nn.graph.embedded import EmbeddedGraphNetwork, ScaledEmbeddedGraphNetwork
-from dlkit.domain.nn.graph.projection_networks import GProjection, ScaledGProjection
-from dlkit.domain.nn.graph.scaled_projection_networks import (
+from dlkit.domain.nn.graph.gatv2_presets import (
     GATv2Projection,
     ScaledGATv2Projection,
     ScaledSimpleGATv2Projection,
     SimpleGATv2Projection,
 )
+from dlkit.domain.nn.graph.message import GraphMessage, SimpleGraphMessage
+from dlkit.domain.nn.graph.projection_networks import GProjection, ScaledGProjection
 
 _CONV_KIND_CASES = [
     pytest.param("gatv2", 1, True, id="gatv2"),
@@ -81,7 +82,6 @@ def test_embedded_graph_network_residual_true_uses_graph_message() -> None:
     )
     message_module = cast(Any, module)._message_module
     assert isinstance(message_module, GraphMessage)
-    assert message_module.layers[0].res is not None
 
 
 def test_embedded_graph_network_residual_false_uses_simple_graph_message() -> None:
@@ -91,7 +91,18 @@ def test_embedded_graph_network_residual_false_uses_simple_graph_message() -> No
     message_module = cast(Any, module)._message_module
     assert isinstance(message_module, SimpleGraphMessage)
     assert not isinstance(message_module, GraphMessage)
-    assert message_module.layers[0].res is None
+
+
+def test_embedded_graph_network_residual_true_adds_learned_projection_params() -> None:
+    plain = EmbeddedGraphNetwork(
+        in_channels=3, out_channels=2, hidden_size=8, num_layers=1, residual=False
+    )
+    residual = EmbeddedGraphNetwork(
+        in_channels=3, out_channels=2, hidden_size=8, num_layers=1, residual=True
+    )
+    plain_params = sum(p.numel() for p in cast(Any, plain)._message_module.parameters())
+    residual_params = sum(p.numel() for p in cast(Any, residual)._message_module.parameters())
+    assert residual_params > plain_params
 
 
 def test_embedded_graph_network_rejects_unsupported_conv_kind() -> None:
@@ -141,13 +152,11 @@ class TestGATv2ProjectionPresets:
         module = GATv2Projection(in_channels=3, out_channels=2, hidden_size=8, num_layers=1)
         message_module = cast(Any, module)._message_module
         assert isinstance(message_module, GraphMessage)
-        assert message_module.layers[0].res is not None
 
     def test_simple_gatv2_projection_uses_plain_message(self) -> None:
         module = SimpleGATv2Projection(in_channels=3, out_channels=2, hidden_size=8, num_layers=1)
         message_module = cast(Any, module)._message_module
         assert isinstance(message_module, SimpleGraphMessage)
-        assert message_module.layers[0].res is None
 
     def test_scaled_simple_gatv2_projection_uses_plain_message(self) -> None:
         module = ScaledSimpleGATv2Projection(
@@ -155,7 +164,13 @@ class TestGATv2ProjectionPresets:
         )
         message_module = cast(Any, module)._message_module
         assert isinstance(message_module, SimpleGraphMessage)
-        assert message_module.layers[0].res is None
+
+    def test_gatv2_projection_residual_adds_learned_projection_params(self) -> None:
+        plain = SimpleGATv2Projection(in_channels=3, out_channels=2, hidden_size=8, num_layers=1)
+        residual = GATv2Projection(in_channels=3, out_channels=2, hidden_size=8, num_layers=1)
+        plain_params = sum(p.numel() for p in cast(Any, plain)._message_module.parameters())
+        residual_params = sum(p.numel() for p in cast(Any, residual)._message_module.parameters())
+        assert residual_params > plain_params
 
     def test_forward_shapes(
         self, node_features: torch.Tensor, edge_index: torch.Tensor, edge_attr_1d: torch.Tensor

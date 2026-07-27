@@ -20,18 +20,11 @@ from typing import Literal
 from torch import Tensor, nn
 from torch_geometric.nn.conv import GATv2Conv, GCNConv, SAGEConv
 
-from dlkit.domain.nn.types import ActivationName
-from dlkit.domain.nn.utils import resolve_activation
-
 type GraphConvKind = Literal["gatv2", "gcn", "sage"]
 
 __all__ = [
     "GraphConvKind",
     "resolve_graph_conv_factory",
-    "GraphMessage",
-    "SimpleGraphMessage",
-    "GATv2Message",
-    "SimpleGATv2Message",
 ]
 
 
@@ -39,9 +32,9 @@ class _GATv2ConvAdapter(nn.Module):
     """Adapter exposing ``GATv2Conv`` via the uniform graph-conv contract.
 
     ``GATv2Conv`` already implements a learned residual projection
-    internally when ``residual=True`` (``self.res``), so this adapter passes
-    ``residual`` straight through and does not add anything of its own on
-    top of the wrapped conv's output.
+    internally when ``residual=True``, so this adapter passes ``residual``
+    straight through and does not add anything of its own on top of the
+    wrapped conv's output.
 
     Args:
         in_channels: Number of input node feature channels.
@@ -84,16 +77,6 @@ class _GATv2ConvAdapter(nn.Module):
             dropout=dropout,
         )
 
-    @property
-    def res(self) -> nn.Module | None:
-        """Return the wrapped conv's own learned residual projection, if any.
-
-        Returns:
-            nn.Module | None: The residual projection module, or ``None``
-                when ``residual=False`` was passed at construction time.
-        """
-        return self.conv.res
-
     def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor | None = None) -> Tensor:
         """Apply the wrapped ``GATv2Conv``.
 
@@ -123,9 +106,11 @@ class _GCNConvAdapter(nn.Module):
         edge_dim: Edge feature dimensionality; must be ``None`` or ``1``.
         residual: Whether to add ``x`` to the conv output.
         dropout: Feature dropout probability applied to the conv output.
-        **conv_kwargs: Additional keyword arguments forwarded to
-            ``GCNConv`` (e.g. ``improved``, ``cached``, ``add_self_loops``,
-            ``normalize``, ``bias``).
+        improved: Forwarded to ``GCNConv`` (uses ``2*I`` self-loop weight).
+        cached: Forwarded to ``GCNConv`` (caches the normalized adjacency).
+        add_self_loops: Forwarded to ``GCNConv``.
+        normalize: Forwarded to ``GCNConv`` (symmetric normalization).
+        bias: Whether ``GCNConv`` includes a bias term.
 
     Raises:
         ValueError: If ``edge_dim`` is not ``None`` or ``1``.
@@ -139,7 +124,11 @@ class _GCNConvAdapter(nn.Module):
         edge_dim: int | None = None,
         residual: bool = False,
         dropout: float = 0.0,
-        **conv_kwargs,
+        improved: bool = False,
+        cached: bool = False,
+        add_self_loops: bool | None = None,
+        normalize: bool = True,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         if edge_dim not in (None, 1):
@@ -149,7 +138,15 @@ class _GCNConvAdapter(nn.Module):
             )
         self.residual = residual
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-        self.conv = GCNConv(in_channels, out_channels, **conv_kwargs)
+        self.conv = GCNConv(
+            in_channels,
+            out_channels,
+            improved=improved,
+            cached=cached,
+            add_self_loops=add_self_loops,
+            normalize=normalize,
+            bias=bias,
+        )
 
     def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor | None = None) -> Tensor:
         """Apply ``GCNConv``, translating ``edge_attr`` into ``edge_weight``.
@@ -185,9 +182,14 @@ class _SAGEConvAdapter(nn.Module):
         edge_dim: Edge feature dimensionality; must be ``None``.
         residual: Whether to add ``x`` to the conv output.
         dropout: Feature dropout probability applied to the conv output.
-        **conv_kwargs: Additional keyword arguments forwarded to
-            ``SAGEConv`` (e.g. ``aggr``, ``normalize``, ``root_weight``,
-            ``project``, ``bias``).
+        aggr: Forwarded to ``SAGEConv`` (neighborhood aggregation, e.g.
+            ``"mean"``, ``"max"``, ``"lstm"``).
+        normalize: Forwarded to ``SAGEConv`` (L2-normalize the output).
+        root_weight: Forwarded to ``SAGEConv`` (add a transformed root/self
+            term).
+        project: Forwarded to ``SAGEConv`` (apply a linear projection before
+            aggregating).
+        bias: Whether ``SAGEConv`` includes a bias term.
 
     Raises:
         ValueError: If ``edge_dim`` is not ``None``.
@@ -201,7 +203,11 @@ class _SAGEConvAdapter(nn.Module):
         edge_dim: int | None = None,
         residual: bool = False,
         dropout: float = 0.0,
-        **conv_kwargs,
+        aggr: str = "mean",
+        normalize: bool = False,
+        root_weight: bool = True,
+        project: bool = False,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         if edge_dim is not None:
@@ -210,7 +216,15 @@ class _SAGEConvAdapter(nn.Module):
             )
         self.residual = residual
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-        self.conv = SAGEConv(in_channels, out_channels, **conv_kwargs)
+        self.conv = SAGEConv(
+            in_channels,
+            out_channels,
+            aggr=aggr,
+            normalize=normalize,
+            root_weight=root_weight,
+            project=project,
+            bias=bias,
+        )
 
     def forward(self, x: Tensor, edge_index: Tensor, edge_attr: Tensor | None = None) -> Tensor:
         """Apply ``SAGEConv``, rejecting any supplied edge features.
@@ -257,7 +271,11 @@ def resolve_graph_conv_factory(
         dropout: Dropout probability; semantics are kind-specific (attention
             dropout for GATv2, feature dropout for GCN/SAGE).
         **conv_kwargs: Kind-specific knobs forwarded to the adapter (e.g.
-            ``heads``/``concat`` for GATv2, ``aggr`` for SAGE).
+            ``heads``/``concat`` for GATv2, ``aggr`` for SAGE). Each adapter
+            declares its own kind-specific kwargs explicitly, so an
+            unsupported kwarg for the chosen kind raises a ``TypeError``
+            naming the adapter and the rejected kwarg, rather than an
+            opaque error from deep inside PyTorch Geometric.
 
     Returns:
         Callable[[int, int], nn.Module]: A factory that builds one adapter
@@ -297,178 +315,3 @@ def resolve_graph_conv_factory(
         case _:
             supported = ("gatv2", "gcn", "sage")
             raise ValueError(f"Unsupported graph conv kind {kind!r}; supported: {supported}")
-
-
-class _GraphMessageBase(nn.Module):
-    """Stacked graph message-passing module, generic over ``conv_kind``.
-
-    Args:
-        conv_kind: Graph convolution strategy used for every layer.
-        hidden_size: Dimension of node feature embeddings.
-        num_layers: Number of graph-conv layers to apply.
-        residual: Whether layers use residual connections (mechanism is
-            kind-specific; see :func:`resolve_graph_conv_factory`).
-        edge_dim: Optional edge feature dimensionality.
-        activation: Activation function applied after each layer.
-        dropout: Dropout probability; semantics are kind-specific.
-        **conv_kwargs: Kind-specific knobs (e.g. ``heads``/``concat`` for
-            GATv2, ``aggr`` for SAGE) forwarded to every layer.
-    """
-
-    def __init__(
-        self,
-        *,
-        conv_kind: GraphConvKind,
-        hidden_size: int,
-        num_layers: int,
-        residual: bool,
-        edge_dim: int | None = None,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        dropout: float = 0.0,
-        **conv_kwargs,
-    ) -> None:
-        super().__init__()
-        factory = resolve_graph_conv_factory(
-            conv_kind,
-            residual=residual,
-            edge_dim=edge_dim,
-            dropout=dropout,
-            **conv_kwargs,
-        )
-        self.layers = nn.ModuleList([factory(hidden_size, hidden_size) for _ in range(num_layers)])
-        self.activation = resolve_activation(activation)
-
-    def forward(
-        self,
-        x: Tensor,
-        edge_index: Tensor,
-        edge_attr: Tensor | None = None,
-    ) -> Tensor:
-        """Apply the stacked conv layers sequentially.
-
-        Args:
-            x: Node feature tensor of shape ``(num_nodes, hidden_size)``.
-            edge_index: Edge indices tensor of shape ``(2, num_edges)``.
-            edge_attr: Optional edge features; validity is kind-specific.
-
-        Returns:
-            Tensor: Updated node embeddings of shape
-                ``(num_nodes, hidden_size)``.
-        """
-        for conv in self.layers:
-            x = self.activation(conv(x, edge_index, edge_attr))
-        return x
-
-
-class GraphMessage(_GraphMessageBase):
-    """Stacked graph message-passing with residual connections."""
-
-    def __init__(
-        self,
-        *,
-        conv_kind: GraphConvKind = "gatv2",
-        hidden_size: int,
-        num_layers: int,
-        edge_dim: int | None = None,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        dropout: float = 0.0,
-        **conv_kwargs,
-    ) -> None:
-        super().__init__(
-            conv_kind=conv_kind,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            residual=True,
-            edge_dim=edge_dim,
-            activation=activation,
-            dropout=dropout,
-            **conv_kwargs,
-        )
-
-
-class SimpleGraphMessage(_GraphMessageBase):
-    """Stacked graph message-passing without residual connections."""
-
-    def __init__(
-        self,
-        *,
-        conv_kind: GraphConvKind = "gatv2",
-        hidden_size: int,
-        num_layers: int,
-        edge_dim: int | None = None,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        dropout: float = 0.0,
-        **conv_kwargs,
-    ) -> None:
-        super().__init__(
-            conv_kind=conv_kind,
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            residual=False,
-            edge_dim=edge_dim,
-            activation=activation,
-            dropout=dropout,
-            **conv_kwargs,
-        )
-
-
-class GATv2Message(GraphMessage):
-    """Stacked GATv2 message-passing with residual connections.
-
-    A one-line preset over :class:`GraphMessage` fixing ``conv_kind="gatv2"``,
-    kept for backward compatibility with code that imports ``GATv2Message``
-    directly.
-    """
-
-    def __init__(
-        self,
-        *,
-        hidden_size: int,
-        num_layers: int,
-        heads: int = 1,
-        edge_dim: int | None = None,
-        concat: bool = True,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            conv_kind="gatv2",
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            edge_dim=edge_dim,
-            activation=activation,
-            dropout=dropout,
-            heads=heads,
-            concat=concat,
-        )
-
-
-class SimpleGATv2Message(SimpleGraphMessage):
-    """Stacked GATv2 message-passing without residual connections.
-
-    A one-line preset over :class:`SimpleGraphMessage` fixing
-    ``conv_kind="gatv2"``, kept for backward compatibility with code that
-    imports ``SimpleGATv2Message`` directly.
-    """
-
-    def __init__(
-        self,
-        *,
-        hidden_size: int,
-        num_layers: int,
-        heads: int = 1,
-        edge_dim: int | None = None,
-        concat: bool = True,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        dropout: float = 0.0,
-    ) -> None:
-        super().__init__(
-            conv_kind="gatv2",
-            hidden_size=hidden_size,
-            num_layers=num_layers,
-            edge_dim=edge_dim,
-            activation=activation,
-            dropout=dropout,
-            heads=heads,
-            concat=concat,
-        )

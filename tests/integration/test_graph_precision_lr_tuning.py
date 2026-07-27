@@ -53,7 +53,7 @@ class TestGraphPrecisionLRTuning:
         updated_model = graph_model.model_copy(
             update={
                 "name": "ScaledGATv2Projection",
-                "module_path": "dlkit.domain.nn.graph.scaled_projection_networks",
+                "module_path": "dlkit.domain.nn.graph.gatv2_presets",
                 "hidden_size": 4,
                 "num_layers": 1,
                 "heads": 1,
