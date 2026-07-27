@@ -8,7 +8,9 @@ from typing import Literal, overload
 from dlkit.common import ConfigurationError
 from dlkit.infrastructure.config.factories import load_job
 from dlkit.infrastructure.config.job_config import (
+    AnyJobConfig,
     ConvergenceJobConfig,
+    FitJobConfig,
     InferenceJobConfig,
     MultiRunJobConfig,
     SearchJobConfig,
@@ -27,25 +29,13 @@ def load_config(config_path: Path, run_type: Literal["convergence"]) -> Converge
 @overload
 def load_config(config_path: Path, run_type: Literal["multirun"]) -> MultiRunJobConfig: ...
 @overload
-def load_config(
-    config_path: Path, run_type: str | None = None
-) -> (
-    TrainingJobConfig
-    | InferenceJobConfig
-    | SearchJobConfig
-    | ConvergenceJobConfig
-    | MultiRunJobConfig
-): ...
+def load_config(config_path: Path, run_type: Literal["fit"]) -> FitJobConfig: ...
+@overload
+def load_config(config_path: Path, run_type: str | None = None) -> AnyJobConfig: ...
 def load_config(
     config_path: Path,
     run_type: str | None = None,
-) -> (
-    TrainingJobConfig
-    | InferenceJobConfig
-    | SearchJobConfig
-    | ConvergenceJobConfig
-    | MultiRunJobConfig
-):
+) -> AnyJobConfig:
     """Load configuration from file with CLI-specific error handling.
 
     Uses the new JobConfig hierarchy with ``load_job()`` as the primary loader.
@@ -53,8 +43,8 @@ def load_config(
     Args:
         config_path: Path to configuration file.
         run_type: Optional run type override (``"train"``, ``"predict"``, ``"search"``,
-            ``"convergence"``, ``"multirun"``). Required when the TOML file does not
-            include a ``[run] type`` key.
+            ``"convergence"``, ``"multirun"``, ``"fit"``). Required when the TOML file
+            does not include a ``[run] type`` key.
 
     Returns:
         Typed job config matched to the resolved ``run.type``.

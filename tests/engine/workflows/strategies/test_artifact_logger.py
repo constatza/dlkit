@@ -18,7 +18,13 @@ from torch import Tensor
 from dlkit.common.hooks import ParamValue
 from dlkit.common.metric_stages import MetricStage
 from dlkit.engine.adapters.lightning.base import ProcessingLightningWrapper
-from dlkit.engine.artifacts import ArtifactPolicy, RuntimeArtifactManifest
+from dlkit.engine.artifacts import (
+    ArtifactPolicy,
+    FileArtifactPayload,
+    ProducedArtifact,
+    RuntimeArtifactManifest,
+    attach_checkpoint_artifacts,
+)
 from dlkit.engine.tracking.artifact_logger import (
     CHECKPOINT_ARTIFACT_DIR,
     DEFAULT_MODEL_ARTIFACT_PATH,
@@ -565,6 +571,39 @@ def test_log_checkpoints_is_noop_with_no_trainer(job_config: JobConfig) -> None:
     artifact_logger.log_checkpoints(components, run_context)
 
     assert run_context.logged_artifact_calls == []
+
+
+def test_log_checkpoints_publishes_artifacts_attached_to_model_with_no_trainer(
+    tmp_path: Path, job_config: JobConfig
+) -> None:
+    """One-shot-fit path: no Trainer, but a checkpoint artifact attached to the
+    live model instance via ``attach_checkpoint_artifacts`` must still be
+    published (see ``OneShotFitExecutor``)."""
+    ckpt_path = tmp_path / "fitted.ckpt"
+    ckpt_path.write_bytes(b"fitted")
+
+    class _FittedModel:
+        pass
+
+    model = _FittedModel()
+    attach_checkpoint_artifacts(
+        model,
+        (
+            ProducedArtifact(
+                kind="checkpoint",
+                artifact_path="fitted.ckpt",
+                payload=FileArtifactPayload(file_path=ckpt_path),
+            ),
+        ),
+    )
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(model=model, trainer=None)
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    assert run_context.logged_artifact_calls == [(ckpt_path, "")]
 
 
 def test_log_checkpoints_is_noop_with_no_checkpoint_callback(job_config: JobConfig) -> None:

@@ -14,6 +14,7 @@ from .build_strategy import (
     IBuildStrategy,
     WorkflowSettings,
 )
+from .fit_build_strategy import FitBuildStrategy
 from .flexible_build_strategy import FlexibleBuildStrategy
 from .generative_build_strategies import FlowMatchingBuildStrategy
 
@@ -25,6 +26,7 @@ class BuildFactory:
         self._strategies = strategies or [
             FlowMatchingBuildStrategy(),
             GraphBuildStrategy(),
+            FitBuildStrategy(),
             FlexibleBuildStrategy(),
         ]
 

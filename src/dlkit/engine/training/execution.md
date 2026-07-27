@@ -26,6 +26,8 @@ Key architectural decisions:
 | `ITrainingExecutor` | Protocol | Abstract training executor interface | N/A |
 | `IOptimizationStrategy` | Protocol | Abstract optimization strategy interface | N/A |
 | `VanillaExecutor` | Class | Pure Lightning training implementation | N/A |
+| `Fittable` | Protocol | One-shot, non-gradient model-fit contract (`fit(dataloader)`, `is_fitted()`) | N/A |
+| `OneShotFitExecutor` | Class | Executes a single deterministic `model.fit(dataloader)` call, no `Trainer` | N/A |
 
 ### Internal Components
 | Name | Type | Purpose | Returns |
@@ -196,6 +198,20 @@ def run_optimization(optimizer: IOptimizationStrategy, settings: SearchJobConfig
 - Separate from `ITrainingExecutor` to avoid interface pollution
 - Enables optimization strategies that internally use training executors
 - Return type includes both trial metadata and training result
+
+### Component 4: `OneShotFitExecutor`
+
+**Purpose**: Sibling `ITrainingExecutor` for models whose entire "training" is a single deterministic, non-gradient call (e.g. a thin-SVD basis fit into a `register_buffer`) — no epochs, optimizer, or loss. Selected via `FitJobConfig` instead of `TrainingJobConfig`; `VanillaExecutor` and the gradient-training path are unmodified.
+
+**Key Methods**:
+- `execute(components: RuntimeComponents, settings: FitJobConfig) -> TrainingResult` — calls `components.model.fit(components.datamodule.train_dataloader())` directly (`components.trainer` is `None`), then writes a Lightning-checkpoint-shaped file itself (reusing `DLKitCheckpointSerializer` for the `dlkit_metadata` block) since there is no `Trainer`/`ModelCheckpoint` callback to produce one.
+
+**Implementation Notes**:
+- `components.model` must implement `Fittable` (checked via `isinstance`, raises `WorkflowError` otherwise) and must already be a `LightningModule` — a model-side contract (see `torchalg`'s `PODCoarseningStrategy`), not something the executor or `FitBuildStrategy` enforces or wraps.
+- Checkpoint write location resolves via the general-purpose `PathResolver` precedence (`infrastructure.io.path_context.resolve_with_context`), not `training.trainer.default_root_dir` — `FitJobConfig` has no `training` section by design.
+- The produced `ProducedArtifact` is attached directly to the live model instance via `engine.artifacts.attach_checkpoint_artifacts` (not returned through `RuntimeComponents`): `TrackingDecorator` snapshots `RuntimeComponents` *before* `execute()` runs, so a new `RuntimeComponents` returned from here would never reach `ArtifactLogger`. `ArtifactLogger.log_checkpoints` reads it back via `read_checkpoint_artifacts(components.model)`.
+
+---
 
 ## Usage Patterns
 

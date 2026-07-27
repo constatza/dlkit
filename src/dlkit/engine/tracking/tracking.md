@@ -99,6 +99,17 @@ training and optimization flows.
   number of open runs. This runs on every `MLflowResourceManager.__exit__`
   and is what lets sequential `train()`/`optimize()` calls share a process
   without a later call inheriting an earlier one's still-active run.
+- `ArtifactLogger.log_checkpoints` has two independent sources: a live
+  `Trainer`'s `ModelCheckpoint` callback (the gradient-training path), and any
+  `ProducedArtifact`s attached directly to `components.model` via
+  `engine.artifacts.attach_checkpoint_artifacts`/`read_checkpoint_artifacts`
+  (the trainer-free one-shot fit path — see
+  `engine.training.execution.execution.md`'s `OneShotFitExecutor` section).
+  The model-attached channel exists because `TrackingDecorator` snapshots
+  `RuntimeComponents` *before* `ITrainingExecutor.execute()` runs, so a
+  checkpoint produced during `execute()` can't reach `ArtifactLogger` through
+  `RuntimeComponents.artifacts` — the live model object, shared by reference
+  across every snapshot, is the only channel that does.
 - Split artifacts are logged after the run exists. Generated splits are
   additionally persisted to a local `splits/` file under
   `training.trainer.default_root_dir` when that root is configured (see

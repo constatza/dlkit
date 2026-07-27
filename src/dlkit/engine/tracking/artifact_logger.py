@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from lightning.pytorch import Trainer
     from mlflow.models import ModelSignature
 
 import numpy as np
@@ -23,6 +24,7 @@ from dlkit.engine.artifacts import (
     ContentArtifactPayload,
     FileArtifactPayload,
     ProducedArtifact,
+    read_checkpoint_artifacts,
 )
 from dlkit.engine.training.checkpoint_utils import find_checkpoint_callback
 from dlkit.engine.training.components import RuntimeComponents
@@ -196,6 +198,53 @@ def _log_or_skip_checkpoint(
         logger.warning("Could not remove local checkpoint {}: {}", ckpt_path, exc)
 
 
+def _log_trainer_checkpoints(
+    trainer: Trainer | None,
+    components: RuntimeComponents,
+    run_context: IRunContext,
+) -> None:
+    """Log best/last checkpoints from a PyTorch Lightning trainer, if one ran.
+
+    Args:
+        trainer: The run's trainer, or None for a trainer-free (one-shot fit) run.
+        components: Build components; used for the artifact-removal policy.
+        run_context: Run context for logging.
+    """
+    if trainer is None:
+        logger.debug("No trainer found in components")
+        return
+
+    ckpt_cb = find_checkpoint_callback(trainer)
+    if not ckpt_cb:
+        logger.debug("No ModelCheckpoint callback found")
+        return
+
+    best = getattr(ckpt_cb, "best_model_path", None)
+    last = getattr(ckpt_cb, "last_model_path", None)
+    if best is not None and not isinstance(best, str | Path):
+        best = None
+    if last is not None and not isinstance(last, str | Path):
+        last = None
+
+    remove_after_upload = components.artifacts.policy.remove_uploaded_files
+    if best:
+        _log_or_skip_checkpoint(
+            run_context,
+            Path(best),
+            CHECKPOINT_ARTIFACT_DIR,
+            remove_after_upload=remove_after_upload,
+        )
+        logger.debug("Logged best checkpoint {}", best)
+    if last and last != best:
+        _log_or_skip_checkpoint(
+            run_context,
+            Path(last),
+            CHECKPOINT_ARTIFACT_DIR,
+            remove_after_upload=remove_after_upload,
+        )
+        logger.debug("Logged last checkpoint {}", last)
+
+
 class ArtifactLogger:
     """Handles artifact logging to MLflow.
 
@@ -252,47 +301,23 @@ class ArtifactLogger:
     ) -> None:
         """Log model checkpoints as artifacts.
 
-        Logs best and last checkpoints from PyTorch Lightning trainer.
-        Raises on failure so training aborts rather than silently missing the artifact.
+        Logs best and last checkpoints from a PyTorch Lightning trainer when
+        one ran, plus any checkpoint artifacts a trainer-free run (the
+        one-shot fit path — see ``OneShotFitExecutor``) attached directly to
+        the model via ``engine.artifacts.attach_checkpoint_artifacts``, since
+        there is no ``Trainer``/``ModelCheckpoint`` callback to produce one
+        for that path. Raises on failure so training aborts rather than
+        silently missing the artifact.
 
         Args:
             components: Build components containing trainer
             run_context: Run context for logging
         """
-        trainer = getattr(components, "trainer", None)
-        if not trainer:
-            logger.debug("No trainer found in components")
-            return
+        _log_trainer_checkpoints(getattr(components, "trainer", None), components, run_context)
 
-        ckpt_cb = find_checkpoint_callback(trainer)
-        if not ckpt_cb:
-            logger.debug("No ModelCheckpoint callback found")
-            return
-
-        best = getattr(ckpt_cb, "best_model_path", None)
-        last = getattr(ckpt_cb, "last_model_path", None)
-        if best is not None and not isinstance(best, str | Path):
-            best = None
-        if last is not None and not isinstance(last, str | Path):
-            last = None
-
-        remove_after_upload = components.artifacts.policy.remove_uploaded_files
-        if best:
-            _log_or_skip_checkpoint(
-                run_context,
-                Path(best),
-                CHECKPOINT_ARTIFACT_DIR,
-                remove_after_upload=remove_after_upload,
-            )
-            logger.debug("Logged best checkpoint {}", best)
-        if last and last != best:
-            _log_or_skip_checkpoint(
-                run_context,
-                Path(last),
-                CHECKPOINT_ARTIFACT_DIR,
-                remove_after_upload=remove_after_upload,
-            )
-            logger.debug("Logged last checkpoint {}", last)
+        for artifact in read_checkpoint_artifacts(components.model):
+            RunContextArtifactPublisher(run_context).publish(artifact)
+            logger.debug("Logged one-shot-fit checkpoint artifact {}", artifact.artifact_path)
 
     def _log_model_artifact(
         self,

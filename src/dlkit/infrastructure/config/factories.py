@@ -10,7 +10,9 @@ from dlkit.common.errors import ConfigValidationError
 
 if TYPE_CHECKING:
     from dlkit.infrastructure.config.job_config import (
+        AnyJobConfig,
         ConvergenceJobConfig,
+        FitJobConfig,
         InferenceJobConfig,
         MultiRunJobConfig,
         SearchJobConfig,
@@ -114,24 +116,16 @@ def load_job(
 ) -> MultiRunJobConfig: ...
 @overload
 def load_job(
+    config_paths: Path | str | Sequence[Path | str], run_type: Literal["fit"]
+) -> FitJobConfig: ...
+@overload
+def load_job(
     config_paths: Path | str | Sequence[Path | str], run_type: str | None = None
-) -> (
-    TrainingJobConfig
-    | InferenceJobConfig
-    | SearchJobConfig
-    | ConvergenceJobConfig
-    | MultiRunJobConfig
-): ...
+) -> AnyJobConfig: ...
 def load_job(
     config_paths: Path | str | Sequence[Path | str],
     run_type: str | None = None,
-) -> (
-    TrainingJobConfig
-    | InferenceJobConfig
-    | SearchJobConfig
-    | ConvergenceJobConfig
-    | MultiRunJobConfig
-):
+) -> AnyJobConfig:
     """Load and validate a job config from one or more TOML files.
 
     Overloaded on the literal ``run_type`` so callers passing a known run type
@@ -161,6 +155,7 @@ def load_job(
     from dlkit.infrastructure.config.core.sources import DLKitTomlSource, _read_env_patches
     from dlkit.infrastructure.config.job_config import (
         ConvergenceJobConfig,
+        FitJobConfig,
         InferenceJobConfig,
         MultiRunJobConfig,
         SearchJobConfig,
@@ -244,10 +239,12 @@ def load_job(
                 return ConvergenceJobConfig.model_validate(merged)
             case "multirun":
                 return MultiRunJobConfig.model_validate(merged)
+            case "fit":
+                return FitJobConfig.model_validate(merged)
             case _:
                 raise ConfigValidationError(
                     f"Unknown run.type: {resolved_type!r}. "
-                    "Must be 'train', 'predict', 'search', 'convergence', or 'multirun'."
+                    "Must be 'train', 'predict', 'search', 'convergence', 'multirun', or 'fit'."
                 )
     except ConfigValidationError:
         raise

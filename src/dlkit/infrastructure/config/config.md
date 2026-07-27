@@ -6,7 +6,7 @@ workflow-specific config views, and component-setting models.
 ## Responsibilities
 
 - immutable Pydantic settings models (`frozen=True`)
-- `JobConfig` top-level discriminated union (training / inference / search / convergence / multirun)
+- `JobConfig` top-level discriminated union (training / inference / search / convergence / multirun / fit); `AnyJobConfig` is the PEP 695 sum-type alias of every validated subtype
 - TOML loading via `load_job()` with deep-merge and profile references
 - patch application and runtime override support
 - component settings and factory support
@@ -20,7 +20,7 @@ Seeding is documented in [`../seeding/seeding.md`](../seeding/seeding.md).
 
 - `core/`: base settings, patching, factories, build context, TOML source
 - `core/_path_helpers.py`: path-preprocessing helpers (training / model / data)
-- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `ConvergenceJobConfig`, `MultiRunJobConfig`, `ChildEntryConfig`
+- `job_config.py`: `JobConfig`, `TrainingJobConfig`, `InferenceJobConfig`, `SearchJobConfig`, `FitJobConfig`, `ConvergenceJobConfig`, `MultiRunJobConfig`, `ChildEntryConfig`, `AnyJobConfig` (sum type)
 - `run_settings.py`: `RunSettings` (type, seed, precision, profile references);
   `RunSettings.resolve_seed()` (pure seed defaulting) and the module-level
   `apply_run_context(run)` context manager (seeds global RNG state and
@@ -190,6 +190,18 @@ section accepts either explicit `sizes` or `min_samples` / `max_samples` /
 `steps` for log-spaced sample-size generation. `repeats` controls independent
 runs per size, and optional `target`, `target_metric`, and `c` fields control
 threshold-based `n_star` detection.
+
+## Fit Settings
+
+`run.type = "fit"` selects `FitJobConfig` — `model` and `data` are required,
+same as `TrainingJobConfig`, but `training` is intentionally left unset
+rather than required. For models whose entire "training" is one
+deterministic, non-gradient call (e.g. a thin-SVD basis fit into a
+`register_buffer`) — no epochs, optimizer, or loss, so nothing downstream
+should ever need to route the model through optimizer/loss wiring. Dispatched
+by `engine.workflows.factories.fit_build_strategy.FitBuildStrategy` (build)
+and `engine.training.one_shot_fit_executor.OneShotFitExecutor` (execute); see
+`engine.training.execution.execution.md`.
 
 ## Optimization Settings
 

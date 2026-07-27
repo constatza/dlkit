@@ -10,8 +10,8 @@ from dlkit.engine.tracking import uri_resolver
 from dlkit.engine.tracking.interfaces import NullTracker
 from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.tracking.tracking_decorator import TrackingDecorator
-from dlkit.engine.training import ITrainingExecutor, VanillaExecutor
-from dlkit.infrastructure.config.job_config import JobConfig
+from dlkit.engine.training import ITrainingExecutor, OneShotFitExecutor, VanillaExecutor
+from dlkit.infrastructure.config.job_config import FitJobConfig, JobConfig
 
 if TYPE_CHECKING:
     from dlkit.engine.workflows.factories.build_strategy import WorkflowSettings
@@ -53,8 +53,12 @@ class ExecutionStrategyFactory:
             - Vanilla + Optuna: OptimizationDecorator(VanillaExecutor, OptunaOptimizer)
             - All features: OptimizationDecorator(TrackingDecorator(...), OptunaOptimizer, MLflowTracker)
         """
-        # Start with core vanilla executor
-        executor: ITrainingExecutor = VanillaExecutor()
+        # Start with core vanilla executor, or the one-shot fit executor for
+        # FitJobConfig (no epochs/optimizer/loss, so VanillaExecutor's
+        # trainer.fit() loop does not apply).
+        executor: ITrainingExecutor = (
+            OneShotFitExecutor() if isinstance(settings, FitJobConfig) else VanillaExecutor()
+        )
 
         # Use real tracker only when tracking.backend is explicitly set to "mlflow"
         if self._mlflow_explicitly_enabled(settings):

@@ -119,6 +119,44 @@ class RuntimeArtifactManifest:
         )
 
 
+_CHECKPOINT_ARTIFACTS_ATTR = "_dlkit_checkpoint_artifacts"
+
+
+def attach_checkpoint_artifacts(model: object, artifacts: tuple[ProducedArtifact, ...]) -> None:
+    """Attach execute-time-produced checkpoint artifacts to a live model instance.
+
+    ``RuntimeComponents`` is a frozen dataclass snapshotted by
+    ``TrackingDecorator`` *before* ``ITrainingExecutor.execute()`` runs (to
+    build its tracking-enriched ``tracked_components`` view), so an executor
+    cannot hand new artifacts back through ``RuntimeComponents.artifacts``
+    once training/fitting has actually produced them — by the time a
+    checkpoint exists, the snapshot artifact-logging will read from has
+    already been taken. The ``model`` instance itself, however, is shared by
+    reference across every ``RuntimeComponents`` snapshot built for a given
+    run, so stashing artifacts directly on it is the channel that reaches
+    ``ArtifactLogger`` after the fact — the same "stash on the live model,
+    ``getattr`` back later" idiom already used for ``_checkpoint_metadata``
+    in ``engine.adapters.lightning.base``.
+
+    Args:
+        model: The live model instance shared across ``RuntimeComponents`` snapshots.
+        artifacts: Checkpoint artifacts produced after the model was built.
+    """
+    setattr(model, _CHECKPOINT_ARTIFACTS_ATTR, artifacts)
+
+
+def read_checkpoint_artifacts(model: object) -> tuple[ProducedArtifact, ...]:
+    """Read execute-time checkpoint artifacts previously attached to ``model``.
+
+    Args:
+        model: Candidate model instance; returns an empty tuple if none were attached.
+
+    Returns:
+        Checkpoint artifacts attached via :func:`attach_checkpoint_artifacts`, or ``()``.
+    """
+    return getattr(model, _CHECKPOINT_ARTIFACTS_ATTR, ())
+
+
 @runtime_checkable
 class ArtifactPublisher(Protocol):
     def publish(self, artifact: ProducedArtifact) -> None: ...

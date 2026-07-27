@@ -8,7 +8,9 @@ from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.common.results import WorkflowResult
 from dlkit.infrastructure.config.job_config import (
+    AnyJobConfig,
     ConvergenceJobConfig,
+    FitJobConfig,
     InferenceJobConfig,
     JobConfig,
     SearchJobConfig,
@@ -19,12 +21,14 @@ from ._override_types import (
     ConvergenceOverrides,
     EvaluationOverrides,
     ExecutionOverrides,
+    FitOverrides,
     OptimizationOverrides,
     TrainingOverrides,
     require_override_model,
 )
 from .convergence import converge
 from .evaluate import evaluate
+from .fit import fit
 from .optimization import optimize
 from .training import train
 
@@ -67,6 +71,14 @@ _ALLOWED_OVERRIDE_KEYS: Mapping[type[JobConfig], frozenset[str]] = {
             "target",
         }
     ),
+    FitJobConfig: frozenset(
+        {
+            "checkpoint_path",
+            "experiment_name",
+            "run_name",
+            "tags",
+        }
+    ),
     InferenceJobConfig: frozenset(
         {
             "checkpoint_path",
@@ -82,11 +94,7 @@ _ALLOWED_OVERRIDE_KEYS: Mapping[type[JobConfig], frozenset[str]] = {
 
 
 def execute(
-    settings: TrainingJobConfig
-    | SearchJobConfig
-    | InferenceJobConfig
-    | ConvergenceJobConfig
-    | JobConfig,
+    settings: AnyJobConfig | JobConfig,
     overrides: ExecutionOverrides | None = None,
     *,
     hooks: LifecycleHooks | None = None,
@@ -131,6 +139,16 @@ def execute(
                 }
             )
             return train(settings, training_overrides if override_payload else None, hooks=hooks)
+
+        case FitJobConfig():
+            fit_overrides = FitOverrides.model_validate(
+                {
+                    key: value
+                    for key, value in override_payload.items()
+                    if key in _ALLOWED_OVERRIDE_KEYS[FitJobConfig]
+                }
+            )
+            return fit(settings, fit_overrides if override_payload else None, hooks=hooks)
 
         case ConvergenceJobConfig():
             convergence_overrides = ConvergenceOverrides.model_validate(

@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from dlkit.infrastructure.config.data_settings import DataSettings
 from dlkit.infrastructure.config.job_config import (
+    FitJobConfig,
     InferenceJobConfig,
     SearchJobConfig,
     TrainingJobConfig,
@@ -154,6 +155,26 @@ def test_inference_job_config_accepts_no_data(minimal_run: dict, minimal_model: 
     )
     assert cfg.model.name == "FFNN"
     assert cfg.data is None
+
+
+def test_fit_job_config_requires_model_and_data(minimal_run: dict) -> None:
+    with pytest.raises(ValidationError):
+        FitJobConfig.model_validate({"run": {**minimal_run, "type": "fit"}})  # missing model/data
+
+
+def test_fit_job_config_accepts_model_and_data_without_training(
+    minimal_run: dict, minimal_model: dict
+) -> None:
+    """FitJobConfig has no training-shaped requirement: only model + data are needed."""
+    cfg = FitJobConfig.model_validate(
+        {
+            "run": {**minimal_run, "type": "fit"},
+            "model": minimal_model,
+            "data": {"batch_size": 32},
+        }
+    )
+    assert cfg.model.name == "FFNN"
+    assert cfg.training is None
 
 
 def test_search_job_config_requires_search_section(

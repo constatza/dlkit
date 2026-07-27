@@ -1,0 +1,135 @@
+"""Tests for OneShotFitExecutor: the trainer-free, closed-form fit path."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any, cast
+
+import pytest
+import torch
+from torch.utils.data import DataLoader
+
+from dlkit.common.errors import WorkflowError
+from dlkit.engine.artifacts import read_checkpoint_artifacts
+from dlkit.engine.inference.checkpoint_reader import extract_model_settings
+from dlkit.engine.training.components import RuntimeComponents
+from dlkit.engine.training.one_shot_fit_executor import OneShotFitExecutor
+from dlkit.infrastructure.config.job_config import FitJobConfig
+from dlkit.infrastructure.io.path_context import path_override_context
+
+from .conftest import MeanBufferFittable
+
+
+@pytest.fixture
+def fit_settings() -> FitJobConfig:
+    return FitJobConfig.model_validate(
+        {
+            "run": {"type": "fit", "seed": 0},
+            "model": {
+                "class": "MeanBufferFittable",
+                "module_path": "tests.engine.training.conftest",
+            },
+            "data": {"batch_size": 4, "num_workers": 0},
+        }
+    )
+
+
+class _StubDataModule:
+    def __init__(self, loader: DataLoader) -> None:
+        self._loader = loader
+
+    def train_dataloader(self) -> DataLoader:
+        return self._loader
+
+
+@pytest.fixture
+def components(fittable_model: MeanBufferFittable, fit_dataloader: DataLoader) -> RuntimeComponents:
+    return RuntimeComponents(
+        model=fittable_model,
+        datamodule=cast(Any, _StubDataModule(fit_dataloader)),
+        trainer=None,
+        meta={},
+    )
+
+
+def test_execute_calls_fit_exactly_once(
+    components: RuntimeComponents, fit_settings: FitJobConfig, tmp_path: Path
+) -> None:
+    with path_override_context({"root_dir": tmp_path}):
+        OneShotFitExecutor().execute(components, fit_settings)
+
+    model = cast(MeanBufferFittable, components.model)
+    assert model.fit_call_count == 1
+    assert model.is_fitted()
+    assert torch.equal(model.mean, torch.tensor([[2.5]]))
+
+
+def test_execute_writes_checkpoint_file_under_resolved_root(
+    components: RuntimeComponents, fit_settings: FitJobConfig, tmp_path: Path
+) -> None:
+    with path_override_context({"root_dir": tmp_path}):
+        OneShotFitExecutor().execute(components, fit_settings)
+
+    checkpoint_files = list(tmp_path.rglob("fitted.ckpt"))
+    assert len(checkpoint_files) == 1
+    checkpoint = torch.load(checkpoint_files[0], weights_only=False)
+    assert "model.mean" in checkpoint["state_dict"]
+    assert torch.equal(checkpoint["state_dict"]["model.mean"], torch.tensor([[2.5]]))
+
+
+def test_execute_attaches_checkpoint_artifact_to_model(
+    components: RuntimeComponents, fit_settings: FitJobConfig, tmp_path: Path
+) -> None:
+    with path_override_context({"root_dir": tmp_path}):
+        OneShotFitExecutor().execute(components, fit_settings)
+
+    artifacts = read_checkpoint_artifacts(components.model)
+    assert len(artifacts) == 1
+    assert artifacts[0].kind == "checkpoint"
+
+
+def test_execute_checkpoint_model_settings_round_trip_through_extract_model_settings(
+    components: RuntimeComponents, fit_settings: FitJobConfig, tmp_path: Path
+) -> None:
+    with path_override_context({"root_dir": tmp_path}):
+        OneShotFitExecutor().execute(components, fit_settings)
+
+    checkpoint_files = list(tmp_path.rglob("fitted.ckpt"))
+    checkpoint = torch.load(checkpoint_files[0], weights_only=False)
+
+    reconstructed = extract_model_settings(checkpoint)
+
+    assert reconstructed.name == "MeanBufferFittable"
+    assert reconstructed.module_path == "tests.engine.training.conftest"
+
+
+def test_execute_raises_when_model_not_fittable(
+    fit_settings: FitJobConfig, fit_dataloader: DataLoader
+) -> None:
+    components = RuntimeComponents(
+        model=cast(Any, object()),
+        datamodule=cast(Any, _StubDataModule(fit_dataloader)),
+        trainer=None,
+        meta={},
+    )
+
+    with pytest.raises(WorkflowError, match="does not implement Fittable"):
+        OneShotFitExecutor().execute(components, fit_settings)
+
+
+def test_execute_wraps_fit_exception_in_workflow_error(
+    fit_settings: FitJobConfig, fit_dataloader: DataLoader
+) -> None:
+    class _BrokenFittable(MeanBufferFittable):
+        def fit(self, dataloader: object) -> None:
+            raise RuntimeError("closed-form fit blew up")
+
+    components = RuntimeComponents(
+        model=_BrokenFittable(),
+        datamodule=cast(Any, _StubDataModule(fit_dataloader)),
+        trainer=None,
+        meta={},
+    )
+
+    with pytest.raises(WorkflowError, match="One-shot fit failed"):
+        OneShotFitExecutor().execute(components, fit_settings)

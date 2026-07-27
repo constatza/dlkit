@@ -86,6 +86,22 @@ class InferenceJobConfig(JobConfig):
         return self
 
 
+class FitJobConfig(JobConfig):
+    """Validated one-shot fit job: model and data are required; training stays unset.
+
+    For models whose entire "training" is one deterministic, non-gradient
+    call (e.g. a thin-SVD into a ``register_buffer``) — no epochs, optimizer,
+    or loss, so ``training`` is intentionally left unset rather than required.
+
+    Args:
+        model: Model class selector and hyperparameters (required).
+        data: Dataset, dataloader, and DataModule configuration (required).
+    """
+
+    model: ModelComponentSettings
+    data: DataSettings
+
+
 class SearchJobConfig(JobConfig):
     """Validated HPO job: same as training plus a non-empty search section.
 
@@ -251,3 +267,16 @@ class MultiRunJobConfig(BasicSettings):
         merged: dict[str, Any] = dict(multirun_section)
         merged.update({k: v for k, v in data.items() if k != "multirun"})
         return merged
+
+
+# Sum type of every validated JobConfig subtype. Single source of truth for
+# the union spelled out repeatedly across load_job()'s overloads, execute()'s
+# dispatch signature, and similar call sites — update here, not at each site.
+type AnyJobConfig = (
+    TrainingJobConfig
+    | InferenceJobConfig
+    | SearchJobConfig
+    | FitJobConfig
+    | ConvergenceJobConfig
+    | MultiRunJobConfig
+)

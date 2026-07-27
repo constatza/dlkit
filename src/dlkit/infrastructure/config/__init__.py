@@ -40,6 +40,8 @@ from .generative_settings import CNFSettings, FlowMatchingSettings, GenerativeSe
 
 # Job config (new top-level API)
 from .job_config import (
+    AnyJobConfig,
+    FitJobConfig,
     InferenceJobConfig,
     JobConfig,
     SearchJobConfig,
@@ -104,10 +106,12 @@ from .transform_settings import TransformSettings
 
 __all__ = [
     # Job config (new top-level API)
+    "AnyJobConfig",
     "JobConfig",
     "TrainingJobConfig",
     "InferenceJobConfig",
     "SearchJobConfig",
+    "FitJobConfig",
     # New settings classes
     "RunSettings",
     "RunType",

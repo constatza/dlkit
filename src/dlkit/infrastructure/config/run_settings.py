@@ -12,7 +12,7 @@ from pydantic import field_validator
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
-RunType = Literal["train", "predict", "search", "convergence", "multirun"]
+RunType = Literal["train", "predict", "search", "convergence", "multirun", "fit"]
 
 
 class RunSettings(BasicSettings):

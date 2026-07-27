@@ -70,6 +70,15 @@ class ConvergenceOverrides(RuntimeOverrideModel):
     target: float | None = None
 
 
+class FitOverrides(RuntimeOverrideModel):
+    """Supported runtime overrides for one-shot fit entrypoints."""
+
+    checkpoint_path: Path | None = None
+    experiment_name: str | None = None
+    run_name: str | None = None
+    tags: dict[str, str] | None = None
+
+
 class EvaluationOverrides(RuntimeOverrideModel):
     """Supported runtime overrides for the evaluation entrypoint."""
 
