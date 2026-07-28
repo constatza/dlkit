@@ -26,12 +26,12 @@ from torch import Tensor, nn
 
 from dlkit.common.metric_stages import MetricStage
 from dlkit.domain.nn.contracts import HyperParam
-from dlkit.domain.nn.factory import model_accepts_kwarg
 from dlkit.domain.nn.introspection import effective_hyperparameters
 from dlkit.engine.adapters.lightning.concerns import (
     DLKitCheckpointSerializer,
     LightningStepLogger,
 )
+from dlkit.engine.adapters.lightning.factory_kwargs import resolve_factory_kwargs
 from dlkit.engine.adapters.lightning.protocols import (
     IBatchTransform,
     IBatchTransformer,
@@ -291,19 +291,9 @@ def _build_model_from_settings(
         raise TypeError(
             f"Model construction requires ModelComponentSettings; got {type(model_settings)!r}"
         )
-    hyperparams = extract_init_kwargs(model_settings)
-    if (
-        model_settings.activation is not None
-        and "activation" not in hyperparams
-        and model_accepts_kwarg(model_cls, "activation")
-    ):
-        hyperparams = {**hyperparams, "activation": model_settings.activation}
-    if (
-        model_settings.normalize is not None
-        and "normalize" not in hyperparams
-        and model_accepts_kwarg(model_cls, "normalize")
-    ):
-        hyperparams = {**hyperparams, "normalize": model_settings.normalize}
+    hyperparams = resolve_factory_kwargs(
+        model_settings, model_cls, extract_init_kwargs(model_settings)
+    )
 
     model = build_model(model_cls, hyperparams, context=context)
     return model, effective_hyperparameters(model, hyperparams)

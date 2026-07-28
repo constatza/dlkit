@@ -142,6 +142,7 @@ class DLKitCheckpointSerializer:
         import importlib
 
         from dlkit.engine.adapters.lightning.checkpoint_dto import ModelCheckpointDTO
+        from dlkit.engine.adapters.lightning.factory_kwargs import resolve_factory_kwargs
         from dlkit.infrastructure.config.model_components import (
             ModelComponentSettings,
             extract_init_kwargs,
@@ -187,6 +188,7 @@ class DLKitCheckpointSerializer:
             else frozenset()
         )
         hyper_kwargs = {k: v for k, v in init_kwargs.items() if k not in shape_keys}
+        hyper_kwargs = resolve_factory_kwargs(model_settings, model_cls, hyper_kwargs)
 
         dto = ModelCheckpointDTO(
             name=serialized_name,

@@ -118,6 +118,44 @@ def flat_components(flat_entry_configs) -> WrapperComponents:
 
 
 @pytest.fixture
+def normalize_model_settings() -> ModelComponentSettings:
+    """ModelComponentSettings for an FFNN with explicit layer normalization."""
+    return ModelComponentSettings.model_validate(
+        {
+            "class": "FFNN",
+            "module_path": "dlkit.domain.nn",
+            "in_features": 4,
+            "out_features": 2,
+            "hidden_size": 4,
+            "num_layers": 1,
+            "normalize": "batch",
+        }
+    )
+
+
+@pytest.fixture
+def normalize_entry_configs():
+    """Feature/target entries matching FFNN.forward's `x` parameter name."""
+    return (
+        ValueEntry(name="x", value=torch.zeros(_BATCH_SIZE, 4), data_role=DataRole.FEATURE),
+        ValueEntry(name="y", value=torch.zeros(_BATCH_SIZE, 2), data_role=DataRole.TARGET),
+    )
+
+
+@pytest.fixture
+def normalize_components(normalize_entry_configs) -> WrapperComponents:
+    """Pre-built WrapperComponents for the normalize round-trip test."""
+    return WrapperComponents(
+        loss_fn=nn.MSELoss(),
+        val_metric_routes=[],
+        test_metric_routes=[],
+        optimizer_policy_settings=OptimizerPolicySettings(),
+        feature_transforms={e.name: ModuleList() for e in normalize_entry_configs if e.name == "x"},
+        target_transforms={},
+    )
+
+
+@pytest.fixture
 def malformed_nested_params_checkpoint() -> dict:
     """Obsolete checkpoint payload with hyper_kwargs.params nesting."""
     return {
@@ -192,6 +230,28 @@ def test_flat_model_settings_checkpoint_round_trip_reconstructs_model(
     assert isinstance(rebuilt, nn.Linear)
     assert rebuilt.in_features == 4
     assert rebuilt.out_features == 2
+
+
+def test_normalize_checkpoint_round_trip_reconstructs_norm_layers(
+    normalize_model_settings, normalize_entry_configs, normalize_components
+):
+    """normalize must survive checkpoint save/load so norm params reload correctly."""
+    wrapper = StandardLightningWrapper(
+        settings=WrapperComponentSettings(),
+        model_settings=normalize_model_settings,
+        components=normalize_components,
+        entry_configs=normalize_entry_configs,
+    )
+
+    checkpoint = {"state_dict": {"model." + k: v for k, v in wrapper.model.state_dict().items()}}
+    wrapper.on_save_checkpoint(checkpoint)
+
+    assert checkpoint["dlkit_metadata"]["model_settings"]["hyper_kwargs"]["normalize"] == "batch"
+
+    rebuilt = build_model_from_checkpoint(checkpoint, None, None)
+
+    norm_layers = [m for m in rebuilt.modules() if isinstance(m, nn.BatchNorm1d)]
+    assert norm_layers, "expected normalize='batch' to survive the checkpoint round trip"
 
 
 def test_malformed_nested_params_checkpoint_fails_fast(malformed_nested_params_checkpoint):
