@@ -164,6 +164,25 @@ class RunContextArtifactPublisher(ArtifactPublisher):
                 raise TypeError(f"Unsupported artifact payload: {type(artifact.payload).__name__}")
 
 
+def _remove_local_file(path: Path) -> None:
+    """Delete a local file after a successful upload, without raising.
+
+    Not checkpoint-specific — used by both the trainer and one-shot-fit
+    checkpoint-logging paths, and safe to reuse for any other artifact kind
+    that gains a remove-after-upload policy later. Missing/unremovable files
+    only log a warning: the upload already succeeded, so this is cleanup,
+    not a failure condition.
+
+    Args:
+        path: Path to the just-uploaded local file.
+    """
+    try:
+        path.unlink()
+        logger.debug("Removed local file after upload: {}", path)
+    except OSError as exc:
+        logger.warning("Could not remove local file {}: {}", path, exc)
+
+
 def _log_or_skip_checkpoint(
     run_context: IRunContext,
     ckpt_path: Path,
@@ -189,13 +208,8 @@ def _log_or_skip_checkpoint(
             successful upload (``ArtifactPolicy.remove_uploaded_files``).
     """
     run_context.log_artifact(ckpt_path, artifact_dir)
-    if not remove_after_upload:
-        return
-    try:
-        ckpt_path.unlink()
-        logger.debug("Removed local checkpoint after upload: {}", ckpt_path)
-    except OSError as exc:
-        logger.warning("Could not remove local checkpoint {}: {}", ckpt_path, exc)
+    if remove_after_upload:
+        _remove_local_file(ckpt_path)
 
 
 def _log_trainer_checkpoints(
@@ -306,7 +320,9 @@ class ArtifactLogger:
         one-shot fit path — see ``OneShotFitExecutor``) attached directly to
         the model via ``engine.artifacts.attach_checkpoint_artifacts``, since
         there is no ``Trainer``/``ModelCheckpoint`` callback to produce one
-        for that path. Raises on failure so training aborts rather than
+        for that path. Both paths apply the same
+        ``ArtifactPolicy.remove_uploaded_files`` removal rule after a
+        successful upload. Raises on failure so training aborts rather than
         silently missing the artifact.
 
         Args:
@@ -315,9 +331,12 @@ class ArtifactLogger:
         """
         _log_trainer_checkpoints(getattr(components, "trainer", None), components, run_context)
 
+        remove_after_upload = components.artifacts.policy.remove_uploaded_files
         for artifact in read_checkpoint_artifacts(components.model):
             RunContextArtifactPublisher(run_context).publish(artifact)
             logger.debug("Logged one-shot-fit checkpoint artifact {}", artifact.artifact_path)
+            if remove_after_upload and isinstance(artifact.payload, FileArtifactPayload):
+                _remove_local_file(artifact.payload.file_path)
 
     def _log_model_artifact(
         self,

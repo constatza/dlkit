@@ -9,12 +9,15 @@ of `tests/integration/`'s fixture set.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pytest
 import tomli_w
+import torch
+from lightning.pytorch import LightningModule
 
 from dlkit.infrastructure.config.job_config import SearchJobConfig, TrainingJobConfig
 from dlkit.interfaces.api.functions import train as api_train
@@ -221,6 +224,111 @@ def train_child_paths(
             tracking_uri=sqlite_tracking_uri,
             experiment_name=f"child-{i}",
             seed=i,
+        )
+        path.write_bytes(tomli_w.dumps(payload).encode("utf-8"))
+        paths.append(path)
+    return paths[0], paths[1]
+
+
+class RankBufferFittable(LightningModule):
+    """Fittable model whose buffer shape (truncated to ``rank`` columns) is
+    only knowable once real data is seen in ``fit()``.
+
+    Mirrors ``tests.engine.training.conftest.LazyBufferFittable``, but reads
+    the feature tensor out of the TensorDict batch shape that
+    ``FlexibleDataset``/``ArrayDataModule`` actually produce end-to-end
+    (``batch["features"]["x"]``), rather than a plain-tensor batch from a
+    hand-built ``TensorDataset``.
+    """
+
+    def __init__(self, rank: int) -> None:
+        super().__init__()
+        self._rank = rank
+
+    def fit(self, dataloader: Iterable[Any]) -> None:
+        batches = [batch["features"]["x"] for batch in dataloader]
+        data = torch.cat(batches)
+        self.register_buffer("basis", data[:, : self._rank].clone())
+
+    def is_fitted(self) -> bool:
+        return "basis" in self._buffers and self._buffers["basis"] is not None
+
+
+def _fit_payload(
+    *,
+    feature_path: Path,
+    target_path: Path,
+    tracking_uri: str,
+    experiment_name: str,
+    rank: int,
+) -> dict[str, Any]:
+    """Build a minimal FitJobConfig payload for a one-shot (non-gradient) fit.
+
+    Args:
+        feature_path: Path to the feature .npy file.
+        target_path: Path to the target .npy file.
+        tracking_uri: Sqlite tracking URI shared across the sweep.
+        experiment_name: MLflow experiment name for this child.
+        rank: Number of feature columns the fitted buffer retains — the knob
+            that makes two children's checkpoints provably distinct by shape.
+
+    Returns:
+        Dict payload suitable for `FitJobConfig.model_validate()` or
+        `tomli_w.dump()`. No `training` key — `FitJobConfig` has none.
+    """
+    return {
+        "run": {"type": "fit"},
+        "experiment": {"name": experiment_name},
+        "model": {
+            "class": "RankBufferFittable",
+            "module_path": "tests.engine.workflows.entrypoints.conftest",
+            "rank": rank,
+        },
+        "data": {
+            "class": "FlexibleDataset",
+            "module_path": "dlkit.engine.data.datasets",
+            "batch_size": BATCH_SIZE,
+            "num_workers": 0,
+            "shuffle": False,
+            "pin_memory": False,
+            "persistent_workers": False,
+            "features": [{"name": "x", "path": str(feature_path), "format": "npy"}],
+            "targets": [{"name": "y", "path": str(target_path), "format": "npy"}],
+        },
+        "tracking": _tracking_dict(tracking_uri),
+    }
+
+
+@pytest.fixture
+def fit_child_paths(
+    minimal_dataset: dict[str, Path], sqlite_tracking_uri: str, tmp_path: Path
+) -> tuple[Path, Path]:
+    """Two child FitJobConfig TOML files on disk, with distinct buffer ranks.
+
+    The two children fit `LazyBufferFittable` at different `rank` values (2
+    and 3), so their resulting checkpoints are provably distinct by shape —
+    used to regression-test that sibling FitJobConfig children in a sweep
+    don't cross-contaminate the shared local checkpoint path.
+
+    Args:
+        minimal_dataset: Dataset path fixture.
+        sqlite_tracking_uri: Shared sqlite tracking URI fixture.
+        tmp_path: Pytest temporary directory fixture.
+
+    Returns:
+        Tuple of two absolute paths to written TOML files.
+    """
+    jobs_dir = tmp_path / "jobs"
+    jobs_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[Path] = []
+    for i, rank in enumerate((2, 3)):
+        path = jobs_dir / f"fit_child_{i}.toml"
+        payload = _fit_payload(
+            feature_path=minimal_dataset["features"],
+            target_path=minimal_dataset["targets"],
+            tracking_uri=sqlite_tracking_uri,
+            experiment_name=f"fit-child-{i}",
+            rank=rank,
         )
         path.write_bytes(tomli_w.dumps(payload).encode("utf-8"))
         paths.append(path)

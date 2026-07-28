@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+import torch
 
 from dlkit.common.errors import ConfigValidationError
 from dlkit.common.hooks import ChildPlannedEvent, LifecycleHooks, RunCreatedEvent
@@ -43,6 +44,7 @@ from dlkit.infrastructure.config.job_config import (
     MultiRunJobConfig,
     TrainingJobConfig,
 )
+from dlkit.interfaces.api.functions.model_registry import download_checkpoint_artifact
 
 
 def _multirun_config(
@@ -97,6 +99,46 @@ def test_run_multirun_config_train_only_sweep_round_trips(
         parent_run_id=result.parent_run_id, tracking_uri=result.tracking_uri
     )
     assert set(child_run_ids) == {outcome.run_id for outcome in result.children}
+
+
+def test_run_multirun_config_fit_sweep_isolates_checkpoints_per_child(
+    fit_child_paths: tuple[Path, Path], tmp_path: Path
+) -> None:
+    """Regression guard: sibling FitJobConfig children must not cross-contaminate
+    the shared local checkpoint path.
+
+    `FitOverrides.checkpoints_dir` isolation is unreachable from `execute()` /
+    `MultiRunOrchestrator` (see `_ALLOWED_OVERRIDE_KEYS` and `ExecutionOverrides`
+    in `engine/workflows/entrypoints/`). Today's safety comes only from strictly
+    sequential child execution plus synchronous per-child artifact upload before
+    the next sibling overwrites the shared local checkpoint file. If that
+    ordering assumption ever breaks, this test should fail.
+    """
+    child_a, child_b = fit_child_paths
+    settings = _multirun_config(
+        experiment_name="sweep-fit-only",
+        parent_run_name="sweep-parent-fit-only",
+        runs=[
+            {"id": "child-a", "label": "Child A", "files": [str(child_a)]},
+            {"id": "child-b", "label": "Child B", "files": [str(child_b)]},
+        ],
+    )
+
+    result = run_multirun(settings)
+
+    assert len(result.children) == 2
+    expected_ranks = {"child-a": 2, "child-b": 3}
+    for outcome in result.children:
+        assert isinstance(outcome, ChildSuccess)
+        assert isinstance(outcome.result, TrainingResult)
+        assert outcome.run_id is not None
+        checkpoint_path = download_checkpoint_artifact(
+            outcome.run_id,
+            tmp_path / f"download-{outcome.child_id}",
+            tracking_uri=result.tracking_uri,
+        )
+        checkpoint = torch.load(checkpoint_path, weights_only=False)
+        assert checkpoint["state_dict"]["basis"].shape[-1] == expected_ranks[outcome.child_id]
 
 
 def test_run_multirun_config_heterogeneous_sweep_train_and_search(

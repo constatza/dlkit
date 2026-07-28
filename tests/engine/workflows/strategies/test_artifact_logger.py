@@ -591,7 +591,7 @@ def test_log_checkpoints_publishes_artifacts_attached_to_model_with_no_trainer(
         (
             ProducedArtifact(
                 kind="checkpoint",
-                artifact_path="fitted.ckpt",
+                artifact_path=f"{CHECKPOINT_ARTIFACT_DIR}/fitted.ckpt",
                 payload=FileArtifactPayload(file_path=ckpt_path),
             ),
         ),
@@ -603,7 +603,46 @@ def test_log_checkpoints_publishes_artifacts_attached_to_model_with_no_trainer(
 
     artifact_logger.log_checkpoints(components, run_context)
 
-    assert run_context.logged_artifact_calls == [(ckpt_path, "")]
+    assert run_context.logged_artifact_calls == [(ckpt_path, CHECKPOINT_ARTIFACT_DIR)]
+    # Default ArtifactPolicy.remove_uploaded_files=False keeps the local file.
+    assert ckpt_path.exists()
+
+
+def test_log_checkpoints_removes_one_shot_fit_checkpoint_when_policy_allows(
+    tmp_path: Path, job_config: JobConfig
+) -> None:
+    """One-shot-fit checkpoints follow the same remove-after-upload policy as
+    trainer checkpoints (regression guard: this used to be trainer-only)."""
+    ckpt_path = tmp_path / "fitted.ckpt"
+    ckpt_path.write_bytes(b"fitted")
+
+    class _FittedModel:
+        pass
+
+    model = _FittedModel()
+    attach_checkpoint_artifacts(
+        model,
+        (
+            ProducedArtifact(
+                kind="checkpoint",
+                artifact_path=f"{CHECKPOINT_ARTIFACT_DIR}/fitted.ckpt",
+                payload=FileArtifactPayload(file_path=ckpt_path),
+            ),
+        ),
+    )
+
+    artifact_logger = ArtifactLogger(tracker=Mock())
+    run_context = _RecordingRunContext()
+    components = _build_components(
+        model=model,
+        trainer=None,
+        artifacts=RuntimeArtifactManifest(policy=ArtifactPolicy(remove_uploaded_files=True)),
+    )
+
+    artifact_logger.log_checkpoints(components, run_context)
+
+    assert run_context.logged_artifact_calls == [(ckpt_path, CHECKPOINT_ARTIFACT_DIR)]
+    assert not ckpt_path.exists()
 
 
 def test_log_checkpoints_is_noop_with_no_checkpoint_callback(job_config: JobConfig) -> None:

@@ -34,6 +34,11 @@ _DEFAULT_MODEL_MODULE = "dlkit.domain.nn"
 
 _CHECKPOINT_FILENAME = "fitted.ckpt"
 
+# Mirrors dlkit.engine.tracking.artifact_logger.CHECKPOINT_ARTIFACT_DIR's value.
+# Not imported directly: engine.training sits below engine.tracking in the
+# package DAG (see tach.toml) and must not depend on it.
+_CHECKPOINT_ARTIFACT_DIR = "checkpoints"
+
 
 def _resolve_checkpoint_path() -> Path:
     """Resolve where this run's fitted checkpoint should be written locally.
@@ -59,7 +64,7 @@ def _resolve_checkpoint_path() -> Path:
     Returns:
         Local path the fitted checkpoint should be written to.
     """
-    return resolve_with_context("checkpoints") / _CHECKPOINT_FILENAME
+    return resolve_with_context(_CHECKPOINT_ARTIFACT_DIR) / _CHECKPOINT_FILENAME
 
 
 def _serialize_model_settings(model_settings: ModelComponentSettings) -> dict[str, Any]:
@@ -194,7 +199,7 @@ class OneShotFitExecutor(ITrainingExecutor):
 
         artifact = ProducedArtifact(
             kind="checkpoint",
-            artifact_path=_CHECKPOINT_FILENAME,
+            artifact_path=f"{_CHECKPOINT_ARTIFACT_DIR}/{_CHECKPOINT_FILENAME}",
             payload=FileArtifactPayload(file_path=checkpoint_path),
         )
         # Attach to the live model instance (not the returned TrainingResult):
