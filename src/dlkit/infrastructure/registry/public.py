@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from difflib import get_close_matches
 from typing import Any
 
+from dlkit.common.errors import ForwardContractError
+from dlkit.common.forward_contract import check_forward_kwargs
 from dlkit.infrastructure.registry.base import LockedRegistry
 
 # One registry instance per component kind
@@ -36,6 +38,57 @@ class RegistryEntry:
     forced: bool
 
 
+def _validate_model_contract(target: Any) -> None:
+    """Structural forward()-kwarg contract check for ``register_model`` targets.
+
+    Duck-typed — deliberately does not import ``dlkit.domain``, keeping
+    ``infrastructure`` and ``domain`` as sibling layers per ``tach.toml``
+    (both depend on ``dlkit.common`` only, neither on the other). Any
+    pydantic-BaseModel-shaped ``InputSpec`` (anything with a ``.model_fields``
+    mapping) is accepted; ``dlkit.nn.DLKitModule`` subclasses already passed
+    the equivalent check at class-definition time and trivially pass again
+    here. Nominal inheritance from ``DLKitModule`` is intentionally not
+    required — see the design writeup in ``docs/plan.md`` for the
+    cost/benefit behind keeping this structural rather than nominal.
+
+    Args:
+        target: The class or callable passed to ``@register_model``.
+
+    Raises:
+        ForwardContractError: If ``InputSpec`` is missing, or declares a
+            field name with no matching ``forward()`` parameter.
+    """
+    input_spec = getattr(target, "InputSpec", None)
+    if input_spec is None or not hasattr(input_spec, "model_fields"):
+        raise ForwardContractError(
+            f"register_model() target {target!r} must declare an InputSpec "
+            "(a pydantic BaseModel naming forward()'s input kwargs; empty is "
+            "fine for single-input models). Subclass dlkit.nn.DLKitModule for "
+            "this to be enforced automatically, or declare InputSpec directly "
+            "on a plain nn.Module.",
+            {"target": repr(target)},
+        )
+    field_names = frozenset(input_spec.model_fields)
+    if not field_names:
+        return  # single-flat-input convention — nothing named to check
+    forward = getattr(target, "forward", None)
+    if forward is None:
+        raise ForwardContractError(
+            f"register_model() target {target!r} declares a non-empty InputSpec "
+            f"{sorted(field_names)} but has no forward() method to check it against.",
+            {"target": repr(target)},
+        )
+    check = check_forward_kwargs(forward, field_names)
+    if check.var_positional or check.var_keyword or check.unknown:
+        raise ForwardContractError(
+            f"{target!r}: InputSpec {sorted(field_names)} does not match "
+            f"forward()'s parameters. Available: {sorted(check.allowed_kwargs)}. "
+            f"unknown={sorted(check.unknown)} "
+            f"var_positional={check.var_positional} var_keyword={check.var_keyword}",
+            {"target": repr(target)},
+        )
+
+
 def _make_register(kind: str):
     registry = _REGISTRIES[kind]
 
@@ -58,6 +111,8 @@ def _make_register(kind: str):
         """
 
         def _apply(target: Any):
+            if kind == "model":
+                _validate_model_contract(target)
             key = name or getattr(target, "__name__", None)
             if not key:
                 raise ValueError(

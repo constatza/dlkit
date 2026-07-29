@@ -2,6 +2,7 @@ import builtins
 
 import pytest
 
+from dlkit.common.errors import ForwardContractError
 from dlkit.infrastructure.registry import (
     describe_model,
     list_registered_datasets,
@@ -22,7 +23,8 @@ def setup_function() -> None:  # pytest hook per-test
 
 def test_auto_name_registration_and_resolution_model():
     class MyNet:
-        pass
+        class InputSpec:
+            model_fields: dict = {}
 
     register_model()(MyNet)
 
@@ -47,10 +49,12 @@ def test_alias_and_duplicate_protection_dataset():
 
 def test_use_flag_forced_precedence_over_config_name():
     class A:
-        pass
+        class InputSpec:
+            model_fields: dict = {}
 
     class B:
-        pass
+        class InputSpec:
+            model_fields: dict = {}
 
     register_model(name="A", use=True)(A)
     register_model(name="B")(B)
@@ -95,10 +99,12 @@ def test_register_metric_and_datamodule_basic():
 
 def test_list_registered_models_returns_sorted_canonical_names():
     class ZedModel:
-        pass
+        class InputSpec:
+            model_fields: dict = {}
 
     class AlphaModel:
-        pass
+        class InputSpec:
+            model_fields: dict = {}
 
     register_model(name="zed")(ZedModel)
     register_model(name="alpha", aliases=["a"])(AlphaModel)
@@ -119,9 +125,45 @@ def test_list_registered_datasets_returns_sorted_canonical_names():
     assert list_registered_datasets() == ["dataset_a", "dataset_b"]
 
 
+def test_register_model_without_input_spec_raises():
+    class NoSpecModel:
+        pass
+
+    with pytest.raises(ForwardContractError, match="must declare an InputSpec"):
+        register_model()(NoSpecModel)
+
+
+def test_register_model_with_mismatched_input_spec_field_raises():
+    class MismatchedModel:
+        class InputSpec:
+            model_fields: dict = {"branch": None}
+
+        def forward(self, x):
+            return x
+
+    with pytest.raises(ForwardContractError, match="does not match"):
+        register_model()(MismatchedModel)
+
+
+def test_register_model_accepts_plain_nn_module_with_duck_typed_input_spec():
+    """register_model requires the structural contract, not DLKitModule inheritance."""
+
+    class ThirdPartyModel:
+        class InputSpec:
+            model_fields: dict = {"x": None}
+
+        def forward(self, x):
+            return x
+
+    register_model()(ThirdPartyModel)
+
+    assert resolve_component("model", "ThirdPartyModel") is ThirdPartyModel
+
+
 def test_describe_model_reports_aliases_and_forced_state():
     class MyModel:
-        pass
+        class InputSpec:
+            model_fields: dict = {}
 
     register_model(name="MyModel", aliases=["mynet"], use=True)(MyModel)
 
