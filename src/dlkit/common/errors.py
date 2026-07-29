@@ -39,6 +39,13 @@ class ModelLoadingError(DLKitError):
     """Model checkpoint loading error."""
 
 
+class ForwardContractError(DLKitError):
+    """Raised when a model's declared entry-name contract cannot be
+    reconciled with its forward() signature, or when caller-supplied kwargs
+    at inference time don't match the checkpoint's persisted forward-arg
+    contract."""
+
+
 class PluginError(DLKitError):
     """Plugin configuration or execution error."""
 

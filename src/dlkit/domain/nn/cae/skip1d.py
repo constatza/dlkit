@@ -9,7 +9,6 @@ from dlkit.domain.nn.cae.base import CAE
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.encoder.latent import (
     TensorToVectorBlock,
     VectorToTensorBlock,
@@ -19,7 +18,7 @@ from dlkit.domain.nn.types import ActivationName, NormalizerName
 from dlkit.domain.nn.utils import build_channel_schedule, resolve_activation
 
 
-class SkipCAE1d(StandardEntryConsumer, CAE):
+class SkipCAE1d(CAE):
     """1D Skip Connection Convolutional Autoencoder.
 
     Args:

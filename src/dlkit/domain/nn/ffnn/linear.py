@@ -4,13 +4,13 @@ from typing import Literal
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.primitives.parametrized_layers import FactorizedLinear
 from dlkit.domain.nn.utils import make_norm_layer
 
 
-class LinearNetwork(StandardEntryConsumer, nn.Module):
+class LinearNetwork(DLKitModule):
     """A simple linear network with a single layer and optional normalization.
 
     This network consists of a single linear transformation with optional
@@ -52,7 +52,7 @@ class LinearNetwork(StandardEntryConsumer, nn.Module):
         return x
 
 
-class FactorizedLinearNetwork(StandardEntryConsumer, nn.Module):
+class FactorizedLinearNetwork(DLKitModule):
     """Single-layer network backed by one FactorizedLinear layer.
 
     The effective weight is ``W = diag(exp(log_scale)) @ base_weight`` with

@@ -1,9 +1,11 @@
 import abc
 
-from torch import Tensor, nn
+from torch import Tensor
+
+from dlkit.domain.nn.base import DLKitModule
 
 
-class CAE(nn.Module):
+class CAE(DLKitModule):
     """Convolutional autoencoder base class.
 
     Provides abstract methods for encode and decode operations, and a standard

@@ -29,10 +29,10 @@ from typing import Literal
 import torch
 from torch import Tensor, nn
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation
@@ -198,7 +198,7 @@ class SpectralDualPath(nn.Module):
 # ---------------------------------------------------------------------------
 
 
-class FourierEnhancedFFNN(StandardEntryConsumer, FourierAugmented):
+class FourierEnhancedFFNN(FourierAugmented, DLKitModule):
     """FFNN augmented with truncated Fourier features.
 
     Inherits ``FourierAugmented`` and builds a ``FFNN`` backbone
@@ -245,7 +245,7 @@ class FourierEnhancedFFNN(StandardEntryConsumer, FourierAugmented):
         super().__init__(backbone=backbone, n_modes=n_modes)
 
 
-class DualPathFFNN(StandardEntryConsumer, SpectralDualPath):
+class DualPathFFNN(SpectralDualPath, DLKitModule):
     """FFNN with parallel spatial and spectral ``FFNN`` branches.
 
     Inherits ``SpectralDualPath`` and builds both branches as

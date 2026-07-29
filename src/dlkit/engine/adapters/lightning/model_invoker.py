@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
@@ -10,6 +9,8 @@ from typing import TYPE_CHECKING, Any, cast
 from tensordict import NestedKey, TensorDict
 from tensordict.nn import TensorDictModule
 from torch import Tensor, nn
+
+from dlkit.common.forward_contract import check_forward_kwargs
 
 if TYPE_CHECKING:
     from dlkit.domain.nn.contracts import OutputSpec
@@ -164,9 +165,9 @@ class InvokerBuildResult:
 def _validate_forward_signature(model: nn.Module, kwarg_names: frozenset[str]) -> None:
     """Validate that model.forward() is safe for named kwarg dispatch.
 
-    Inspects the signature via ``inspect.signature`` only — never decorates or
-    wraps the model, which would corrupt Lightning checkpoint serialization.
-    Private — accessible only via ``InvokerBuildResult.validator``.
+    Thin wrapper over ``check_forward_kwargs`` — never decorates or wraps the
+    model, which would corrupt Lightning checkpoint serialization. Private —
+    accessible only via ``InvokerBuildResult.validator``.
 
     Args:
         model: PyTorch module whose ``forward`` signature is inspected.
@@ -177,34 +178,24 @@ def _validate_forward_signature(model: nn.Module, kwarg_names: frozenset[str]) -
             for named dispatch — ambiguous routing).
         ValueError: If any name in ``kwarg_names`` is absent from the signature.
     """
-    sig = inspect.signature(model.forward)
-    params = sig.parameters
-
-    for param in params.values():
-        if param.kind == inspect.Parameter.VAR_POSITIONAL:
-            raise TypeError(
-                f"{type(model).__name__}.forward declares *{param.name} which is unsafe "
-                "for named dispatch. Remove *args or use positional dispatch."
-            )
-        if param.kind == inspect.Parameter.VAR_KEYWORD:
-            raise TypeError(
-                f"{type(model).__name__}.forward declares **{param.name} which is unsafe "
-                "for named dispatch. Remove **kwargs or use positional dispatch."
-            )
-
-    allowed = {
-        name
-        for name, p in params.items()
-        if p.kind in {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
-    }
-    unknown = kwarg_names - allowed
-    if unknown:
+    check = check_forward_kwargs(model.forward, kwarg_names)
+    if check.var_positional:
+        raise TypeError(
+            f"{type(model).__name__}.forward declares *{check.var_positional} which is unsafe "
+            "for named dispatch. Remove *args or use positional dispatch."
+        )
+    if check.var_keyword:
+        raise TypeError(
+            f"{type(model).__name__}.forward declares **{check.var_keyword} which is unsafe "
+            "for named dispatch. Remove **kwargs or use positional dispatch."
+        )
+    if check.unknown:
         raise ValueError(
-            f"Features {sorted(unknown)} have no matching parameter in "
+            f"Features {sorted(check.unknown)} have no matching parameter in "
             f"{type(model).__name__}.forward. "
             f"Rename the feature(s) to match a forward() parameter name, or set "
             f"model_input=False to exclude them from dispatch. "
-            f"Available parameters: {sorted(allowed)}"
+            f"Available parameters: {sorted(check.allowed_kwargs)}"
         )
 
 
@@ -253,7 +244,7 @@ def _build_invoker_from_entries(
 
     if named:
         kwarg_in_keys: dict[str, NestedKey] = {e.name: ("features", e.name) for e in named}
-        forward_arg_map: dict[str, str] = {e.name: e.name for e in named}
+        forward_arg_map: dict[str, str] = derive_forward_arg_map(named)
         kwarg_names = frozenset(forward_arg_map)
         invoker = TensorDictModelInvoker(
             in_keys=[], kwarg_in_keys=kwarg_in_keys, output_spec=resolved_spec
@@ -289,6 +280,23 @@ def _ordered_model_input_names(feature_entries: list[Any]) -> tuple[str, ...]:
     return tuple(
         entry.name for entry in feature_entries if entry.model_input and entry.name is not None
     )
+
+
+def derive_forward_arg_map(feature_entries: list[Any]) -> dict[str, str]:
+    """Kwarg-name -> feature-name map for named model-input entries.
+
+    Identity today (``entry.name`` is used verbatim as the ``forward()``
+    kwarg — see ``_build_invoker_from_entries``). Single source of truth for
+    both the invoker build path and ``WrapperCheckpointMetadata``, which
+    previously re-derived the same filter independently.
+
+    Args:
+        feature_entries: Feature DataEntry objects in config-insertion order.
+
+    Returns:
+        Mapping of forward() kwarg name to feature entry name.
+    """
+    return {name: name for name in _ordered_model_input_names(feature_entries)}
 
 
 def normalize_model_output(

@@ -5,8 +5,8 @@ from collections.abc import Callable, Sequence
 import torch.nn as nn
 from torch import Tensor
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives.conditioning import (
     ConditionedResidualSequential,
@@ -130,7 +130,7 @@ class FiLMResidualBlock(IConditionedModule):
         return x + self.branch_scale * self.film(h, condition)
 
 
-class VarWidthFiLMFFNN(StandardEntryConsumer, nn.Module):
+class VarWidthFiLMFFNN(DLKitModule):
     """Variable-width FiLM-conditioned feedforward network.
 
     Op chain:
@@ -210,7 +210,7 @@ class VarWidthFiLMFFNN(StandardEntryConsumer, nn.Module):
         return self.head(x)
 
 
-class FiLMEmbeddedFFNN(StandardEntryConsumer, nn.Module):
+class FiLMEmbeddedFFNN(DLKitModule):
     """Embedded FiLM-conditioned network with constant-width residual body.
 
     Op chain:

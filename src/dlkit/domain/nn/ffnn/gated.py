@@ -15,8 +15,8 @@ from typing import TypeVar
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.constrained import _resolve_hidden_size
 from dlkit.domain.nn.types import NormalizerName
 from dlkit.domain.nn.utils import make_norm_layer
@@ -24,7 +24,7 @@ from dlkit.domain.nn.utils import make_norm_layer
 _GateT = TypeVar("_GateT", bound=nn.Module)
 
 
-class GatedMLP(StandardEntryConsumer, nn.Module):
+class GatedMLP(DLKitModule):
     """Feed-forward network with per-layer pluggable gating.
 
     Each hidden layer applies a gating mechanism (e.g. GLU or SwiGLU)

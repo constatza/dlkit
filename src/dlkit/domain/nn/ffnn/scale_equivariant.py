@@ -5,11 +5,9 @@ from typing import Literal
 
 from torch import Tensor
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
-)
-from dlkit.domain.nn.contracts import (
-    StandardEntryConsumer,
 )
 from dlkit.domain.nn.ffnn.constrained import (
     EmbeddedFactorizedFFNN,
@@ -36,7 +34,7 @@ _DEFAULT_EPS_GAIN = DEFAULT_SCALE_EQUIVARIANT_EPS_GAIN
 # ── Plain dense (non-structured) ────────────────────────────────────────────
 
 
-class ScaleEquivariantFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantFFNN(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant residual constant-width FFNN."""
 
     class InputSpec(_InputSpec):
@@ -76,7 +74,7 @@ class ScaleEquivariantFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
 # ── Embedded Factorized (FactorizedLinear embedding, body, and regression) ───
 
 
-class ScaleEquivariantEmbeddedFactorizedFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantEmbeddedFactorizedFFNN(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant residual embedded factorized FFNN."""
 
     class InputSpec(_InputSpec):
@@ -125,7 +123,7 @@ class ScaleEquivariantEmbeddedFactorizedFFNN(StandardEntryConsumer, ScaleEquivar
 # ── Hyper-Connection / Sparse-MoE scale-equivariant variants ────────────────
 
 
-class ScaleEquivariantEmbeddedHyperFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantEmbeddedHyperFFNN(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant Hyper-Connection FFNN with optional projections."""
 
     class InputSpec(_InputSpec):
@@ -173,7 +171,7 @@ class ScaleEquivariantEmbeddedHyperFFNN(StandardEntryConsumer, ScaleEquivariantW
         )
 
 
-class ScaleEquivariantEmbeddedMoEFFNN(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantEmbeddedMoEFFNN(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant Sparse-MoE FFNN with optional projections.
 
     Routing diagnostics (``RoutingStats``) are not exposed through this
@@ -241,7 +239,7 @@ class ScaleEquivariantEmbeddedMoEFFNN(StandardEntryConsumer, ScaleEquivariantWra
 # ── FiLM-conditioned scale-equivariant variants ──────────────────────────────
 
 
-class ScaleEquivariantVarWidthFiLMFFNN(StandardEntryConsumer, ConditionedScaleEquivariantWrapper):
+class ScaleEquivariantVarWidthFiLMFFNN(ConditionedScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant variable-width FiLM-conditioned FFNN.
 
     Scale equivariance applies to the features branch only:
@@ -290,7 +288,7 @@ class ScaleEquivariantVarWidthFiLMFFNN(StandardEntryConsumer, ConditionedScaleEq
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
 
-class ScaleEquivariantFiLMEmbeddedFFNN(StandardEntryConsumer, ConditionedScaleEquivariantWrapper):
+class ScaleEquivariantFiLMEmbeddedFFNN(ConditionedScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant FiLM-conditioned embedded constant-width FFNN.
 
     Scale equivariance applies to the features branch only:
@@ -341,7 +339,7 @@ class ScaleEquivariantFiLMEmbeddedFFNN(StandardEntryConsumer, ConditionedScaleEq
         super().__init__(base_model=base, norm=norm, eps_gain=eps_gain, keep_stats=keep_stats)
 
 
-class ScaleEquivariantFiLMFFNN(StandardEntryConsumer, ConditionedScaleEquivariantWrapper):
+class ScaleEquivariantFiLMFFNN(ConditionedScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant constant-width FiLM-conditioned FFNN.
 
     Scale equivariance applies to the features branch only:

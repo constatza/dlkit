@@ -5,7 +5,8 @@ from typing import Literal
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import HyperParam, StandardEntryConsumer
+from dlkit.domain.nn.base import DLKitModule
+from dlkit.domain.nn.contracts import HyperParam
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
 from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
@@ -55,7 +56,7 @@ def _make_hidden_block(
     )
 
 
-class VarWidthFFNN(StandardEntryConsumer, nn.Module):
+class VarWidthFFNN(DLKitModule):
     """Feed-forward network with explicit per-layer widths.
 
     Shape diagram:

@@ -3,13 +3,15 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, Self
 
-from torch import Tensor, nn
+from torch import Tensor
+
+from dlkit.domain.nn.base import DLKitModule
 
 if TYPE_CHECKING:
     from dlkit.common.shapes import ShapeContext
 
 
-class BaseGraphNetwork(nn.Module):
+class BaseGraphNetwork(DLKitModule):
     """Abstract base for graph neural networks (PyG-based).
 
     Args:

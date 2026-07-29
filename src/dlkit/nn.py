@@ -7,6 +7,7 @@ from dlkit.domain.nn import (
     DenseBlockKind,
     DenseLinearKind,
     DenseMLPBlock,
+    DLKitModule,
     DualPathFFNN,
     EmbeddedDeepONet,
     EmbeddedFactorizedFFNN,
@@ -173,4 +174,6 @@ __all__ = [
     "operators",
     "primitives",
     "spectral",
+    # Base
+    "DLKitModule",
 ]

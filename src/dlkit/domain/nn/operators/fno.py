@@ -7,9 +7,9 @@ from collections.abc import Callable
 from torch import Tensor, nn
 
 from dlkit.common.shapes import ShapeContext
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     HyperParam,
-    StandardEntryConsumer,
 )
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
@@ -20,7 +20,7 @@ from dlkit.domain.nn.types import ActivationName
 from dlkit.domain.nn.utils import resolve_activation, resolved_activation_name
 
 
-class FourierNeuralOperator1d(StandardEntryConsumer, GridOperatorBase):
+class FourierNeuralOperator1d(GridOperatorBase, DLKitModule):
     """Fourier Neural Operator for 1-D spatial functions.
 
     Input/output dimensions:

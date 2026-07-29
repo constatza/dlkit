@@ -9,10 +9,10 @@ from torch import nn
 from torch.distributions.normal import Normal
 
 from dlkit.common.shapes import ShapeContext
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.encoder.latent import TensorToVectorBlock, VectorToTensorBlock
 from dlkit.domain.nn.encoder.skip import SkipDecoder1d, SkipEncoder1d
 from dlkit.domain.nn.types import ActivationName, NormalizerName
@@ -61,7 +61,7 @@ def vae_loss(
     return mse + kld
 
 
-class VAE1d(StandardEntryConsumer, nn.Module):
+class VAE1d(DLKitModule):
     """Variational Autoencoder for 1D convolutional data.
 
     Encodes input to a (mu, logvar) latent distribution, samples via

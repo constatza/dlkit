@@ -10,10 +10,10 @@ import torch
 from torch import Tensor, nn
 
 from dlkit.common.shapes import ShapeContext
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.hyper_moe import EmbeddedHyperFFNN, EmbeddedMoEFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN, VarWidthFFNN
 from dlkit.domain.nn.primitives import DenseBlockKind, DenseLinearKind
@@ -104,7 +104,7 @@ class DeepONet(nn.Module):
         return values
 
 
-class _FlatBranchDeepONet(StandardEntryConsumer, DeepONet):
+class _FlatBranchDeepONet(DeepONet, DLKitModule):
     """Internal DeepONet base for flattened branch inputs.
 
     Input/output dimensions:

@@ -5,11 +5,9 @@ from typing import Literal
 
 from torch import Tensor, nn
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
-)
-from dlkit.domain.nn.contracts import (
-    StandardEntryConsumer,
 )
 from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
@@ -171,7 +169,7 @@ def _factorized_rect_factory(
 # ── Embedded factorized variants (FactorizedLinear embedding and regression) ──
 
 
-class EmbeddedFactorizedFFNN(StandardEntryConsumer, _EmbeddedParametricBody):
+class EmbeddedFactorizedFFNN(_EmbeddedParametricBody, DLKitModule):
     """Residual embedded FFNN with factorized embedding, body, and regression layers.
 
     All three layer groups — embedding (first), constant-width body, and
@@ -237,7 +235,7 @@ class EmbeddedFactorizedFFNN(StandardEntryConsumer, _EmbeddedParametricBody):
 # ── Non-embedded Factorized variants ────────────────────────────────────────
 
 
-class FactorizedFFNN(StandardEntryConsumer, nn.Module):
+class FactorizedFFNN(DLKitModule):
     """Residual non-embedded Factorized FFNN.
 
     First block maps ``in_features → hidden_size`` using a structured Factorized

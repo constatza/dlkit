@@ -6,6 +6,8 @@ import torch
 from torch import nn
 from torch_geometric.typing import Tensor
 
+from dlkit.domain.nn.contracts import InputSpec as _InputSpec
+
 from .base import BaseGraphNetwork
 from .projections import SkipProjection
 
@@ -30,6 +32,9 @@ class ProjectionNetwork(BaseGraphNetwork):
         input_projection: Optional custom input projection module.
         output_projection: Optional custom output projection module.
     """
+
+    class InputSpec(_InputSpec):
+        pass
 
     def __init__(
         self,

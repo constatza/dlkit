@@ -5,7 +5,8 @@ from typing import Literal, cast
 
 from torch import Tensor, nn
 
-from dlkit.domain.nn.contracts import HyperParam, StandardEntryConsumer
+from dlkit.domain.nn.base import DLKitModule
+from dlkit.domain.nn.contracts import HyperParam
 from dlkit.domain.nn.contracts import InputSpec as _InputSpec
 from dlkit.domain.nn.init import initialize_
 from dlkit.domain.nn.primitives import (
@@ -115,7 +116,7 @@ def _make_body_block(
     )
 
 
-class EmbeddedHyperFFNN(StandardEntryConsumer, nn.Module):
+class EmbeddedHyperFFNN(DLKitModule):
     """Hyper-Connection FFNN with optional input/output projections."""
 
     class InputSpec(_InputSpec):
@@ -223,7 +224,7 @@ class EmbeddedHyperFFNN(StandardEntryConsumer, nn.Module):
         return self.regression_layer(self.body(self.embedding_layer(x)))
 
 
-class EmbeddedMoEFFNN(StandardEntryConsumer, nn.Module):
+class EmbeddedMoEFFNN(DLKitModule):
     """Sparse-MoE FFNN with optional input/output projections."""
 
     class InputSpec(_InputSpec):

@@ -29,10 +29,10 @@ from typing import Literal, cast
 import torch
 from torch import Tensor, nn
 
+from dlkit.domain.nn.base import DLKitModule
 from dlkit.domain.nn.contracts import (
     InputSpec as _InputSpec,
 )
-from dlkit.domain.nn.contracts import StandardEntryConsumer
 from dlkit.domain.nn.ffnn.constrained import FactorizedFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.primitives import (
@@ -63,7 +63,7 @@ def _fourier_encode(x: Tensor, B: Tensor) -> Tensor:
     return torch.cat([proj.sin(), proj.cos()], dim=-1)
 
 
-class FourierFeatureNetwork(StandardEntryConsumer, nn.Module):
+class FourierFeatureNetwork(DLKitModule):
     """MLP with coordinate-wise Fourier feature mapping (Tancik et al. 2020).
 
     Maps input coordinates through:
@@ -132,7 +132,7 @@ class FourierFeatureNetwork(StandardEntryConsumer, nn.Module):
         return self.mlp(_fourier_encode(x, self.B))
 
 
-class FactorizedFourierFeatureNetwork(StandardEntryConsumer, nn.Module):
+class FactorizedFourierFeatureNetwork(DLKitModule):
     """Fourier-feature coordinate network with paper-style factorized MLP backbone."""
 
     class InputSpec(_InputSpec):
@@ -310,7 +310,7 @@ class MultiresolutionHashEncoding(nn.Module):
         return torch.cat(levels, dim=-1)
 
 
-class HashEncodingNetwork(StandardEntryConsumer, nn.Module):
+class HashEncodingNetwork(DLKitModule):
     """Coordinate network using a multiresolution hashed grid encoder."""
 
     class InputSpec(_InputSpec):
@@ -359,7 +359,7 @@ class HashEncodingNetwork(StandardEntryConsumer, nn.Module):
         return self.mlp(self.encoding(x))
 
 
-class Siren(StandardEntryConsumer, nn.Module):
+class Siren(DLKitModule):
     """Sinusoidal representation network (Sitzmann et al. 2020, NeurIPS).
 
     Uses sin activations throughout with layer-specific weight initialisation:
@@ -434,7 +434,7 @@ class Siren(StandardEntryConsumer, nn.Module):
         return self.output_layer(x)
 
 
-class ModifiedMLP(StandardEntryConsumer, nn.Module):
+class ModifiedMLP(DLKitModule):
     """Modified MLP with U/V encoder gating (Wang et al. 2022).
 
     Two learned encoder branches U and V modulate each hidden layer:
@@ -515,7 +515,7 @@ class ModifiedMLP(StandardEntryConsumer, nn.Module):
         return self.output_layer(h)
 
 
-class ScaleEquivariantFourierFeatureNetwork(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantFourierFeatureNetwork(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant Fourier feature network."""
 
     class InputSpec(_InputSpec):
@@ -557,7 +557,7 @@ class ScaleEquivariantFourierFeatureNetwork(StandardEntryConsumer, ScaleEquivari
         )
 
 
-class ScaleEquivariantSiren(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantSiren(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant sinusoidal representation network."""
 
     class InputSpec(_InputSpec):
@@ -589,7 +589,7 @@ class ScaleEquivariantSiren(StandardEntryConsumer, ScaleEquivariantWrapper):
         )
 
 
-class ScaleEquivariantModifiedMLP(StandardEntryConsumer, ScaleEquivariantWrapper):
+class ScaleEquivariantModifiedMLP(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant modified MLP with U/V gating."""
 
     class InputSpec(_InputSpec):
@@ -621,9 +621,7 @@ class ScaleEquivariantModifiedMLP(StandardEntryConsumer, ScaleEquivariantWrapper
         )
 
 
-class ScaleEquivariantFactorizedFourierFeatureNetwork(
-    StandardEntryConsumer, ScaleEquivariantWrapper
-):
+class ScaleEquivariantFactorizedFourierFeatureNetwork(ScaleEquivariantWrapper, DLKitModule):
     """Scale-equivariant factorized Fourier-feature network."""
 
     class InputSpec(_InputSpec):

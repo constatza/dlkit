@@ -1,4 +1,5 @@
-from . import attention, cae, contracts, encoder, ffnn, operators, primitives, spectral
+from . import attention, base, cae, contracts, encoder, ffnn, operators, primitives, spectral
+from .base import DLKitModule
 from .contracts import (
     EntryConsumer,
     InputSpec,
@@ -87,8 +88,10 @@ from .spectral import (
 
 __all__ = [
     # Contracts
+    "DLKitModule",
     "EntryConsumer",
     "InputSpec",
+    "base",
     "contracts",
     # VarWidth (explicit per-layer widths)
     "VarWidthFFNN",

@@ -166,6 +166,60 @@ class StandardEntryConsumer:
         ...
 ```
 
+### `DLKitModule` — the enforced base (`base.py`)
+
+`DLKitModule(StandardEntryConsumer, nn.Module, ABC, metaclass=_DLKitModuleMeta)`
+is a concrete, **optional**, recommended base for dlkit-native models,
+re-exported as `dlkit.nn.DLKitModule`. It behaves exactly like `nn.Module` in
+every way that matters (`__init__`, `forward`, hooks, `.to()`/`.state_dict()`,
+`torch.compile` support) and adds one thing: a required `InputSpec` that is
+checked against `forward()` at **class-definition time**, not just left as
+convention.
+
+`_DLKitModuleMeta` (an `ABCMeta` subclass) runs `validate_model_contract(cls)`
+in its `__new__`, after `super().__new__()` — never in `__init_subclass__`,
+which fires *before* `ABCMeta` has computed `__abstractmethods__`, making it
+impossible to correctly skip still-abstract intermediate bases from there
+(verified empirically; see `docs/plan.md` in the repo root for the full
+writeup). Still-abstract classes (e.g. `DeepONet`'s internal
+`_FlatBranchDeepONet` chain before a leaf implements `forward()`) are
+skipped automatically; concrete classes must declare `InputSpec` (empty is
+fine for single-input models — nothing to name-check), and any declared
+field with no matching `forward()` parameter raises `ForwardContractError`
+immediately, not at some later training/inference call site.
+
+This closes a real bug class: DeepONet declares `forward(branch, trunk)`,
+not `forward(x)`, and nothing previously stopped `InputSpec` from silently
+drifting out of sync with the real signature. See
+`dlkit.engine.inference.inference.md` for how this same persisted contract
+is now also validated at `predict()` time.
+
+**Not required to use dlkit.** `factory.build_model` and dlkit's training
+pipeline only need the *structural* `EntryConsumer` protocol
+(`hasattr(cls, "from_context")`) — any class satisfying it works, with or
+without `DLKitModule`. `infrastructure.registry.public.register_model()`
+checks the same `InputSpec`/`forward()` contract *structurally* too (plain
+`getattr`, no `issubclass(DLKitModule)`) — a plain `nn.Module` plus a
+duck-typed `InputSpec` attribute registers exactly as cleanly as a
+`DLKitModule` subclass. `DLKitModule` only buys the earlier,
+class-definition-time guarantee; it was deliberately kept off the critical
+path for third-party interop (see the cost/benefit writeup in
+`docs/plan.md`).
+
+**Base-class ordering when mixing with an existing concrete wrapper.**
+When a model composes a concrete non-`DLKitModule` base (e.g.
+`ScaleEquivariantWrapper`, `GridOperatorBase`, `DeepONet`, `FourierAugmented`)
+rather than defining `forward()` itself, that concrete base **must** be
+listed before `DLKitModule`: `class Leaf(ConcreteBase, DLKitModule):`, never
+the reverse. Verified live: with `DLKitModule` first, `cls.forward`
+resolves to `DLKitModule`'s abstract stub instead of `ConcreteBase`'s real
+implementation — silently returning `None` from `super().forward()` calls,
+or leaving the class incorrectly stuck abstract when it never overrides
+`forward()` at all. `operators/deeponet.py`'s
+`_FlatBranchDeepONet(DeepONet, DLKitModule)` and
+`ffnn/scale_equivariant.py`'s `ScaleEquivariantFFNN(ScaleEquivariantWrapper,
+DLKitModule)` are the reference examples.
+
 ### Entry name validation (early error before PyTorch runs)
 
 `from_context` checks `InputSpec.model_fields` against the available
@@ -203,7 +257,7 @@ flows through the network.
 ### Adding a new model family
 
 ```python
-class MyModel(StandardEntryConsumer, nn.Module):
+class MyModel(DLKitModule):  # StandardEntryConsumer + nn.Module + ABC, contract-checked
     # 1. Declare what entries forward() expects.
     class InputSpec(InputSpec):
         x: Shape         # forward(self, x: Tensor)
@@ -233,7 +287,10 @@ class MyModel(StandardEntryConsumer, nn.Module):
 ```
 
 Rules:
-- `InputSpec` field names must match `forward` parameter names exactly.
+- `InputSpec` field names must match `forward` parameter names exactly —
+  enforced automatically at class-definition time for `DLKitModule`
+  subclasses (raises `ForwardContractError`), not just a documented
+  convention.
 - `_SHAPE_KWARG_NAMES` must list every key that `resolve_shape_kwargs` returns.
 - Shape rank/size validation belongs in `resolve_shape_kwargs`.
 - `__init__` may repeat simple range checks (`if n < 0: raise`) but should not

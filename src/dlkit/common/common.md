@@ -12,7 +12,7 @@ the codebase.
 - thin structural protocols for settings contracts (no infrastructure imports)
 
 ## Current Contracts
-- Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`
+- Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`, `ForwardContractError`
 - Results: `TrainingResult`, `InferenceResult`, `EvaluationResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`, `MultiRunResult[T]`
 - Multirun type algebra: `WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult | EvaluationResult`;
   `ChildSuccess[T]` / `ChildFailure` / `type ChildOutcome[T] = ChildSuccess[T] | ChildFailure`
@@ -100,6 +100,32 @@ and dataset samples. Construct it manually only for advanced use cases or tests.
 `GeometrySpec.get_shape(name)` looks up a field by name and returns its shape tuple,
 or `None` if not found. This is the interface consumed by `ShapeAwareTransform.configure_shape`
 for eager buffer pre-allocation.
+
+## Forward-kwarg contract reflection
+
+`forward_contract.py` provides `check_forward_kwargs(func, kwarg_names) ->
+ForwardSignatureCheck` — pure `inspect.signature` reflection with no
+torch/pydantic dependency, reporting facts (`var_positional`, `var_keyword`,
+`allowed_kwargs`, `unknown`) rather than raising. It exists here, not in
+`domain` or `engine`, because it is the one primitive both layers need to
+validate that a model's declared `InputSpec` entry names agree with its real
+`forward()` parameters:
+
+- `domain.nn.base._DLKitModuleMeta` calls it at class-definition time for
+  every concrete `DLKitModule` subclass.
+- `engine.adapters.lightning.model_invoker._validate_forward_signature`
+  calls it at wrapper-build time, validating the dataset config's configured
+  kwarg subset.
+- `infrastructure.registry.public._validate_model_contract` calls it at
+  `register_model()` time for third-party models (structurally, without
+  importing `domain` — see `domain/nn/nn.md` for why nominal
+  `DLKitModule` inheritance isn't required there).
+
+Each caller raises its own error type from the returned facts —
+`ForwardContractError` for the two above, `ValueError`/`TypeError` for the
+training-time wrapper build path (kept for backward compatibility with
+existing callers) — rather than this module dictating one exception type
+for every layer.
 
 ## Design Rule
 `common` does not import higher layers. Runtime orchestration, config loading,
