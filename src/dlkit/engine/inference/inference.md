@@ -13,7 +13,16 @@ be the only consumer outside `engine`.
   fitted transforms, precision), then serves `.predict()` calls without
   reloading. Incoming tensor inputs are moved to the loaded predictor device
   before transform/model execution, so CPU dataloader batches can be evaluated
-  by CUDA predictors.
+  by CUDA predictors. Before the model is called, `_validate_kwarg_names`
+  checks any caller-supplied kwargs against the checkpoint's persisted
+  `forward_arg_map`, raising `ForwardContractError` (naming the real expected
+  kwargs) instead of letting a wrong name fall through to a raw `TypeError`
+  from inside the model call — e.g. calling a DeepONet checkpoint with
+  `predict(x=...)` when it expects `predict(branch=..., trunk=...)`.
+  `describe_inputs() -> dict[str, str]` exposes that same persisted contract
+  so a caller can inspect required kwargs before ever calling `predict()`.
+  Both are no-ops for legacy/positional-mode checkpoints (empty
+  `forward_arg_map`).
 - `loading.py`, `checkpoint_reader.py`, `model_builder.py`, `transforms.py` —
   checkpoint parsing, model reconstruction, and transform restoration.
 - `batch_prediction.py` — dataset-level orchestration over a
@@ -24,6 +33,13 @@ be the only consumer outside `engine`.
     predictions **and** ground-truth targets, over `test_dataloader()` by
     default (`predict_dataloader()` only when `split="predict"` is
     explicit). Requires `predictor.predict_target_key` to be set.
+  - `_dispatch_feature_kwargs` selects each batch's feature tensors via
+    `predictor.feature_names` and raises `ValueError` if it's empty
+    (legacy/positional-mode checkpoints aren't supported by the batched
+    path) — it used to silently fall back to passing every batch key
+    through untouched, which is exactly the kind of unvalidated-name bug
+    `predict()`'s own contract check now guards against; both paths call
+    the same `predict()`, so this closes the gap uniformly.
 - `evaluation.py` — eval-only orchestration, no Lightning `Trainer`:
   - `compute_regression_metrics(predictions, targets) -> dict[str, float]` —
     MAE/RMSE/R2 via `torchmetrics.regression`, single-target only.

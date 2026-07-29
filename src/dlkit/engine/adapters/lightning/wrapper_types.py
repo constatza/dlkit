@@ -85,31 +85,35 @@ class WrapperCheckpointMetadata:
     def feature_names(self) -> tuple[str, ...]:
         """Derive ordered feature names from entry_configs.
 
+        Delegates to ``model_invoker._ordered_model_input_names`` — the same
+        derivation the invoker build path uses — so this and the invoker
+        never drift independently.
+
         Returns:
             Tuple of feature name strings in insertion order.
         """
         from dlkit.infrastructure.config.data_entries import is_feature
 
-        return tuple(
-            e.name
-            for e in self.entry_configs
-            if is_feature(e) and e.model_input and e.name is not None
-        )
+        from .model_invoker import _ordered_model_input_names
+
+        return _ordered_model_input_names([e for e in self.entry_configs if is_feature(e)])
 
     @property
     def forward_arg_map(self) -> dict[str, str]:
         """Derive forward-arg map from entry configs for checkpoint persistence.
+
+        Delegates to ``model_invoker.derive_forward_arg_map`` — the same
+        derivation the invoker build path uses — so this and the invoker
+        never drift independently.
 
         Returns:
             Dict mapping kwarg name to feature name.
         """
         from dlkit.infrastructure.config.data_entries import is_feature
 
-        return {
-            e.name: e.name
-            for e in self.entry_configs
-            if is_feature(e) and e.model_input and e.name is not None
-        }
+        from .model_invoker import derive_forward_arg_map
+
+        return derive_forward_arg_map([e for e in self.entry_configs if is_feature(e)])
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

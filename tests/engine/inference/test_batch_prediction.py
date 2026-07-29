@@ -49,17 +49,18 @@ def test_run_batched_prediction_dispatches_named_features_in_order(
     assert tuple(kwargs) == ("u", "query_coords")
 
 
-def test_run_batched_prediction_falls_back_to_all_feature_keys_without_names(
+def test_run_batched_prediction_raises_without_feature_names(
     make_predictor: Callable[..., MagicMock],
     make_datamodule: Callable[..., MagicMock],
 ) -> None:
+    """Legacy/positional-mode checkpoints (empty feature_names) fail loudly
+    rather than silently guessing which batch keys to dispatch — the same
+    class of bug as the dead forward_arg_map this investigation fixed."""
     predictor = make_predictor(feature_names=())
     datamodule = make_datamodule(batches=[{"x": torch.zeros(1, 3)}])
 
-    run_batched_prediction(predictor, datamodule)
-
-    _, kwargs = predictor.predict.call_args
-    assert set(kwargs) == {"x"}
+    with pytest.raises(ValueError, match="feature_names"):
+        run_batched_prediction(predictor, datamodule)
 
 
 def test_run_batched_prediction_concatenates_across_batches(

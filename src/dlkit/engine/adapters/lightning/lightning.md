@@ -159,8 +159,11 @@ Target(name="y", path="data/targets.npy")
 
 Named features are dispatched as keyword arguments — `entry.name` is used directly
 as the `forward()` parameter name. Config-list order does not affect routing.
-`validate_forward_signature` checks the model signature at wrapper init time and
-raises `ValueError` if a feature name has no matching parameter.
+`_validate_forward_signature` checks the model signature at wrapper init time and
+raises `ValueError` if a feature name has no matching parameter — a thin wrapper
+over `dlkit.common.forward_contract.check_forward_kwargs`, the same reflection
+primitive `domain.nn.base` and `infrastructure.registry.public` use for their own
+class-definition-time and registration-time contract checks (see `common/common.md`).
 
 For NPZ inputs, the entry `name` is used as the array key.
 
@@ -420,10 +423,18 @@ construction normalizes those mappings into typed `TransformSettings` before
 applying runtime module defaults and creating transform modules.
 
 `feature_names` is used by `CheckpointPredictor` to look up the correct feature
-transform chain. `forward_arg_map` records the kwarg binding used during training —
-`CheckpointPredictor.predict(x=tensor)` resolves `forward_arg_map["x"] = "x"` to
-find the right transform and then calls `model(x=transformed_tensor)`. An empty
-`forward_arg_map` indicates positional dispatch.
+transform chain (by position for positional dispatch, by key for named kwargs
+— see `_apply_input_transforms` in `engine/inference/predictor.py`).
+`forward_arg_map` records the kwarg binding used during training and is
+validated, not just carried: `CheckpointPredictor.predict()` checks any
+caller-supplied kwarg names against it *before* calling the model, raising
+`ForwardContractError` naming the real expected kwargs on a mismatch (e.g.
+`predict(x=...)` against a checkpoint whose contract is `{"branch": "branch",
+"trunk": "trunk"}`) instead of surfacing a raw `TypeError` from inside the
+model call. `CheckpointPredictor.describe_inputs()` exposes this same dict
+for callers who want to check the contract before calling `predict()` at
+all. An empty `forward_arg_map` indicates positional dispatch — both the
+validation and `describe_inputs()` are no-ops in that case.
 
 ---
 

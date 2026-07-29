@@ -29,9 +29,7 @@ def _dispatch_feature_kwargs(
     """Select and order a batch's feature tensors for ``predictor.predict()``.
 
     Uses ``predictor.feature_names`` (restored from checkpoint metadata) to
-    select and order feature kwargs. When ``feature_names`` is empty (e.g.
-    legacy checkpoints), falls back to passing every feature key present in
-    the batch.
+    select and order feature kwargs.
 
     Args:
         predictor: Loaded predictor whose ``feature_names`` drives dispatch.
@@ -39,11 +37,22 @@ def _dispatch_feature_kwargs(
 
     Returns:
         Keyword arguments ready to pass to ``predictor.predict(**kwargs)``.
+
+    Raises:
+        ValueError: If ``predictor.feature_names`` is empty — a legacy/
+            positional-mode checkpoint has no named contract to dispatch
+            batch keys against, and guessing which batch keys to pass would
+            silently risk passing the wrong tensor to the wrong kwarg.
     """
     feature_names = predictor.feature_names
-    if feature_names:
-        return {name: features_td[name] for name in feature_names if name in features_td.keys()}
-    return {k: features_td[k] for k in features_td.keys()}
+    if not feature_names:
+        raise ValueError(
+            "run_batched_prediction()/run_batched_evaluation() require "
+            "predictor.feature_names to be populated from checkpoint metadata "
+            "(legacy/positional-mode checkpoints are not supported by batched "
+            "prediction). Re-export the checkpoint with named feature entries."
+        )
+    return {name: features_td[name] for name in feature_names if name in features_td.keys()}
 
 
 def run_batched_prediction(

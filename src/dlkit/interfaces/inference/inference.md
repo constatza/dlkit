@@ -145,10 +145,15 @@ defaults to `"fail_fast"` (matching the old all-or-nothing behavior exactly);
 - `load_model_from_settings()` resolves `model.checkpoint` from an
   `InferenceJobConfig` unless an explicit `checkpoint_path=` override is provided.
 - `CheckpointPredictor` exposes `feature_names` and `predict_target_key` as public
-  metadata properties.
+  metadata properties, plus `describe_inputs() -> dict[str, str]` to inspect the
+  required `predict()` kwargs before calling it.
 - Checkpoints produced by the standard Lightning wrapper also persist
   `forward_arg_map`, allowing inference to reconstruct named feature dispatch
   and apply the correct feature transform before calling `model.forward(**kwargs)`.
+  `predict()` validates caller kwargs against this contract before the model is
+  called, raising `dlkit.common.errors.ForwardContractError` (naming the real
+  expected kwargs) on a mismatch instead of a raw `TypeError` from inside the
+  model — see `engine/inference/inference.md` for the full mechanism.
 - For DeepONet-style checkpoints, `feature_names` preserves both the branch
   feature entry and the query-coordinate `target_coordinates` entry in
   training-time order.

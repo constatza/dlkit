@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 import torch
 from tensordict import TensorDict
 
-from dlkit.common.errors import WorkflowError
+from dlkit.common.errors import ForwardContractError, WorkflowError
 from dlkit.engine.adapters.lightning.base import _unpack_model_output
 from dlkit.engine.adapters.lightning.functions import apply_inverse_chain
 from dlkit.infrastructure.precision import (
@@ -95,6 +95,10 @@ class IPredictor(Protocol):
     @property
     def feature_names(self) -> tuple[str, ...]:
         """Ordered feature names restored from checkpoint metadata."""
+        ...
+
+    def describe_inputs(self) -> dict[str, str]:
+        """Return the checkpoint's persisted forward()-kwarg contract."""
         ...
 
     @property
@@ -271,6 +275,8 @@ class CheckpointPredictor(IPredictor):
         if not self._loaded or self._model_state is None:
             raise PredictorNotLoadedError()
 
+        self._validate_kwarg_names(kwargs)
+
         # Establish precision context (inferred from model)
         precision_to_use = self._config.precision or self._inferred_precision
 
@@ -337,6 +343,52 @@ class CheckpointPredictor(IPredictor):
         if self._model_state is None:
             return ""
         return self._model_state.predict_target_key
+
+    def describe_inputs(self) -> dict[str, str]:
+        """Return the checkpoint's persisted forward()-kwarg contract.
+
+        Maps each expected keyword argument name to the feature entry it is
+        sourced from (identity today — see ``ModelState.forward_arg_map``).
+        Empty dict for legacy/positional-mode checkpoints; call ``predict()``
+        with positional args in ``feature_names`` order instead.
+
+        Returns:
+            Mapping of forward() kwarg name to feature entry name.
+        """
+        if self._model_state is None:
+            return {}
+        return dict(self._model_state.forward_arg_map)
+
+    def _validate_kwarg_names(self, kwargs: dict[str, torch.Tensor]) -> None:
+        """Fail fast with a dlkit-authored message on an unexpected kwarg name.
+
+        Compares caller-supplied kwarg names against the checkpoint's
+        persisted ``forward_arg_map`` before the model is ever called — the
+        same failure point Python's own call machinery would already raise
+        at for a genuinely wrong name, just with a message naming what the
+        checkpoint actually expects instead of a raw ``TypeError`` from deep
+        inside the model. Only checks kwargs; positional args are validated
+        by Python's own call machinery, unchanged.
+
+        Args:
+            kwargs: Caller-supplied named tensor inputs.
+
+        Raises:
+            ForwardContractError: If any kwarg name is not in the checkpoint's
+                persisted forward-arg contract.
+        """
+        assert self._model_state is not None
+        expected = frozenset(self._model_state.forward_arg_map)
+        if not expected:
+            return  # legacy/positional-mode checkpoint — nothing to validate
+        unknown = frozenset(kwargs) - expected
+        if unknown:
+            raise ForwardContractError(
+                f"predict() received unexpected keyword argument(s) {sorted(unknown)}. "
+                f"This checkpoint expects: {sorted(expected)}. Call describe_inputs() "
+                "to inspect the full contract.",
+                {"unexpected": sorted(unknown), "expected": sorted(expected)},
+            )
 
     def _move_inputs_to_device(
         self,
