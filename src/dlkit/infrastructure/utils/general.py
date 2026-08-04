@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from importlib import import_module
 from inspect import isclass, signature
-from types import FunctionType
 from typing import Any, Literal
 
 
@@ -37,52 +36,6 @@ def kwargs_compatible_with(
         compatible = {k: v for k, v in kwargs.items() if k in mro_keys}
         return compatible
     raise ValueError(f"Invalid value for which: {which}")
-
-
-def get_name(obj: object) -> str:
-    """Return the name of a function or class. If `obj` is an instance,
-    return the class name of that instance. If it’s a function or class,
-    return its __name__. Otherwise, return the type’s name.
-    """
-    if isinstance(obj, FunctionType):
-        # It’s a function object
-        return obj.__name__
-    if isclass(obj):
-        # It’s a class object
-        return obj.__name__
-    # Assume it’s an instance; return its class’s name
-    return obj.__class__.__name__
-
-
-def filter_dict(
-    data: dict, predicate: Callable, *, which: Literal["key", "value"] = "value"
-) -> dict:
-    """Return a new dict by filtering items using filter().
-
-    Args:
-        data: The original dict of key→value pairs.
-        predicate: A callable that takes one argument (key or value) and
-                   returns True to keep that item.
-        which:    "key" to apply predicate to the dict’s keys,
-                  "value" to apply predicate to its values (default).
-
-    Returns:
-        A fresh dict containing only those (k, v) for which
-        predicate(k) is True (when which=="key") or
-        predicate(v) is True (when which=="value").
-
-    Raises:
-        ValueError: If `which` isn’t "key" or "value".
-    """
-    idx = 1
-    if which == "key":
-        idx = 0
-
-    return dict(filter(lambda item: predicate(item[idx]), data.items()))
-
-
-def get_signature_names(func: Callable) -> list[str]:
-    return list(signature(func).parameters.keys())
 
 
 def import_object(module_path: str, fallback_module: str = "") -> Callable:

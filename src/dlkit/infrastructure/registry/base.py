@@ -37,24 +37,24 @@ class LockedRegistry[T]:
                 )
             self._aliases[alias] = canonical
 
-    def _canonical_key(self, name: str) -> str | None:
-        if name in self._mapping:
-            return name
-        if name in self._aliases:
-            return self._aliases[name]
-        return None
+    def canonical_key(self, name: str) -> str | None:
+        with self._lock:
+            if name in self._mapping:
+                return name
+            return self._aliases.get(name)
 
     def get(self, name: str) -> T:
-        canonical = self._canonical_key(name)
-        if canonical is None:
-            raise KeyError(name)
-        return self._mapping[canonical]
+        with self._lock:
+            canonical = self.canonical_key(name)
+            if canonical is None:
+                raise KeyError(name)
+            return self._mapping[canonical]
 
     def has(self, name: str) -> bool:
-        return self._canonical_key(name) is not None
+        return self.canonical_key(name) is not None
 
     def set_forced(self, name: str) -> None:
-        canonical = self._canonical_key(name) or name
+        canonical = self.canonical_key(name) or name
         with self._lock:
             if canonical not in self._mapping:
                 raise KeyError(f"Cannot force '{name}': not registered")
@@ -65,10 +65,32 @@ class LockedRegistry[T]:
             self._forced_key = None
 
     def get_forced(self) -> T | None:
-        key = self._forced_key
-        if key is None:
-            return None
-        return self._mapping.get(key)
+        with self._lock:
+            key = self._forced_key
+            if key is None:
+                return None
+            return self._mapping.get(key)
+
+    @property
+    def forced_key(self) -> str | None:
+        """Currently forced canonical key, if any."""
+        with self._lock:
+            return self._forced_key
+
+    def all_keys(self) -> set[str]:
+        """All resolvable names: canonical keys plus aliases."""
+        with self._lock:
+            return set(self._mapping.keys()) | set(self._aliases.keys())
+
+    def mapping_snapshot(self) -> dict[str, T]:
+        """Shallow copy of the canonical key → object mapping."""
+        with self._lock:
+            return dict(self._mapping)
+
+    def aliases_snapshot(self) -> dict[str, str]:
+        """Shallow copy of the alias → canonical key mapping."""
+        with self._lock:
+            return dict(self._aliases)
 
     # Test-only helpers (not exported)
     def _reset_for_tests(self) -> None:
@@ -76,7 +98,3 @@ class LockedRegistry[T]:
             self._mapping.clear()
             self._aliases.clear()
             self._forced_key = None
-
-    # Introspection for suggestions (kept internal)
-    def _all_keys(self) -> set[str]:
-        return set(self._mapping.keys()) | set(self._aliases.keys())

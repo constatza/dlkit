@@ -148,7 +148,7 @@ def resolve_from_registry(kind: str, name: str) -> Any:
         return _REGISTRIES[kind].get(name)
     except KeyError as e:
         # Improve error with suggestions
-        keys = sorted(_REGISTRIES[kind]._all_keys())  # internal for suggestions only
+        keys = sorted(_REGISTRIES[kind].all_keys())  # for suggestions only
         suggestions = get_close_matches(name, keys, n=3, cutoff=0.6)
         sug = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise KeyError(f"No registered {kind} named '{name}'.{sug}") from e
@@ -160,28 +160,30 @@ def get_forced(kind: str) -> Any | None:
 
 def _list_registered(kind: str) -> list[str]:
     registry = _REGISTRIES[kind]
-    return sorted(registry._mapping)
+    return sorted(registry.mapping_snapshot())
 
 
 def _describe_entry(kind: str, name: str) -> RegistryEntry:
     registry = _REGISTRIES[kind]
     try:
-        canonical = registry._canonical_key(name)
+        canonical = registry.canonical_key(name)
         if canonical is None:
             raise KeyError(name)
-        target = registry._mapping[canonical]
+        target = registry.get(canonical)
     except KeyError as exc:
-        keys = sorted(registry._all_keys())
+        keys = sorted(registry.all_keys())
         suggestions = get_close_matches(name, keys, n=3, cutoff=0.6)
         sug = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise KeyError(f"No registered {kind} named '{name}'.{sug}") from exc
 
     aliases = tuple(
-        sorted(alias for alias, mapped in registry._aliases.items() if mapped == canonical)
+        sorted(
+            alias for alias, mapped in registry.aliases_snapshot().items() if mapped == canonical
+        )
     )
     module_path = getattr(target, "__module__", None)
     qualname = getattr(target, "__qualname__", getattr(target, "__name__", None))
-    forced = registry._forced_key == canonical
+    forced = registry.forced_key == canonical
 
     return RegistryEntry(
         kind=kind,

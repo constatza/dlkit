@@ -26,9 +26,6 @@ Key architectural decisions:
 |------|------|---------|---------|
 | `kwargs_compatible_with()` | Function | Filter kwargs for constructor compatibility | `dict[str, Any]` |
 | `import_object()` | Function | Dynamically import class/function from path | `Callable` |
-| `get_name()` | Function | Get name of function/class/instance | `str` |
-| `filter_dict()` | Function | Filter dict by predicate on keys/values | `dict` |
-| `get_signature_names()` | Function | Get parameter names from callable | `list[str]` |
 | `get_logger()` | Function | Get configured logger instance | `Logger` |
 | `configure_logging()` | Function | Configure loguru logging system | `None` |
 | `recommended_uvicorn_workers()` | Function | Calculate optimal worker count | `int` |
@@ -50,7 +47,7 @@ None - pure utility functions
 ### Sub-modules
 | Sub-module | Purpose | Key Functions |
 |------------|---------|---------------|
-| `general.py` | General utilities (import, reflection, filtering) | `import_object`, `kwargs_compatible_with`, `filter_dict` |
+| `general.py` | General utilities (import, reflection) | `import_object`, `kwargs_compatible_with` |
 | `logging_config.py` | Centralized loguru logging configuration | `configure_logging`, `get_logger` |
 | `system_utils.py` | Server worker management | `recommended_uvicorn_workers` |
 | `tensordict_utils.py` | TensorDict/sequence helpers | `tensordict_to_numpy`, `sequence_to_tensordict` |
@@ -289,23 +286,9 @@ except Exception as e:
     logger.error("Operation failed", error=str(e), exc_info=True)
 ```
 
-### Common Use Case 3: Dictionary Filtering
-```python
-from dlkit.infrastructure.utils.general import filter_dict
-
-config = {
-    "model_path": "/path/to/model.ckpt",
-    "learning_rate": 0.001,
-    "batch_size": 32,
-}
-
-paths = filter_dict(config, lambda v: isinstance(v, str))
-```
-
 ## Error Handling
 
 **Exceptions Raised**:
-- `ValueError`: Invalid parameters (e.g., wrong `which` value in `filter_dict`)
 - `ImportError`: Module or object not found in `import_object`
 
 ## Testing

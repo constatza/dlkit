@@ -1,4 +1,5 @@
 import builtins
+import threading
 
 import pytest
 
@@ -13,6 +14,7 @@ from dlkit.infrastructure.registry import (
     register_metric,
     register_model,
 )
+from dlkit.infrastructure.registry.base import LockedRegistry
 from dlkit.infrastructure.registry.public import _reset_for_tests
 from dlkit.infrastructure.registry.resolve import resolve_component
 
@@ -176,3 +178,63 @@ def test_describe_model_reports_aliases_and_forced_state():
     assert entry.module_path == MyModel.__module__
     assert entry.qualname == MyModel.__qualname__
     assert entry.forced is True
+
+
+def test_locked_registry_public_accessors_expose_state():
+    """LockedRegistry's public accessors (used by public.py) reflect its state."""
+    registry = LockedRegistry()
+    registry.register("Canonical", "target")
+    registry.add_alias("alias", "Canonical")
+    registry.set_forced("Canonical")
+
+    assert registry.canonical_key("alias") == "Canonical"
+    assert registry.canonical_key("missing") is None
+    assert registry.all_keys() == {"Canonical", "alias"}
+    assert registry.mapping_snapshot() == {"Canonical": "target"}
+    assert registry.aliases_snapshot() == {"alias": "Canonical"}
+    assert registry.forced_key == "Canonical"
+
+
+def test_locked_registry_snapshots_are_copies_not_live_views():
+    registry = LockedRegistry()
+    registry.register("Canonical", "target")
+
+    mapping = registry.mapping_snapshot()
+    mapping["Injected"] = "other"
+
+    assert "Injected" not in registry.mapping_snapshot()
+
+
+def test_locked_registry_accessors_acquire_the_lock():
+    """The public accessors must go through self._lock, not read state unguarded."""
+    registry = LockedRegistry()
+    registry.register("Canonical", "target")
+    registry.add_alias("alias", "Canonical")
+    registry.set_forced("Canonical")
+
+    class CountingLock:
+        def __init__(self, inner: threading.RLock) -> None:
+            self._inner = inner
+            self.acquisitions = 0
+
+        def __enter__(self):
+            self.acquisitions += 1
+            return self._inner.__enter__()
+
+        def __exit__(self, *exc_info):
+            return self._inner.__exit__(*exc_info)
+
+    counting_lock = CountingLock(registry._lock)
+    registry._lock = counting_lock  # ty: ignore[invalid-assignment]
+
+    accessors = (
+        lambda: registry.canonical_key("alias"),
+        registry.all_keys,
+        registry.mapping_snapshot,
+        registry.aliases_snapshot,
+        lambda: registry.forced_key,
+    )
+    for accessor in accessors:
+        accessor()
+
+    assert counting_lock.acquisitions == len(accessors)
