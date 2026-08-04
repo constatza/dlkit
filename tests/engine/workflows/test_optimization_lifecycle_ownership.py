@@ -118,17 +118,15 @@ def test_factory_does_not_enter_backend_session_context() -> None:
     ), "Factory backend-session creation should return an unentered context manager."
 
 
-def test_runtime_entrypoint_owns_tracker_but_not_backend_session_context() -> None:
+def test_runtime_entrypoint_does_not_own_tracker_or_backend_session_context() -> None:
     source = inspect.getsource(optimize)
     context_targets = _with_context_targets(source)
 
-    assert any("experiment_tracker" in target for target in context_targets), (
-        "The runtime optimization entrypoint should continue to own experiment "
-        "tracker setup and cleanup."
-    )
-    assert not any("backend_session" in target for target in context_targets), (
-        "The runtime optimization entrypoint should not enter backend sessions; "
-        "that lifecycle belongs to the optimization orchestrator."
+    assert not context_targets, (
+        "The runtime optimization entrypoint should not enter any context "
+        "manager itself — tracker and backend-session lifecycles both belong "
+        "to the optimization orchestrator now, mirroring "
+        f"MultiRunOrchestrator.run_sweep. Found with-targets: {context_targets!r}"
     )
 
 

@@ -175,19 +175,22 @@ Runtime callers should use:
 
 The optimization orchestrator is responsible for:
 - entering and exiting `IOptimizationBackendSession`
+- entering and exiting the top-level experiment tracker when tracking is
+  enabled, mirroring `MultiRunOrchestrator.run_sweep`'s `with self._tracker:`
 - coordinating backend-specific sampling and reporting through that session
-- entering tracker-owned nested run contexts after the backend session is active
+- entering tracker-owned nested run contexts after the backend session and
+  tracker are both active
 
 The runtime entrypoint is responsible for:
 - applying request-level overrides
 - managing path context
-- entering and exiting the top-level experiment tracker when tracking is enabled
 - calling the optimization strategy
 
 The factory is responsible for:
 - creating `IStudyRepository`, `IOptimizationBackendSession`, trackers, and persisters
 - wiring the shared backend-study registry only when search tracking/storage is configured
-- returning unentered context-manager dependencies
+- returning unentered context-manager dependencies — the orchestrator enters
+  them, not the caller
 
 ## Import Rules
 

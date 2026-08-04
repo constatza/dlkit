@@ -395,8 +395,10 @@ class OptimizationOrchestrator:
     ) -> OptimizationResult:
         """Execute complete optimization workflow.
 
-        The runtime edge owns the experiment tracker context lifecycle. This
-        service assumes any tracker dependency has already been entered.
+        This service owns the experiment tracker context lifecycle: when a
+        tracker is configured, it is entered here, mirroring
+        ``MultiRunOrchestrator.run_sweep``'s ``with self._tracker:``. Callers
+        must pass an unentered tracker.
 
         Args:
             study_name: Name of the optimization study
@@ -433,9 +435,10 @@ class OptimizationOrchestrator:
 
             with self._optimization_backend_session:
                 study = self._study_manager.create_study(**study_kwargs)
-                if tracker is not None:
+                if tracker is None:
+                    return self._execute_without_tracking(study, base_settings)
+                with tracker:
                     return self._execute_with_tracking(study, base_settings)
-                return self._execute_without_tracking(study, base_settings)
 
         except Exception as e:
             logger.error("Optimization workflow '{}' failed: {}", study_name, e)

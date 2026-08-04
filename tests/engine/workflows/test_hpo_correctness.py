@@ -222,16 +222,22 @@ class _TrackingAdapter(IExperimentTracker):
     def __init__(self) -> None:
         self.study_context = _RecordingRunContext()
         self.trial_contexts: list[_RecordingRunContext] = []
+        self.enter_calls = 0
+        self.exit_calls = 0
+        self.entered_before_first_study_run = False
 
     def __enter__(self) -> _TrackingAdapter:
+        self.enter_calls += 1
         return self
 
     def __exit__(self, exc_type, exc, tb) -> bool:
+        self.exit_calls += 1
         return False
 
     def create_study_run(self, study: Study):
         from contextlib import nullcontext
 
+        self.entered_before_first_study_run = self.enter_calls == 1 and self.exit_calls == 0
         return nullcontext(self.study_context)
 
     def create_trial_run(self, trial: Trial, parent_context: Any):
@@ -415,6 +421,37 @@ def test_tracked_execution_samples_and_reports_once(
     # looks like a regular training result at a glance, with no need to open
     # the nested best-retrain run.
     assert tracker.study_context.logged_metrics["loss"] == 0.1
+
+
+def test_orchestrator_enters_and_exits_tracker_exactly_once_around_execution(
+    minimal_training_result: TrainingResult,
+) -> None:
+    """OptimizationOrchestrator now owns the tracker's context lifecycle.
+
+    Callers pass an unentered tracker; the orchestrator must enter it before
+    creating any run and exit it exactly once when execution completes,
+    mirroring MultiRunOrchestrator.run_sweep's `with self._tracker:`.
+    """
+    trial_executor = _RecordingTrialExecutor(minimal_training_result)
+    backend_session = _RecordingBackendSession(sampled={"model.hidden_size": 2})
+    tracker = _TrackingAdapter()
+    orchestrator = OptimizationOrchestrator(
+        study_manager=_make_study_manager(),
+        trial_executor=cast(TrialExecutor, trial_executor),
+        optimization_backend_session=cast(Any, backend_session),
+        experiment_tracker=tracker,
+    )
+
+    orchestrator.execute_optimization(
+        study_name="tracker-lifecycle",
+        base_settings=_make_search_job(),
+        n_trials=1,
+        direction=OptimizationDirection.MINIMIZE,
+    )
+
+    assert tracker.enter_calls == 1
+    assert tracker.exit_calls == 1
+    assert tracker.entered_before_first_study_run is True
 
 
 def test_retrain_does_not_double_log_model_hyperparameters(

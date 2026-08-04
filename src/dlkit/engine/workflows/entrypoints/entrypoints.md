@@ -8,7 +8,8 @@
 - validate and apply request-scoped overrides
 - establish path override context
 - measure elapsed time for workflow results
-- own experiment-tracker lifecycle at the runtime edge
+- own experiment-tracker lifecycle at the runtime edge, except `optimize()`
+  (see Design Rule below)
 - delegate optimization backend-session lifecycle to runtime orchestrators
 
 ## Current Layout
@@ -58,6 +59,11 @@ Entrypoints stay procedural. They normalize request-level concerns and then hand
 control to runtime orchestration and optimization services. They may enter
 top-level tracker contexts when a workflow needs runtime-owned tracking setup,
 but they do not enter optimization backend-session contexts themselves.
+
+`optimize()` is the exception: `OptimizationOrchestrator.execute_optimization()`
+owns entering and exiting its own experiment tracker directly, mirroring
+`MultiRunOrchestrator.run_sweep`'s `with self._tracker:` — the entrypoint
+itself enters no context managers at all. See `optimization.md`.
 
 Convergence entrypoints validate convergence-specific overrides, build
 sample-size training sweeps, and delegate repeat execution to engine

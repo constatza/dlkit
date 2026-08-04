@@ -38,18 +38,9 @@ def optimize(
 
     def run_optimization() -> OptimizationResult:
         opt_settings = cast(SearchJobConfig, context.settings)
-        base_factory = OptimizationServiceFactory()
-        experiment_tracker = base_factory.create_experiment_tracker(opt_settings, hooks=hooks)
-        strategy_factory = OptimizationServiceFactory(
-            experiment_tracker=experiment_tracker, hooks=hooks
-        )
-        optimization_strategy = strategy_factory.create_optimization_strategy(opt_settings)
-
-        if experiment_tracker is None:
-            result = optimization_strategy.execute_optimization(opt_settings)
-        else:
-            with experiment_tracker:
-                result = optimization_strategy.execute_optimization(opt_settings)
+        factory = OptimizationServiceFactory(hooks=hooks)
+        optimization_strategy = factory.create_optimization_strategy(opt_settings)
+        result = optimization_strategy.execute_optimization(opt_settings)
 
         return OptimizationResult(
             best_trial=result.best_trial,
