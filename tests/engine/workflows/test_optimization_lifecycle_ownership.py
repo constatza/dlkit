@@ -132,6 +132,28 @@ def test_runtime_entrypoint_owns_tracker_but_not_backend_session_context() -> No
     )
 
 
+def test_factory_orchestrator_forwards_hooks_to_experiment_tracker() -> None:
+    source = inspect.getsource(OptimizationServiceFactory.create_optimization_orchestrator)
+    tree = _parse_source(source)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _attribute_chain(node.func).endswith(
+            "create_experiment_tracker"
+        ):
+            keyword_names = {kw.arg for kw in node.keywords}
+            assert "hooks" in keyword_names, (
+                "create_optimization_orchestrator must forward self._hooks to "
+                "create_experiment_tracker; otherwise LifecycleHooks passed to "
+                "OptimizationServiceFactory(hooks=...) silently never reach the "
+                "tracker the orchestrator builds internally."
+            )
+            return
+
+    raise AssertionError(
+        "create_experiment_tracker call not found in create_optimization_orchestrator source"
+    )
+
+
 def test_factory_only_wires_optuna_infrastructure_when_enabled() -> None:
     factory = OptimizationServiceFactory()
 

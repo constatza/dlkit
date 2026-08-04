@@ -113,7 +113,7 @@ class OptimizationServiceFactory:
                 settings,
                 study_repository,
             )
-            experiment_tracker = self.create_experiment_tracker(settings)
+            experiment_tracker = self.create_experiment_tracker(settings, hooks=self._hooks)
             config_persister = self.create_config_persister(settings)
 
             # Create services
