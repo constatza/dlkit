@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Self, cast
 from unittest.mock import MagicMock
 
 import matplotlib.pyplot as plt
@@ -83,8 +84,9 @@ def test_compute_regression_metrics_moves_metrics_to_input_device(
         def __init__(self, *args: object, **kwargs: object) -> None:
             super().__init__()
 
-        def to(self, device: torch.device, *args: object, **kwargs: object) -> _RecordingMetric:
-            seen_devices.append(device)
+        def to(self, *args: object, **kwargs: object) -> Self:
+            device = kwargs.get("device", args[0] if args else None)
+            seen_devices.append(cast(torch.device, device))
             return self
 
         def forward(self, *_args: torch.Tensor) -> torch.Tensor:

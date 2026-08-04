@@ -171,7 +171,7 @@ def test_execute_reconstructs_a_model_whose_buffer_is_registered_only_in_fit(
     assert isinstance(rebuilt, LazyBufferFittable)
     assert rebuilt.is_fitted()
     original = cast(LazyBufferFittable, lazy_components.model)
-    assert torch.equal(rebuilt.basis, original.basis)
+    assert torch.equal(cast(torch.Tensor, rebuilt.basis), cast(torch.Tensor, original.basis))
 
 
 def test_execute_raises_when_model_not_fittable(
