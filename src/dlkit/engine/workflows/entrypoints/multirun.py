@@ -234,7 +234,7 @@ def _run_sweep(
     except Exception as exc:
         if isinstance(exc, WorkflowError):
             raise
-        raise_error("Multirun sweep failed", exc)
+        raise_error("Multirun sweep failed", exc, error_class=WorkflowError)
 
 
 def run_multirun(
@@ -275,7 +275,7 @@ def run_multirun(
     except ConfigValidationError:
         raise
     except Exception as exc:
-        raise_error("Multirun child expansion failed", exc)
+        raise_error("Multirun child expansion failed", exc, error_class=WorkflowError)
 
     return _run_sweep(
         children=children,

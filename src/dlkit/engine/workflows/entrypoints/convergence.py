@@ -9,7 +9,6 @@ from dlkit.engine.tracking.mlflow_tracker import MLflowTracker
 from dlkit.engine.workflows.convergence.orchestrator import ConvergenceOrchestrator
 from dlkit.engine.workflows.multi_run import MultiRunOrchestrator
 from dlkit.infrastructure.config.job_config import ConvergenceJobConfig
-from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
@@ -57,7 +56,7 @@ def _apply_convergence_overrides(
     if experiment_patch:
         patch["experiment"] = experiment_patch
 
-    return settings.patch(patch) if patch else settings  # type: ignore[return-value]
+    return settings.patch(patch) if patch else settings
 
 
 def converge(
@@ -92,7 +91,7 @@ def converge(
         workflow_name="convergence",
     )
 
-    try:
+    def run_convergence() -> ConvergenceResult:
         convergence_settings = context.settings
         if not isinstance(convergence_settings, ConvergenceJobConfig):
             raise WorkflowError(
@@ -100,8 +99,9 @@ def converge(
                 {"workflow": "convergence"},
             )
 
+        settings_to_run = convergence_settings
         if validated_overrides is not None:
-            convergence_settings = _apply_convergence_overrides(
+            settings_to_run = _apply_convergence_overrides(
                 convergence_settings, validated_overrides
             )
 
@@ -112,14 +112,11 @@ def converge(
         from .execution import execute as dispatch_execute
 
         tracker = MLflowTracker()
-        tracker.configure(convergence_settings.tracking)
+        tracker.configure(settings_to_run.tracking)
 
         multi_run = MultiRunOrchestrator(tracker, dispatch_execute, hooks=hooks)
         orchestrator = ConvergenceOrchestrator(multi_run)
 
-        return context.run_with_path_context(lambda: orchestrator.execute(convergence_settings))
+        return orchestrator.execute(settings_to_run)
 
-    except Exception as exc:
-        if isinstance(exc, WorkflowError):
-            raise
-        raise_error("Convergence study failed", exc)
+    return context.run(run_convergence, error_message="Convergence study failed")

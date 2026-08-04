@@ -5,11 +5,9 @@ from __future__ import annotations
 from typing import cast
 
 from dlkit.common import TrainingResult
-from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.engine.workflows.orchestrator import Orchestrator
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
-from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._entrypoint_context import EntrypointContext
@@ -35,25 +33,21 @@ def train(
     validated_overrides = require_override_model(overrides, TrainingOverrides)
     context = EntrypointContext.prepare(settings, validated_overrides, workflow_name="training")
 
-    try:
+    def run_training() -> TrainingResult:
         orchestrator = Orchestrator()
         training_settings = cast(TrainingJobConfig, context.settings)
-        execution_result = context.run_with_path_context(
-            lambda: orchestrator.execute_training(training_settings, hooks=hooks)
-        )
-        duration = context.elapsed()
-        if duration <= 0:
-            duration = getattr(execution_result, "duration_seconds", 0.0)
-        return TrainingResult(
-            model_state=getattr(execution_result, "model_state", None),
-            metrics=getattr(execution_result, "metrics", None) or {},
-            artifacts=getattr(execution_result, "artifacts", None) or {},
-            duration_seconds=duration,
-            predictions=getattr(execution_result, "predictions", None),
-            mlflow_run_id=getattr(execution_result, "mlflow_run_id", None),
-            mlflow_tracking_uri=getattr(execution_result, "mlflow_tracking_uri", None),
-        )
-    except Exception as exc:
-        if isinstance(exc, WorkflowError):
-            raise
-        raise_error("Training execution failed", exc)
+        return orchestrator.execute_training(training_settings, hooks=hooks)
+
+    execution_result = context.run(run_training, error_message="Training execution failed")
+    duration = context.elapsed()
+    if duration <= 0:
+        duration = getattr(execution_result, "duration_seconds", 0.0)
+    return TrainingResult(
+        model_state=getattr(execution_result, "model_state", None),
+        metrics=getattr(execution_result, "metrics", None) or {},
+        artifacts=getattr(execution_result, "artifacts", None) or {},
+        duration_seconds=duration,
+        predictions=getattr(execution_result, "predictions", None),
+        mlflow_run_id=getattr(execution_result, "mlflow_run_id", None),
+        mlflow_tracking_uri=getattr(execution_result, "mlflow_tracking_uri", None),
+    )

@@ -127,6 +127,7 @@ def evaluate(
 
     Raises:
         ConfigurationError: ``settings.data`` is unset or has no targets.
+        WorkflowError: The evaluation run fails for any other reason.
     """
     validated_overrides = require_override_model(overrides, EvaluationOverrides)
     context = EntrypointContext.prepare(settings, validated_overrides, workflow_name="evaluation")
@@ -137,46 +138,52 @@ def evaluate(
             "evaluate() requires settings.data.targets to be configured — "
             "there is no ground truth to compare predictions against otherwise."
         )
+    data_settings = settings.data
 
-    resolved_checkpoint_path = _resolve_checkpoint_path(settings)
+    def run_evaluation() -> EvaluationResult:
+        resolved_checkpoint_path = _resolve_checkpoint_path(settings)
 
-    resolved_plots = settings.plots if settings.plots.enabled else _DEFAULT_EVAL_PLOTS
+        resolved_plots = settings.plots if settings.plots.enabled else _DEFAULT_EVAL_PLOTS
 
-    predictor = load_model_from_settings(
-        settings,
-        checkpoint_path=resolved_checkpoint_path,
-        device=settings.device,
-        batch_size=settings.data.batch_size,
-        apply_transforms=True,
-    )
-    try:
-        datamodule = build_inference_datamodule(
-            settings, checkpoint_override=resolved_checkpoint_path
+        predictor = load_model_from_settings(
+            settings,
+            checkpoint_path=resolved_checkpoint_path,
+            device=settings.device,
+            batch_size=data_settings.batch_size,
+            apply_transforms=True,
         )
-        result = evaluate_checkpoint(predictor, datamodule, resolved_plots, split=settings.split)
-    finally:
-        predictor.unload()
-
-    if settings.tracking.backend == "mlflow":
-        tracker = MLflowTracker()
-        tracker.configure(settings.tracking)
-        exp_name = settings.experiment.name if settings.experiment else _DEFAULT_EXPERIMENT_NAME
-        run_name = settings.experiment.run_name if settings.experiment else None
-        with tracker, tracker.create_run(experiment_name=exp_name, run_name=run_name) as run:
-            if hooks is not None and hooks.on_run_created is not None:
-                hooks.on_run_created(
-                    RunCreatedEvent(
-                        run_id=run.run_id,
-                        tracking_uri=tracker.get_tracking_uri(),
-                        kind="evaluate",
-                        is_outermost=True,
-                    )
-                )
-            log_evaluation_result(result, run, resolved_plots)
-            result = replace(
-                result,
-                mlflow_run_id=run.run_id,
-                mlflow_tracking_uri=tracker.get_tracking_uri(),
+        try:
+            datamodule = build_inference_datamodule(
+                settings, checkpoint_override=resolved_checkpoint_path
             )
+            result = evaluate_checkpoint(
+                predictor, datamodule, resolved_plots, split=settings.split
+            )
+        finally:
+            predictor.unload()
 
-    return result
+        if settings.tracking.backend == "mlflow":
+            tracker = MLflowTracker()
+            tracker.configure(settings.tracking)
+            exp_name = settings.experiment.name if settings.experiment else _DEFAULT_EXPERIMENT_NAME
+            run_name = settings.experiment.run_name if settings.experiment else None
+            with tracker, tracker.create_run(experiment_name=exp_name, run_name=run_name) as run:
+                if hooks is not None and hooks.on_run_created is not None:
+                    hooks.on_run_created(
+                        RunCreatedEvent(
+                            run_id=run.run_id,
+                            tracking_uri=tracker.get_tracking_uri(),
+                            kind="evaluate",
+                            is_outermost=True,
+                        )
+                    )
+                log_evaluation_result(result, run, resolved_plots)
+                result = replace(
+                    result,
+                    mlflow_run_id=run.run_id,
+                    mlflow_tracking_uri=tracker.get_tracking_uri(),
+                )
+
+        return result
+
+    return context.run(run_evaluation, error_message="Evaluation failed")

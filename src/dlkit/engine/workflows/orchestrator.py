@@ -6,6 +6,7 @@ Composes: prepare (ops) -> build (factory) -> execute (strategy) -> finalize.
 from __future__ import annotations
 
 from dlkit.common import TrainingResult
+from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.infrastructure.config.job_config import JobConfig, SearchJobConfig
 from dlkit.infrastructure.utils.error_handling import raise_error
@@ -87,7 +88,7 @@ class Orchestrator:
             return result
 
         except Exception as e:
-            raise_error("Training orchestration failed", e)
+            raise_error("Training orchestration failed", e, error_class=WorkflowError)
 
 
 # Execution classes moved to strategies/execution.py to avoid bloat here

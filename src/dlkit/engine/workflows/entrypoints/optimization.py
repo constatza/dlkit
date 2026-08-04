@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import cast
 
 from dlkit.common import OptimizationResult
-from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks
 from dlkit.infrastructure.config.job_config import SearchJobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
@@ -37,7 +36,7 @@ def optimize(
         workflow_name="optimization",
     )
 
-    try:
+    def run_optimization() -> OptimizationResult:
         opt_settings = cast(SearchJobConfig, context.settings)
         base_factory = OptimizationServiceFactory()
         experiment_tracker = base_factory.create_experiment_tracker(opt_settings, hooks=hooks)
@@ -46,16 +45,11 @@ def optimize(
         )
         optimization_strategy = strategy_factory.create_optimization_strategy(opt_settings)
 
-        def run() -> OptimizationResult:
-            return optimization_strategy.execute_optimization(opt_settings)
-
-        def run_with_tracker() -> OptimizationResult:
-            if experiment_tracker is None:
-                return run()
+        if experiment_tracker is None:
+            result = optimization_strategy.execute_optimization(opt_settings)
+        else:
             with experiment_tracker:
-                return run()
-
-        result = context.run_with_path_context(run_with_tracker)
+                result = optimization_strategy.execute_optimization(opt_settings)
 
         return OptimizationResult(
             best_trial=result.best_trial,
@@ -65,10 +59,5 @@ def optimize(
             mlflow_run_id=result.mlflow_run_id,
             mlflow_tracking_uri=result.mlflow_tracking_uri,
         )
-    except Exception as exc:
-        if isinstance(exc, WorkflowError):
-            raise
-        raise WorkflowError(
-            f"Optimization execution failed: {exc!s}",
-            {"workflow": "optimization", "error": str(exc)},
-        ) from exc
+
+    return context.run(run_optimization, error_message="Optimization execution failed")

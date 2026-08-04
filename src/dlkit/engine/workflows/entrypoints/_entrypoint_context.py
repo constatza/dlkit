@@ -14,6 +14,7 @@ from dlkit.infrastructure.config.job_config import (
     SearchJobConfig,
     TrainingJobConfig,
 )
+from dlkit.infrastructure.utils.error_handling import raise_error
 
 from ._override_types import RuntimeOverrideModel
 from ._overrides import apply_runtime_overrides, build_runtime_overrides, validate_runtime_overrides
@@ -71,3 +72,30 @@ class EntrypointContext:
     def run_with_path_context(self, fn: Callable[[], T]) -> T:
         """Execute a callback within the derived runtime context."""
         return fn()
+
+    def run(
+        self,
+        workflow_fn: Callable[[], T],
+        *,
+        error_message: str,
+        error_class: type[Exception] = WorkflowError,
+    ) -> T:
+        """Execute a workflow callback with path context and unified error handling.
+
+        A ``WorkflowError`` raised by ``workflow_fn`` propagates unchanged; any
+        other exception is wrapped via ``raise_error`` as ``error_class``.
+
+        Args:
+            workflow_fn: Zero-arg callback performing the workflow's execution.
+            error_message: Message used when wrapping a non-``WorkflowError`` failure.
+            error_class: Exception type to raise for a wrapped failure.
+
+        Returns:
+            The value returned by ``workflow_fn``.
+        """
+        try:
+            return self.run_with_path_context(workflow_fn)
+        except Exception as exc:
+            if isinstance(exc, WorkflowError):
+                raise
+            raise_error(error_message, exc, error_class=error_class)

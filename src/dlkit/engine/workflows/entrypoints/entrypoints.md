@@ -14,7 +14,12 @@
 ## Current Layout
 - `_settings.py`: workflow settings coercion
 - `_override_types.py`: strict override payload models
-- `_entrypoint_context.py`: shared setup for override application, path context, and timing
+- `_entrypoint_context.py`: shared setup for override application, path context, and timing.
+  `EntrypointContext.run(workflow_fn, error_message=..., error_class=WorkflowError)` is the
+  single place all five entrypoints (`fit.py`, `training.py`, `optimization.py`,
+  `convergence.py`, `evaluate.py`) route their workflow execution through: it runs
+  `workflow_fn` under `run_with_path_context`, re-raises a `WorkflowError` unchanged, and
+  wraps any other exception via `raise_error(error_message, exc, error_class=error_class)`.
 - `training.py`: training entrypoint
 - `fit.py`: one-shot, non-gradient fit entrypoint (`FitJobConfig`). Unlike
   trainer-backed jobs, `FitJobConfig` has no `training.trainer.default_root_dir`

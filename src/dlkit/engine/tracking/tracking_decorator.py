@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from dlkit.common import TrainingResult
+from dlkit.common.errors import WorkflowError
 from dlkit.common.hooks import LifecycleHooks, RunCreatedEvent
 from dlkit.engine.artifacts import ArtifactPolicy, NestedRunCapability
 from dlkit.engine.tracking.artifact_logger import ArtifactLogger
@@ -270,7 +271,9 @@ class TrackingDecorator(ITrainingExecutor):
             return enriched_result
 
         except Exception as e:
-            raise_error("Training with tracking failed", e, stage="tracking")
+            raise_error(
+                "Training with tracking failed", e, error_class=WorkflowError, stage="tracking"
+            )
 
     def execute_within_run(
         self,
