@@ -1,9 +1,11 @@
 """Configuration error types for TOML config loading.
 
-ConfigValidationError is the canonical class; imported here for backward compatibility.
+``dlkit.common.errors.ConfigValidationError`` is the canonical class; it is
+re-exported here (and, separately, from ``dlkit.infrastructure.config.validators``)
+for backward compatibility with existing call sites.
 """
 
-from dlkit.infrastructure.config.validators import ConfigValidationError
+from dlkit.common.errors import ConfigValidationError
 
 
 class ConfigSectionError(ValueError):

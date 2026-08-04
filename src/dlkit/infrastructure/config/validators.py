@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from dlkit.common.checkpoint_source import CheckpointSource
+from dlkit.common.errors import ConfigValidationError
 
 from .data_entries import PathBasedEntry, ValueBasedEntry
 from .entry_base import DataEntry
@@ -47,18 +48,9 @@ def _validate_entry_paths(entries: Iterable[DataEntry], role_label: str) -> None
             raise ValueError(f"{role_label} path does not exist: {entry.path}")
 
 
-class ConfigValidationError(ValueError):
-    """Raised when configuration is incomplete or invalid for workflow execution."""
-
-    def __init__(
-        self,
-        message: str,
-        model_class: str = "",
-        section_data: dict[str, str] | None = None,
-    ):
-        super().__init__(message)
-        self.model_class = model_class
-        self.section_data = section_data or {}
+# ConfigValidationError is re-exported here (from dlkit.common.errors) for
+# backward compatibility with existing `from ...validators import ConfigValidationError`
+# call sites; dlkit.common.errors.ConfigValidationError is the canonical class.
 
 
 # ============================================================================
@@ -202,6 +194,35 @@ def validate_optimization_config_complete(config: SearchJobConfig) -> None:
     _validate_job_config_data(config)
 
 
+def _dispatch_job_config_validator(
+    config: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
+) -> None:
+    """Route a JobConfig to its type-specific completeness validator.
+
+    Shared by ``validate_config_complete`` and ``validate_runtime_preflight`` so
+    the SearchJobConfig -> InferenceJobConfig -> TrainingJobConfig/JobConfig
+    dispatch order lives in exactly one place.
+
+    Args:
+        config: Job configuration.
+
+    Raises:
+        ConfigValidationError: If config is incomplete or invalid.
+        TypeError: If config type is not recognized.
+    """
+    from .job_config import InferenceJobConfig, JobConfig, SearchJobConfig, TrainingJobConfig
+
+    match config:
+        case SearchJobConfig():
+            _validate_search_job_config(config)
+        case InferenceJobConfig():
+            _validate_inference_job_config(config)
+        case TrainingJobConfig() | JobConfig():
+            _validate_job_config_data(config)
+        case _:
+            raise TypeError(f"Unsupported config type: {type(config).__name__}")
+
+
 # Convenience function for workflow auto-detection
 def validate_config_complete(
     config: TrainingJobConfig | SearchJobConfig | InferenceJobConfig | JobConfig,
@@ -217,19 +238,7 @@ def validate_config_complete(
         ConfigValidationError: If config is incomplete or invalid
         TypeError: If config type is not recognized
     """
-    from .job_config import InferenceJobConfig, JobConfig, SearchJobConfig, TrainingJobConfig
-
-    if isinstance(config, SearchJobConfig):
-        _validate_search_job_config(config)
-        return
-    if isinstance(config, InferenceJobConfig):
-        _validate_inference_job_config(config)
-        return
-    if isinstance(config, (TrainingJobConfig, JobConfig)):
-        _validate_job_config_data(config)
-        return
-
-    raise TypeError(f"Unsupported config type: {type(config).__name__}")
+    _dispatch_job_config_validator(config)
 
 
 def _validate_search_job_config(config: SearchJobConfig) -> None:
@@ -278,20 +287,17 @@ def validate_runtime_preflight(
     Returns:
         List of error message strings; empty if all checks pass
     """
-    from .job_config import InferenceJobConfig, SearchJobConfig, TrainingJobConfig
-
     errors: list[str] = []
 
     try:
-        match config:
-            case SearchJobConfig():
-                _validate_search_job_config(config)
-            case InferenceJobConfig():
-                _validate_inference_job_config(config)
-            case TrainingJobConfig():
-                _validate_job_config_data(config)
-            case _:
-                _validate_job_config_data(config)
+        _dispatch_job_config_validator(config)
+    except TypeError:
+        # Preflight is best-effort: fall back to generic data validation for
+        # unrecognized config types instead of raising.
+        try:
+            _validate_job_config_data(config)
+        except ConfigValidationError as e:
+            errors.append(str(e))
     except ConfigValidationError as e:
         errors.append(str(e))
 

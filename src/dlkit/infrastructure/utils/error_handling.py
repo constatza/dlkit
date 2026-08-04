@@ -7,17 +7,56 @@ from __future__ import annotations
 
 import inspect
 import uuid
-from typing import NoReturn
+from typing import NamedTuple, NoReturn
 
-from dlkit.common.errors import ConfigurationError, WorkflowError
+from dlkit.common.errors import WorkflowError
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 # Global logger for error handling
 _error_logger = get_logger(__name__, "error_handler")
 
 
+class _CallerContext(NamedTuple):
+    """Component/operation identifying the frame that called `raise_error`."""
+
+    component: str
+    operation: str
+
+
+def _resolve_caller_context() -> _CallerContext:
+    """Detect the calling component and operation from the call stack.
+
+    Walks two frames up from this helper (past `_resolve_caller_context`
+    itself and `raise_error`) to find the frame that invoked `raise_error`.
+    """
+    frame = inspect.currentframe()
+    component = "unknown"
+    operation = "unknown"
+
+    try:
+        caller_frame = frame.f_back.f_back if frame and frame.f_back else None
+        if caller_frame:
+            filename = caller_frame.f_code.co_filename
+            operation = caller_frame.f_code.co_name
+
+            # Extract component from filename path, e.g. ".../dlkit/workflows/x.py" -> "workflows"
+            parts = filename.split("/")
+            if "dlkit" in parts:
+                dlkit_idx = parts.index("dlkit")
+                if dlkit_idx + 1 < len(parts):
+                    component = parts[dlkit_idx + 1]
+    finally:
+        del frame  # Prevent reference cycles
+
+    return _CallerContext(component=component, operation=operation)
+
+
 def raise_error(
-    message: str, original_error: Exception | None = None, *, stage: str | None = None
+    message: str,
+    original_error: Exception | None = None,
+    *,
+    error_class: type[Exception] = WorkflowError,
+    stage: str | None = None,
 ) -> NoReturn:
     """Unified error raising with automatic context and logging.
 
@@ -25,48 +64,28 @@ def raise_error(
     - Detects the calling component from stack trace
     - Generates correlation ID for tracking
     - Logs the error with structured context
-    - Raises appropriate exception type
+    - Raises the exception type the caller specifies
     - Chains original exception for debugging
+
+    Callers must pass `error_class` explicitly when the default
+    (`WorkflowError`) isn't the right type — e.g. `ConfigurationError` for a
+    config-related failure. This is deliberate: the exception type is a
+    property of what failed, which only the caller knows, not something to
+    guess from the error message's wording.
 
     Args:
         message: Error message describing what failed
         original_error: Original exception to chain (optional)
+        error_class: Exception type to raise (defaults to `WorkflowError`)
+        stage: Optional workflow stage to record in the error context
 
     Raises:
-        WorkflowError: For workflow/execution errors
-        ConfigurationError: For config-related errors
-        DLKitError: For other domain errors
+        error_class: The exception type requested by the caller
     """
-    # Auto-detect component from call stack
-    frame = inspect.currentframe()
-    component = "unknown"
-    operation = "unknown"
-
-    try:
-        if frame and frame.f_back:
-            caller_frame = frame.f_back
-            filename = caller_frame.f_code.co_filename
-            function_name = caller_frame.f_code.co_name
-
-            # Extract component from filename path
-            if "dlkit" in filename:
-                parts = filename.split("/")
-                if "dlkit" in parts:
-                    dlkit_idx = parts.index("dlkit")
-                    if dlkit_idx + 1 < len(parts):
-                        component = parts[dlkit_idx + 1]  # e.g., "workflows", "api", "adapters"
-
-            operation = function_name
-    finally:
-        del frame  # Prevent reference cycles
+    component, operation = _resolve_caller_context()
 
     # Generate correlation ID
     correlation_id = str(uuid.uuid4())[:8]
-
-    # Determine exception type based on component or message content
-    error_class = WorkflowError  # Default
-    if component == "io" or "config" in message.lower():
-        error_class = ConfigurationError
 
     # Create context
     context = {"correlation_id": correlation_id, "component": component, "operation": operation}
@@ -98,7 +117,7 @@ def raise_error(
     else:
         _error_logger.error("Error in {}.{}: {}", component, operation, message)
 
-    # Raise the appropriate exception
+    # Raise the caller-specified exception
     if original_error:
         raise error_class(final_message, context) from original_error
     raise error_class(final_message, context)

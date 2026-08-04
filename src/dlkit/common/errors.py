@@ -84,6 +84,24 @@ class PlaceholderNotResolvedError(ValueError):
 class ConfigValidationError(ValueError):
     """Raised when configuration is incomplete, invalid, or fails validation."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        model_class: str = "",
+        section_data: dict[str, str] | None = None,
+    ) -> None:
+        """Initialize with a message and optional validation context.
+
+        Args:
+            message: Human-readable description of the validation failure.
+            model_class: Name of the Pydantic model that failed validation, if any.
+            section_data: Raw section data that failed validation, if any.
+        """
+        super().__init__(message)
+        self.model_class = model_class
+        self.section_data = section_data or {}
+
 
 class BatchComplianceError(ValueError):
     """Raised when dataset sources violate batch-shape invariants."""

@@ -56,8 +56,8 @@ def load_config[T: BaseModel](
     except Exception as e:
         raise ConfigValidationError(
             f"Failed to validate config with {resolved_model_class.__name__}: {e}",
-            resolved_model_class.__name__,
-            config_data,
+            model_class=resolved_model_class.__name__,
+            section_data=config_data,
         ) from e
 
     return validated
