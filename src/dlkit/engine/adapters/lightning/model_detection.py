@@ -1,14 +1,13 @@
 """Model-family detection helpers used during assembly.
 
-ABC-based model detection for SOLID compliance: replaces hardcoded
-isinstance checks with an extensible detector chain. Lives in the engine
-layer (not domain) because classification depends on ``lightning.pytorch``,
-which the domain layer must not import.
+Classifies a model settings object into a :class:`ModelType` based on the
+class it names. Lives in the engine layer (not domain) because
+classification depends on ``lightning.pytorch``, which the domain layer must
+not import.
 """
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from collections.abc import Callable
 from enum import Enum
 from typing import Any
@@ -29,144 +28,63 @@ class ModelType(Enum):
     GRAPH = "graph"
 
 
-class IModelTypeDetector(ABC):
-    """Interface for model type detection strategies."""
+def _get_model_class(model_settings: Any) -> type[object] | Callable[..., object] | None:
+    """Resolve the model class named by ``model_settings``.
 
-    @abstractmethod
-    def can_detect(self, model_settings: Any) -> bool:
-        """Check if this detector can classify the model.
+    Args:
+        model_settings: Model configuration settings.
 
-        Args:
-            model_settings: Model configuration settings
-
-        Returns:
-            True if this detector can classify the model
-        """
-        ...
-
-    @abstractmethod
-    def detect_type(self, model_settings: Any) -> ModelType:
-        """Detect the model type.
-
-        Args:
-            model_settings: Model configuration settings
-
-        Returns:
-            Detected model type
-        """
-        ...
-
-
-class ABCModelTypeDetector(IModelTypeDetector):
-    """ABC-based model type detector using inheritance checks."""
-
-    def can_detect(self, model_settings: Any) -> bool:
-        """Always can attempt detection."""
-        return True
-
-    def detect_type(self, model_settings: Any) -> ModelType:
-        """Detect model type using class inheritance.
-
-        Args:
-            model_settings: Model configuration settings
-
-        Returns:
-            Model type based on class inheritance
-        """
-        model_cls = self._get_model_class(model_settings)
-
-        if model_cls is None or not isinstance(model_cls, type):
-            return ModelType.SHAPE_AGNOSTIC_EXTERNAL
-
-        # Check inheritance
-        try:
-            from lightning.pytorch import LightningModule
-
-            from dlkit.domain.nn.graph.base import BaseGraphNetwork
-
-            if issubclass(model_cls, BaseGraphNetwork):
-                return ModelType.GRAPH
-
-            if issubclass(model_cls, LightningModule):
-                return ModelType.SHAPE_AGNOSTIC_EXTERNAL
-
-            if issubclass(model_cls, nn.Module):
-                return ModelType.SHAPE_AWARE_DLKIT
-
-        except ImportError as exc:
-            logger.debug("Model type detection could not import a classifier base: {}", exc)
-
-        return ModelType.SHAPE_AGNOSTIC_EXTERNAL
-
-    def _get_model_class(self, model_settings: Any) -> type[object] | Callable[..., object] | None:
-        """Get the model class from settings.
-
-        Args:
-            model_settings: Model configuration settings
-
-        Returns:
-            Model class if available, None otherwise
-        """
-        model_name = getattr(model_settings, "name", None)
-        if model_name is None:
-            return None
-
-        if isinstance(model_name, type):
-            return model_name
-
-        if isinstance(model_name, str):
-            try:
-                return import_object(
-                    model_name, fallback_module=getattr(model_settings, "module_path", "")
-                )
-            except (ImportError, AttributeError) as exc:
-                logger.debug("Could not import model class '{}': {}", model_name, exc)
-                return None
-
+    Returns:
+        Model class if available, None otherwise.
+    """
+    model_name = getattr(model_settings, "name", None)
+    if model_name is None:
         return None
 
+    if isinstance(model_name, type):
+        return model_name
 
-class ModelTypeDetectionChain:
-    """Chain of responsibility for model type detection."""
+    if isinstance(model_name, str):
+        try:
+            return import_object(
+                model_name, fallback_module=getattr(model_settings, "module_path", "")
+            )
+        except (ImportError, AttributeError) as exc:
+            logger.debug("Could not import model class '{}': {}", model_name, exc)
+            return None
 
-    def __init__(self, detectors: list[IModelTypeDetector] | None = None):
-        """Initialize detection chain.
-
-        Args:
-            detectors: List of detectors in order of preference
-        """
-        self._detectors = detectors or [
-            ABCModelTypeDetector(),
-        ]
-
-    def detect_model_type(self, model_settings: Any) -> ModelType:
-        """Detect model type using chain of detectors.
-
-        Args:
-            model_settings: Model configuration settings
-
-        Returns:
-            Detected model type
-        """
-        for detector in self._detectors:
-            if detector.can_detect(model_settings):
-                return detector.detect_type(model_settings)
-
-        # Should never reach here with ABCModelTypeDetector (always returns True for can_detect)
-        return ModelType.SHAPE_AGNOSTIC_EXTERNAL
-
-
-# Global instance for consistent detection
-_detection_chain = ModelTypeDetectionChain()
+    return None
 
 
 def detect_model_type(model_settings: Any) -> ModelType:
-    """Detect model type using the global detection chain.
+    """Detect model type using class inheritance.
 
     Args:
-        model_settings: Model configuration settings
+        model_settings: Model configuration settings.
 
     Returns:
-        Detected model type
+        Detected model type.
     """
-    return _detection_chain.detect_model_type(model_settings)
+    model_cls = _get_model_class(model_settings)
+
+    if model_cls is None or not isinstance(model_cls, type):
+        return ModelType.SHAPE_AGNOSTIC_EXTERNAL
+
+    try:
+        from lightning.pytorch import LightningModule
+
+        from dlkit.domain.nn.graph.base import BaseGraphNetwork
+
+        if issubclass(model_cls, BaseGraphNetwork):
+            return ModelType.GRAPH
+
+        if issubclass(model_cls, LightningModule):
+            return ModelType.SHAPE_AGNOSTIC_EXTERNAL
+
+        if issubclass(model_cls, nn.Module):
+            return ModelType.SHAPE_AWARE_DLKIT
+
+    except ImportError as exc:
+        logger.debug("Model type detection could not import a classifier base: {}", exc)
+
+    return ModelType.SHAPE_AGNOSTIC_EXTERNAL
