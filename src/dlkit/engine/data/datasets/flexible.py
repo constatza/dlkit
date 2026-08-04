@@ -38,10 +38,13 @@ def _build_nested_tensordict(
     """Build a nested TensorDict from typed feature and target tensor maps."""
     from tensordict import TensorDict
 
+    # tensordict's own runtime signature accepts a plain dict for `source`
+    # (`T | dict[NestedKey, CompatibleType] | None`); ty doesn't resolve
+    # that union branch against a `_TensorMap` argument — known stub limitation.
     return TensorDict(
         {
-            "features": TensorDict(feature_tensors, batch_size=batch_size),  # type: ignore
-            "targets": TensorDict(target_tensors, batch_size=batch_size),  # type: ignore
+            "features": TensorDict(feature_tensors, batch_size=batch_size),  # ty: ignore[invalid-argument-type]
+            "targets": TensorDict(target_tensors, batch_size=batch_size),  # ty: ignore[invalid-argument-type]
         },
         batch_size=batch_size,
     )

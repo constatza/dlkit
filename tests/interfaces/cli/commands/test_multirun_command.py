@@ -39,7 +39,7 @@ def mock_multirun_job() -> SimpleNamespace:
 
 
 @pytest.fixture
-def mock_multirun_result() -> MultiRunResult:  # type: ignore[type-arg]
+def mock_multirun_result() -> MultiRunResult:
     """A real MultiRunResult with one success and one failure child.
 
     Built from real dataclasses (not Mocks) since the CLI presenter
@@ -70,7 +70,7 @@ class TestMultirunRunCommand:
         cli_runner: CliRunner,
         multirun_config_path: Path,
         mock_multirun_job: SimpleNamespace,
-        mock_multirun_result: MultiRunResult,  # type: ignore[type-arg]
+        mock_multirun_result: MultiRunResult,
     ) -> None:
         with (
             patch(
@@ -93,7 +93,7 @@ class TestMultirunRunCommand:
         cli_runner: CliRunner,
         multirun_config_path: Path,
         mock_multirun_job: SimpleNamespace,
-        mock_multirun_result: MultiRunResult,  # type: ignore[type-arg]
+        mock_multirun_result: MultiRunResult,
     ) -> None:
         with (
             patch(

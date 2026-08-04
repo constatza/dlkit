@@ -166,7 +166,7 @@ def test_optuna_backend_session_suggests_plain_hyperparameters(
         self.params[name] = value
         return value
 
-    _FakeOptunaTrial.suggest_categorical = _fake_suggest_categorical  # type: ignore
+    _FakeOptunaTrial.suggest_categorical = _fake_suggest_categorical  # ty: ignore[invalid-assignment]
 
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
     base_settings = SimpleNamespace(search=search_settings_with_choices)
@@ -273,7 +273,7 @@ def test_optuna_backend_session_cleans_up_after_sampling_failure(
     def _raise_sampling_error(self: _FakeOptunaTrial, name: str, choices: list) -> None:
         raise RuntimeError("sampling failed")
 
-    _FakeOptunaTrial.suggest_categorical = _raise_sampling_error  # type: ignore
+    _FakeOptunaTrial.suggest_categorical = _raise_sampling_error  # ty: ignore[invalid-assignment]
 
     session = OptunaOptimizationBackendSession(repository.study_registry, optuna)
 

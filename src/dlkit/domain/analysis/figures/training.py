@@ -66,7 +66,7 @@ def loss_curve_figure(
     ax_loss.set_ylabel(ylabel)
 
     if show_lr and ax_lr is not None:
-        lr_epochs = range(1, len(lr_values) + 1)  # type: ignore[arg-type]
+        lr_epochs = range(1, len(lr_values) + 1)
         ax_lr.plot(lr_epochs, lr_values, color="green")
         ax_lr.set_yscale("log")
         ax_lr.set_ylabel("LR")

@@ -159,10 +159,13 @@ class NamedBatchTransformer(nn.Module):
                 # Same zero-copy passthrough rationale as features above.
                 new_targets[k] = cast(Tensor, batch[tn, k])
 
+        # tensordict's own runtime signature accepts a plain dict for `source`
+        # (`T | dict[NestedKey, CompatibleType] | None`); ty doesn't resolve
+        # that union branch against a dict literal — known stub limitation.
         return TensorDict(
             {
-                fn: TensorDict(new_features, batch_size=batch.batch_size),  # type: ignore
-                tn: TensorDict(new_targets, batch_size=batch.batch_size),  # type: ignore
+                fn: TensorDict(new_features, batch_size=batch.batch_size),  # ty: ignore[invalid-argument-type]
+                tn: TensorDict(new_targets, batch_size=batch.batch_size),  # ty: ignore[invalid-argument-type]
             },
             batch_size=batch.batch_size,
         )
@@ -203,7 +206,11 @@ class NamedBatchTransformer(nn.Module):
                             )
                         case _:
                             result[k] = cast(Tensor | TensorDictBase, v)
-                return TensorDict(result, batch_size=predictions.batch_size)  # type: ignore
+                # Same tensordict stub limitation as above.
+                return TensorDict(
+                    result,  # ty: ignore[invalid-argument-type]
+                    batch_size=predictions.batch_size,
+                )
 
     def fit(self, dataloader: Iterable[TensorDictBase]) -> None:
         """Fit all fittable transforms using training data.

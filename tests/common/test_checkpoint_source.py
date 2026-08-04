@@ -67,7 +67,7 @@ def test_latest_run_checkpoint_named_construction(
 def test_run_checkpoint_is_frozen(run_checkpoint: RunCheckpoint) -> None:
     """RunCheckpoint is frozen and raises FrozenInstanceError on mutation."""
     with pytest.raises(FrozenInstanceError):
-        run_checkpoint.run_id = "different-run"  # type: ignore
+        run_checkpoint.run_id = "different-run"  # ty: ignore[invalid-assignment]
 
 
 def test_latest_run_checkpoint_is_frozen(
@@ -75,7 +75,7 @@ def test_latest_run_checkpoint_is_frozen(
 ) -> None:
     """LatestRunCheckpoint is frozen and raises FrozenInstanceError on mutation."""
     with pytest.raises(FrozenInstanceError):
-        latest_run_checkpoint_named.experiment_name = "different-experiment"  # type: ignore
+        latest_run_checkpoint_named.experiment_name = "different-experiment"  # ty: ignore[invalid-assignment]
 
 
 def test_run_checkpoint_equality(

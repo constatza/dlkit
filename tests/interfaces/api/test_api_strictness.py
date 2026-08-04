@@ -79,7 +79,7 @@ def test_train_rejects_dict_overrides(training_config: TrainingJobConfig) -> Non
     with pytest.raises(
         TypeError, match="overrides must be provided as TrainingOverrides, got dict"
     ):
-        train(training_config, overrides={"epochs": 10})  # type: ignore[arg-type]
+        train(training_config, overrides={"epochs": 10})
 
 
 def test_optimize_rejects_dict_overrides(optimization_config: SearchJobConfig) -> None:
@@ -87,7 +87,7 @@ def test_optimize_rejects_dict_overrides(optimization_config: SearchJobConfig) -
     with pytest.raises(
         TypeError, match="overrides must be provided as OptimizationOverrides, got dict"
     ):
-        optimize(optimization_config, overrides={"trials": 10})  # type: ignore[arg-type]
+        optimize(optimization_config, overrides={"trials": 10})
 
 
 def test_execute_rejects_dict_overrides(training_config: TrainingJobConfig) -> None:
@@ -95,4 +95,4 @@ def test_execute_rejects_dict_overrides(training_config: TrainingJobConfig) -> N
     with pytest.raises(
         TypeError, match="overrides must be provided as ExecutionOverrides, got dict"
     ):
-        execute(training_config, overrides={"epochs": 10})  # type: ignore[arg-type]
+        execute(training_config, overrides={"epochs": 10})
