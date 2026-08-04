@@ -9,7 +9,6 @@ from dlkit.domain.nn import (
     DenseMLPBlock,
     DLKitModule,
     DualPathFFNN,
-    EmbeddedDeepONet,
     EmbeddedFactorizedFFNN,
     EmbeddedHyperFFNN,
     EmbeddedMoEFFNN,
@@ -143,7 +142,6 @@ __all__ = [
     "DeepONet",
     "VarWidthDeepONet",
     "FFNNDeepONet",
-    "EmbeddedDeepONet",
     "HyperDeepONet",
     "MoEDeepONet",
     # Gating mechanisms and gated building blocks

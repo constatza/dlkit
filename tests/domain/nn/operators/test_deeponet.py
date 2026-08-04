@@ -9,10 +9,10 @@ import torch
 from torch import nn
 
 from dlkit.common.shapes import ShapeContext
+from dlkit.domain.nn.ffnn import EmbeddedHyperFFNN, EmbeddedMoEFFNN
 from dlkit.domain.nn.ffnn.residual import FFNN
 from dlkit.domain.nn.operators import (
     DeepONet,
-    EmbeddedDeepONet,
     FFNNDeepONet,
     HyperDeepONet,
     IOperatorNetwork,
@@ -20,6 +20,7 @@ from dlkit.domain.nn.operators import (
     MoEDeepONet,
     VarWidthDeepONet,
 )
+from dlkit.domain.nn.primitives import HyperConnection, SparseMoE
 
 from ..conftest import VarianceBand
 
@@ -111,24 +112,6 @@ class TestDeepONetVariants:
         trunk = torch.randn(batch_size, 1, 1)
         assert model(deeponet_branch, trunk).shape == (batch_size, 1, 5)
 
-    def test_embedded_deeponet_uses_regular_vector_and_coordinate_input(
-        self,
-        deeponet_branch: torch.Tensor,
-        batch_size: int,
-    ) -> None:
-        model = EmbeddedDeepONet(
-            branch_in_features=20,
-            out_features=4,
-            trunk_dim=2,
-            basis_dim=10,
-            branch_hidden_size=32,
-            branch_num_layers=2,
-            trunk_hidden_size=28,
-            trunk_num_layers=3,
-        )
-        trunk = torch.randn(batch_size, 1, 2)
-        assert model(deeponet_branch, trunk).shape == (batch_size, 1, 4)
-
     def test_variants_support_trunk_batches(
         self,
         deeponet_branch: torch.Tensor,
@@ -137,16 +120,6 @@ class TestDeepONetVariants:
     ) -> None:
         for model in (
             FFNNDeepONet(
-                branch_in_features=20,
-                out_features=2,
-                trunk_dim=2,
-                basis_dim=8,
-                branch_hidden_size=16,
-                branch_num_layers=2,
-                trunk_hidden_size=12,
-                trunk_num_layers=2,
-            ),
-            EmbeddedDeepONet(
                 branch_in_features=20,
                 out_features=2,
                 trunk_dim=2,
@@ -402,7 +375,8 @@ class TestHyperAndMoEDeepONetVariants:
         trunk = torch.randn(batch_size, n_queries, 1)
         model(deeponet_branch, trunk).sum().backward()
 
-        branch_hyper_layer = model.branch_net.body.layers[0]
+        branch_net = cast(EmbeddedHyperFFNN, model.branch_net)
+        branch_hyper_layer = cast(HyperConnection, branch_net.body.layers[0])
         assert branch_hyper_layer.pre_delta.grad is not None
         assert branch_hyper_layer.post_delta.grad is not None
 
@@ -429,7 +403,8 @@ class TestHyperAndMoEDeepONetVariants:
         trunk = torch.randn(batch_size, n_queries, 1)
         model(deeponet_branch, trunk).sum().backward()
 
-        branch_moe_layer = model.branch_net.body.layers[0]
+        branch_net = cast(EmbeddedMoEFFNN, model.branch_net)
+        branch_moe_layer = cast(SparseMoE, branch_net.body.layers[0])
         assert branch_moe_layer.router.proj.weight.grad is not None
 
     def test_hyper_deeponet_from_context_resolves_shapes(
@@ -445,8 +420,8 @@ class TestHyperAndMoEDeepONetVariants:
             trunk_hidden_size=12,
             trunk_num_layers=2,
         )
-        assert model.branch_net.embedding_layer.in_features == 100
-        assert model.trunk_net.embedding_layer.in_features == 2
+        assert cast(EmbeddedHyperFFNN, model.branch_net).embedding_layer.in_features == 100
+        assert cast(EmbeddedHyperFFNN, model.trunk_net).embedding_layer.in_features == 2
 
     def test_hyper_deeponet_lane_hidden_features_sizes_internal_block(
         self,
@@ -469,7 +444,8 @@ class TestHyperAndMoEDeepONetVariants:
         trunk = torch.randn(batch_size, n_queries, 1)
 
         assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 2)
-        branch_hyper_layer = model.branch_net.body.layers[0]
+        branch_net = cast(EmbeddedHyperFFNN, model.branch_net)
+        branch_hyper_layer = cast(HyperConnection, branch_net.body.layers[0])
         assert branch_hyper_layer.module.hidden_features == 32
 
     def test_moe_deeponet_expert_hidden_features_sizes_internal_block(
@@ -495,7 +471,8 @@ class TestHyperAndMoEDeepONetVariants:
         trunk = torch.randn(batch_size, n_queries, 1)
 
         assert model(deeponet_branch, trunk).shape == (batch_size, n_queries, 2)
-        branch_moe_layer = model.branch_net.body.layers[0]
+        branch_net = cast(EmbeddedMoEFFNN, model.branch_net)
+        branch_moe_layer = cast(SparseMoE, branch_net.body.layers[0])
         for expert in branch_moe_layer.experts:
             assert expert.hidden_features == 32
 

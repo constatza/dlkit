@@ -28,7 +28,7 @@ If the query coordinates are not explicitly marked as `TARGET_COORDINATES`, the 
   inner product over the `basis_dim` axis (`torch.einsum("bop,bqop->bqo", ...)`
   in `DeepONet.forward`). It is derived, not an independent constructor kwarg.
 - `branch_hidden_size` / `trunk_hidden_size`: the internal hidden-layer width
-  of each constant-width network (`FFNNDeepONet`/`EmbeddedDeepONet` only).
+  of each constant-width network (`FFNNDeepONet` only).
   Independent of `basis_dim` — controls how each network processes data
   internally, not the width it must output. Required, no default: `latent_dim`
   can be orders of magnitude larger than `branch_in_features`/`trunk_dim`, and
@@ -118,29 +118,6 @@ Constructor dimensions:
 - `trunk_layers`
 
 ## `FFNNDeepONet`
-
-Input/output dimensions:
-- branch input after flattening: `(B, flattened_branch_width)`
-- trunk input: `(B, n_queries, trunk_dim)`
-- output: `(B, n_queries, out_features)`
-
-Architecture dimensions:
-- branch FFNN output: `(B, basis_dim * out_features)`
-- trunk FFNN output: `(B * n_queries, basis_dim * out_features)`
-
-Constructor dimensions:
-- `branch_in_features`: flattened branch width
-- `branch_in_features = prod(branch_shape)` derived from the first input shape
-- common sensor-vector case: `branch_shape = (n_sensors,) -> branch_in_features = n_sensors`
-- `trunk_dim = trunk_shape[-1]` derived from the trunk input shape
-- `basis_dim`
-- `out_features`
-- `branch_hidden_size`
-- `branch_num_layers`
-- `trunk_hidden_size`
-- `trunk_num_layers`
-
-## `EmbeddedDeepONet`
 
 Input/output dimensions:
 - branch input after flattening: `(B, flattened_branch_width)`

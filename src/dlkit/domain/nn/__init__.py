@@ -28,7 +28,6 @@ from .ffnn.scale_equivariant import (
 )
 from .operators import (
     DeepONet,
-    EmbeddedDeepONet,
     FFNNDeepONet,
     FourierNeuralOperator1d,
     GridOperatorBase,
@@ -161,7 +160,6 @@ __all__ = [
     "DeepONet",
     "VarWidthDeepONet",
     "FFNNDeepONet",
-    "EmbeddedDeepONet",
     "HyperDeepONet",
     "MoEDeepONet",
     # Gating mechanisms and gated building blocks

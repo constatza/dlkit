@@ -88,7 +88,7 @@ class TestAbstractSkip:
     def test_dlkit_module_itself_is_not_instantiable(self) -> None:
         """DLKitModule declares forward() abstract; it cannot be instantiated directly."""
         with pytest.raises(TypeError, match="abstract"):
-            DLKitModule()  # type: ignore[abstract]
+            DLKitModule()
 
     def test_intermediate_abstract_subclass_does_not_raise_on_definition(self) -> None:
         """A subclass that still leaves forward() abstract is not contract-checked yet."""
@@ -97,7 +97,7 @@ class TestAbstractSkip:
     def test_intermediate_abstract_subclass_is_not_instantiable(self) -> None:
         """Still-abstract intermediate bases remain non-instantiable, same as nn.Module/ABC."""
         with pytest.raises(TypeError, match="abstract"):
-            _AbstractIntermediateModel()  # type: ignore[abstract]
+            _AbstractIntermediateModel()
 
 
 # ---------------------------------------------------------------------------

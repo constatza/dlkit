@@ -157,6 +157,155 @@ class _FlatBranchDeepONet(DeepONet, DLKitModule):
         return super().forward(branch.reshape(branch.shape[0], -1), trunk)
 
 
+type DeepONetSubnetKind = Literal["var_width", "ffnn", "hyper", "moe"]
+
+
+def _resolve_deeponet_subnet_factory(
+    kind: DeepONetSubnetKind,
+    *,
+    activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
+    normalize: Literal["batch", "layer"] | None = None,
+    dropout: float = 0.0,
+    bias: bool = True,
+    block_kind: DenseBlockKind = "parametric",
+    linear_kind: DenseLinearKind = "linear",
+    top_k: int = 2,
+    router_activation: Literal["softmax", "normalized_sigmoid"] = "softmax",
+    capacity_factor: float | None = None,
+    drop_policy: Literal["none", "drop"] = "none",
+    jitter_noise: float = 0.0,
+) -> Callable[..., nn.Module]:
+    """Resolve a branch/trunk sub-network factory for one DeepONet FFNN-family kind.
+
+    Every ``*DeepONet`` preset subclass builds a branch-side and a trunk-side
+    network from the same underlying FFNN-family class with mirrored
+    ``branch_*``/``trunk_*`` kwargs. This centralizes that construction: the
+    kwargs shared identically by both sides (``activation``, ``normalize``,
+    ``dropout``, ``bias``, and — for ``"hyper"``/``"moe"`` — the
+    block/routing knobs) are bound once here, and the returned factory is
+    then called twice with only the per-side sizing kwargs that actually
+    differ between branch and trunk.
+
+    Args:
+        kind: Which FFNN-family class to build (``"var_width"`` ->
+            :class:`VarWidthFFNN`, ``"ffnn"`` -> :class:`FFNN`, ``"hyper"``
+            -> :class:`EmbeddedHyperFFNN`, ``"moe"`` -> :class:`EmbeddedMoEFFNN`).
+        activation: Shared activation for both sides.
+        normalize: Shared normalization strategy for both sides.
+        dropout: Shared dropout probability for both sides.
+        bias: Shared bias flag for both sides.
+        block_kind: Shared dense-block kind (``"hyper"``/``"moe"`` only).
+        linear_kind: Shared linear-layer kind (``"hyper"``/``"moe"`` only).
+        top_k: Shared expert fan-out (``"moe"`` only).
+        router_activation: Shared router activation (``"moe"`` only).
+        capacity_factor: Shared expert capacity factor (``"moe"`` only).
+        drop_policy: Shared token-drop policy (``"moe"`` only).
+        jitter_noise: Shared router jitter noise (``"moe"`` only).
+
+    Returns:
+        A factory taking ``in_features``, ``out_features``, and the
+        kind-specific per-side sizing kwargs (``layers`` for
+        ``"var_width"``; ``hidden_size``/``num_layers`` for ``"ffnn"``; those
+        plus ``num_lanes``/``lane_hidden_features`` for ``"hyper"``; those
+        plus ``num_experts``/``expert_hidden_features`` for ``"moe"``), and
+        returning the constructed sub-network module.
+    """
+    match kind:
+        case "var_width":
+            resolved = resolve_activation(activation)
+
+            def build(*, in_features: int, out_features: int, layers: Sequence[int]) -> nn.Module:
+                return VarWidthFFNN(
+                    in_features=in_features,
+                    out_features=out_features,
+                    layers=layers,
+                    activation=resolved,
+                    normalize=normalize,
+                    dropout=dropout,
+                    bias=bias,
+                )
+
+            return build
+        case "ffnn":
+            resolved = resolve_activation(activation)
+
+            def build(
+                *, in_features: int, out_features: int, hidden_size: int, num_layers: int
+            ) -> nn.Module:
+                return FFNN(
+                    in_features=in_features,
+                    out_features=out_features,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    activation=resolved,
+                    normalize=normalize,
+                    dropout=dropout,
+                    bias=bias,
+                )
+
+            return build
+        case "hyper":
+
+            def build(
+                *,
+                in_features: int,
+                out_features: int,
+                hidden_size: int,
+                num_layers: int,
+                num_lanes: int,
+                lane_hidden_features: int | None,
+            ) -> nn.Module:
+                return EmbeddedHyperFFNN(
+                    in_features=in_features,
+                    out_features=out_features,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    num_lanes=num_lanes,
+                    lane_hidden_features=lane_hidden_features,
+                    block_kind=block_kind,
+                    linear_kind=linear_kind,
+                    activation=activation,
+                    normalize=normalize,
+                    dropout=dropout,
+                    bias=bias,
+                )
+
+            return build
+        case "moe":
+
+            def build(
+                *,
+                in_features: int,
+                out_features: int,
+                hidden_size: int,
+                num_layers: int,
+                num_experts: int,
+                expert_hidden_features: int | None,
+            ) -> nn.Module:
+                return EmbeddedMoEFFNN(
+                    in_features=in_features,
+                    out_features=out_features,
+                    hidden_size=hidden_size,
+                    num_layers=num_layers,
+                    num_experts=num_experts,
+                    expert_hidden_features=expert_hidden_features,
+                    top_k=top_k,
+                    block_kind=block_kind,
+                    linear_kind=linear_kind,
+                    router_activation=router_activation,
+                    capacity_factor=capacity_factor,
+                    drop_policy=drop_policy,
+                    jitter_noise=jitter_noise,
+                    return_stats=False,
+                    activation=activation,
+                    normalize=normalize,
+                    dropout=dropout,
+                    bias=bias,
+                )
+
+            return build
+
+
 class VarWidthDeepONet(_FlatBranchDeepONet):
     """DeepONet with variable-width FFNN branch and trunk networks.
 
@@ -196,25 +345,19 @@ class VarWidthDeepONet(_FlatBranchDeepONet):
             raise ValueError("branch_layers must contain at least one hidden width")
         if not trunk_layers:
             raise ValueError("trunk_layers must contain at least one hidden width")
-        resolved = resolve_activation(activation)
         latent_dim = basis_dim * out_features
-        branch_net = VarWidthFFNN(
-            in_features=branch_in_features,
-            out_features=latent_dim,
-            layers=branch_layers,
-            activation=resolved,
+        build_subnet = _resolve_deeponet_subnet_factory(
+            "var_width",
+            activation=activation,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
         )
-        trunk_net = VarWidthFFNN(
-            in_features=trunk_dim,
-            out_features=latent_dim,
-            layers=trunk_layers,
-            activation=resolved,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
+        branch_net = build_subnet(
+            in_features=branch_in_features, out_features=latent_dim, layers=branch_layers
+        )
+        trunk_net = build_subnet(
+            in_features=trunk_dim, out_features=latent_dim, layers=trunk_layers
         )
         super().__init__(
             branch_net=branch_net,
@@ -262,27 +405,25 @@ class FFNNDeepONet(_FlatBranchDeepONet):
         dropout: float = 0.0,
         bias: bool = True,
     ) -> None:
-        resolved = resolve_activation(activation)
         latent_dim = basis_dim * out_features
-        branch_net = FFNN(
-            in_features=branch_in_features,
-            out_features=latent_dim,
-            hidden_size=branch_hidden_size,
-            num_layers=branch_num_layers,
-            activation=resolved,
+        build_subnet = _resolve_deeponet_subnet_factory(
+            "ffnn",
+            activation=activation,
             normalize=normalize,
             dropout=dropout,
             bias=bias,
         )
-        trunk_net = FFNN(
+        branch_net = build_subnet(
+            in_features=branch_in_features,
+            out_features=latent_dim,
+            hidden_size=branch_hidden_size,
+            num_layers=branch_num_layers,
+        )
+        trunk_net = build_subnet(
             in_features=trunk_dim,
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
-            activation=resolved,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
         )
         super().__init__(
             branch_net=branch_net,
@@ -344,13 +485,8 @@ class HyperDeepONet(_FlatBranchDeepONet):
         bias: bool = True,
     ) -> None:
         latent_dim = basis_dim * out_features
-        branch_net = EmbeddedHyperFFNN(
-            in_features=branch_in_features,
-            out_features=latent_dim,
-            hidden_size=branch_hidden_size,
-            num_layers=branch_num_layers,
-            num_lanes=branch_num_lanes,
-            lane_hidden_features=branch_lane_hidden_features,
+        build_subnet = _resolve_deeponet_subnet_factory(
+            "hyper",
             block_kind=block_kind,
             linear_kind=linear_kind,
             activation=activation,
@@ -358,19 +494,21 @@ class HyperDeepONet(_FlatBranchDeepONet):
             dropout=dropout,
             bias=bias,
         )
-        trunk_net = EmbeddedHyperFFNN(
+        branch_net = build_subnet(
+            in_features=branch_in_features,
+            out_features=latent_dim,
+            hidden_size=branch_hidden_size,
+            num_layers=branch_num_layers,
+            num_lanes=branch_num_lanes,
+            lane_hidden_features=branch_lane_hidden_features,
+        )
+        trunk_net = build_subnet(
             in_features=trunk_dim,
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
             num_lanes=trunk_num_lanes,
             lane_hidden_features=trunk_lane_hidden_features,
-            block_kind=block_kind,
-            linear_kind=linear_kind,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
         )
         super().__init__(
             branch_net=branch_net,
@@ -444,113 +582,35 @@ class MoEDeepONet(_FlatBranchDeepONet):
         bias: bool = True,
     ) -> None:
         latent_dim = basis_dim * out_features
-        branch_net = EmbeddedMoEFFNN(
+        build_subnet = _resolve_deeponet_subnet_factory(
+            "moe",
+            block_kind=block_kind,
+            linear_kind=linear_kind,
+            top_k=top_k,
+            router_activation=router_activation,
+            capacity_factor=capacity_factor,
+            drop_policy=drop_policy,
+            jitter_noise=jitter_noise,
+            activation=activation,
+            normalize=normalize,
+            dropout=dropout,
+            bias=bias,
+        )
+        branch_net = build_subnet(
             in_features=branch_in_features,
             out_features=latent_dim,
             hidden_size=branch_hidden_size,
             num_layers=branch_num_layers,
             num_experts=branch_num_experts,
             expert_hidden_features=branch_expert_hidden_features,
-            top_k=top_k,
-            block_kind=block_kind,
-            linear_kind=linear_kind,
-            router_activation=router_activation,
-            capacity_factor=capacity_factor,
-            drop_policy=drop_policy,
-            jitter_noise=jitter_noise,
-            return_stats=False,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
         )
-        trunk_net = EmbeddedMoEFFNN(
+        trunk_net = build_subnet(
             in_features=trunk_dim,
             out_features=latent_dim,
             hidden_size=trunk_hidden_size,
             num_layers=trunk_num_layers,
             num_experts=trunk_num_experts,
             expert_hidden_features=trunk_expert_hidden_features,
-            top_k=top_k,
-            block_kind=block_kind,
-            linear_kind=linear_kind,
-            router_activation=router_activation,
-            capacity_factor=capacity_factor,
-            drop_policy=drop_policy,
-            jitter_noise=jitter_noise,
-            return_stats=False,
-            activation=activation,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
-        )
-        super().__init__(
-            branch_net=branch_net,
-            trunk_net=trunk_net,
-            basis_dim=basis_dim,
-            out_features=out_features,
-        )
-
-
-class EmbeddedDeepONet(_FlatBranchDeepONet):
-    """DeepONet with embedded dense residual FFNN branch and trunk networks.
-
-    Input/output dimensions:
-        branch input after flattening: ``(batch, flattened_branch_width)``
-        trunk input: ``(batch, n_queries, trunk_dim)``
-        output: ``(batch, n_queries, out_features)``
-
-    Architecture dimensions:
-        branch FFNN output: ``(batch, basis_dim * out_features)``
-        trunk FFNN output: ``(batch * n_queries, basis_dim * out_features)``
-
-    Constructor dimensions:
-        ``branch_in_features``: flattened branch width
-        ``branch_in_features = prod(branch_shape)`` derived from the first input shape
-        common sensor-vector case: ``branch_shape = (n_sensors,)`` gives
-        ``branch_in_features = n_sensors``
-        ``trunk_dim = trunk_shape[-1]`` derived from the trunk input shape
-        ``basis_dim``, ``out_features``, ``branch_hidden_size``,
-        ``branch_num_layers``, ``trunk_hidden_size``, ``trunk_num_layers``
-    """
-
-    def __init__(
-        self,
-        *,
-        branch_in_features: int,
-        out_features: int,
-        trunk_dim: int,
-        basis_dim: int,
-        branch_hidden_size: int,
-        branch_num_layers: int = 4,
-        trunk_hidden_size: int,
-        trunk_num_layers: int = 4,
-        activation: ActivationName | Callable[[Tensor], Tensor] | None = None,
-        normalize: Literal["batch", "layer"] | None = None,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ) -> None:
-        resolved = resolve_activation(activation)
-        latent_dim = basis_dim * out_features
-        branch_net = FFNN(
-            in_features=branch_in_features,
-            out_features=latent_dim,
-            hidden_size=branch_hidden_size,
-            num_layers=branch_num_layers,
-            activation=resolved,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
-        )
-        trunk_net = FFNN(
-            in_features=trunk_dim,
-            out_features=latent_dim,
-            hidden_size=trunk_hidden_size,
-            num_layers=trunk_num_layers,
-            activation=resolved,
-            normalize=normalize,
-            dropout=dropout,
-            bias=bias,
         )
         super().__init__(
             branch_net=branch_net,

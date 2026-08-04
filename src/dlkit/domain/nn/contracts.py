@@ -201,7 +201,7 @@ class StandardEntryConsumer:
                 f"{set(shape_kwargs)} but shape_kwarg_names() declares "
                 f"{cls.shape_kwarg_names()} — keep them in sync"
             )
-        return cls(**shape_kwargs, **kwargs)  # type: ignore[call-arg]
+        return cls(**shape_kwargs, **kwargs)
 
 
 __all__ = [

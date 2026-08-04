@@ -163,7 +163,7 @@ class TestOutputSpec:
     def test_allows_extra_fields(self) -> None:
         """Extra fields are permitted."""
         spec = OutputSpec.model_validate({"y": (2,)})
-        assert spec.y == (2,)  # type: ignore  # extra="allow" field
+        assert spec.y == (2,)  # ty: ignore[unresolved-attribute]  # extra="allow" field
 
     def test_empty_construction_is_valid(self) -> None:
         """OutputSpec can be constructed with no fields."""

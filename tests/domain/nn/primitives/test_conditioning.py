@@ -282,7 +282,7 @@ def conditioned_body_output(
 def test_iconditioned_module_cannot_be_instantiated_directly() -> None:
     """Direct instantiation of IConditionedModule must raise TypeError."""
     with pytest.raises(TypeError):
-        IConditionedModule()  # type: ignore[abstract]
+        IConditionedModule()
 
 
 def test_iconditioned_module_concrete_subclass_can_be_instantiated(
@@ -304,7 +304,7 @@ def test_iconditioned_module_concrete_subclass_is_abstract_subtype() -> None:
         pass
 
     with pytest.raises(TypeError):
-        _NoForward()  # type: ignore[abstract]
+        _NoForward()
 
 
 # ── AsConditioned tests ────────────────────────────────────────────────────────

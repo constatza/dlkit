@@ -196,5 +196,5 @@ def test_se_embedded_moe_does_not_expose_return_stats() -> None:
             hidden_size=7,
             num_layers=2,
             num_experts=3,
-            return_stats=True,  # type: ignore[call-arg]
+            return_stats=True,  # ty: ignore[unknown-argument]
         )

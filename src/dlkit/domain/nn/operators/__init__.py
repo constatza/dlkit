@@ -1,7 +1,6 @@
 from .base import GridOperatorBase, IGridOperator, IOperatorNetwork, IQueryOperator
 from .deeponet import (
     DeepONet,
-    EmbeddedDeepONet,
     FFNNDeepONet,
     HyperDeepONet,
     MoEDeepONet,
@@ -21,7 +20,6 @@ __all__ = [
     "DeepONet",
     "VarWidthDeepONet",
     "FFNNDeepONet",
-    "EmbeddedDeepONet",
     "HyperDeepONet",
     "MoEDeepONet",
 ]

@@ -168,8 +168,7 @@ def test_embedded_hyper_ffnn_lane_hidden_features_sizes_internal_block() -> None
     assert out.shape == (4, 5)
     for layer in model.body.layers:
         hyper_layer = cast(HyperConnection, layer)
-        block = cast(nn.Module, hyper_layer.module)
-        assert block.hidden_features == 32
+        assert hyper_layer.module.hidden_features == 32
 
 
 def test_embedded_moe_ffnn_expert_hidden_features_sizes_internal_block() -> None:
