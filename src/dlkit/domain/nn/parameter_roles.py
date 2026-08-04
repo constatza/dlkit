@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from enum import Enum, auto
+from enum import Enum, StrEnum, auto
+
+
+class SiteKind(StrEnum):
+    """Kind of FX graph site a parameterized operation was extracted from."""
+
+    MODULE = "module"
+    FUNCTION = "function"
 
 
 class ParameterRole(Enum):

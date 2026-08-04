@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.fx import GraphModule, Node, Tracer
 
-from dlkit.domain.nn.parameter_roles import ParameterRole
+from dlkit.domain.nn.parameter_roles import ParameterRole, SiteKind
 
 _MISSING = object()
 _SUPPORTED_FUNCTIONS = {
@@ -44,7 +44,7 @@ class _Site:
 
     site_id: int
     node: Node
-    kind: str
+    kind: SiteKind
     label: str
     parameter_names: tuple[str, ...]
     parameter_ids: tuple[int, ...]
@@ -275,7 +275,7 @@ class GraphParameterRoleClassifier:
         return _Site(
             site_id=site_id,
             node=node,
-            kind="module",
+            kind=SiteKind.MODULE,
             label=module_path,
             parameter_names=parameter_names,
             parameter_ids=tuple(id(parameter) for parameter in parameters),
@@ -315,7 +315,7 @@ class GraphParameterRoleClassifier:
         return _Site(
             site_id=site_id,
             node=node,
-            kind="function",
+            kind=SiteKind.FUNCTION,
             label=getattr(target, "__name__", repr(target)),
             parameter_names=parameter_names,
             parameter_ids=tuple(id(parameter) for parameter in parameters),
