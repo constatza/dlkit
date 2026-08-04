@@ -85,6 +85,7 @@ def _split_filepath(training_settings: TrainingJobConfig) -> Path:
     assert training_cfg is not None
     trainer_cfg = training_cfg.trainer
     assert trainer_cfg is not None
+    assert trainer_cfg.default_root_dir is not None
     split_files = list(Path(trainer_cfg.default_root_dir).glob("splits/*.json"))
     assert len(split_files) == 1, f"expected exactly one split file, found {split_files}"
     return split_files[0]
@@ -213,13 +214,14 @@ def test_evaluate_multirun_evaluates_every_child_run(
         # child_id carries the source checkpoint's run identity.
         assert {child.child_id for child in result.children} == expected_run_ids
         for child in result.children:
+            assert isinstance(child, ChildSuccess)
             assert isinstance(child.result, EvaluationResult)
             assert child.result.metrics.keys() == {"mae", "rmse", "r2"}
             assert all(isinstance(v, float) for v in child.result.metrics.values())
             assert child.result.predictions.shape[0] == child.result.targets.shape[0] > 0
     finally:
         for child in result.children:
-            if isinstance(child, ChildSuccess):
+            if isinstance(child, ChildSuccess) and isinstance(child.result, EvaluationResult):
                 for fig in child.result.figures.values():
                     plt.close(fig)
 
@@ -250,7 +252,7 @@ def test_evaluate_multirun_tags_children_and_logs_each_child(
         assert set(tagged_children) == {child.run_id for child in result.children}
     finally:
         for child in result.children:
-            if isinstance(child, ChildSuccess):
+            if isinstance(child, ChildSuccess) and isinstance(child.result, EvaluationResult):
                 for fig in child.result.figures.values():
                     plt.close(fig)
 
@@ -327,7 +329,7 @@ def test_evaluate_multirun_callable_settings_resolves_per_child(
         assert {child.child_id for child in result.children} == set(run_ids)
     finally:
         for child in result.children:
-            if isinstance(child, ChildSuccess):
+            if isinstance(child, ChildSuccess) and isinstance(child.result, EvaluationResult):
                 for fig in child.result.figures.values():
                     plt.close(fig)
 
@@ -352,11 +354,13 @@ def test_evaluate_multirun_continue_policy_records_child_failures(
     original = evaluate_module.download_checkpoint_artifact
     calls = {"count": 0}
 
-    def _fail_first_then_delegate(*args: object, **kwargs: object) -> Path:
+    def _fail_first_then_delegate(
+        run_id: str, destination: Path, *, tracking_uri: str | None = None
+    ) -> Path:
         calls["count"] += 1
         if calls["count"] == 1:
             raise RuntimeError("simulated checkpoint download failure")
-        return original(*args, **kwargs)
+        return original(run_id, destination, tracking_uri=tracking_uri)
 
     monkeypatch.setattr(evaluate_module, "download_checkpoint_artifact", _fail_first_then_delegate)
 
@@ -372,6 +376,6 @@ def test_evaluate_multirun_continue_policy_records_child_failures(
         assert len(successes) == NUM_VARIANTS - 1
     finally:
         for child in result.children:
-            if isinstance(child, ChildSuccess):
+            if isinstance(child, ChildSuccess) and isinstance(child.result, EvaluationResult):
                 for fig in child.result.figures.values():
                     plt.close(fig)

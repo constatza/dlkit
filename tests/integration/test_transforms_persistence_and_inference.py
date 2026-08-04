@@ -116,6 +116,8 @@ def _build_wrapper(entry_cfgs: tuple[NpyEntry, ...]) -> StandardLightningWrapper
 
 
 def _configure_identity_ffnn(model: FFNN) -> None:
+    assert isinstance(model.embedding_layer, torch.nn.Linear)
+    assert isinstance(model.regression_layer, torch.nn.Linear)
     with torch.no_grad():
         model.embedding_layer.weight.copy_(torch.eye(4))
         model.embedding_layer.bias.zero_()
@@ -351,6 +353,8 @@ def test_checkpoint_save_load_preserves_identity_weights(tmp_path: Path) -> None
     )
 
     assert isinstance(loaded.model, FFNN)
+    assert isinstance(loaded.model.embedding_layer, torch.nn.Linear)
+    assert isinstance(loaded.model.regression_layer, torch.nn.Linear)
     assert torch.equal(loaded.model.embedding_layer.weight, torch.eye(4))
     assert torch.equal(loaded.model.regression_layer.weight, torch.eye(4))
     assert torch.equal(loaded.model.embedding_layer.bias, torch.zeros(4))

@@ -165,6 +165,7 @@ def _split_filepath(training_settings: TrainingJobConfig) -> Path:
     assert training_cfg is not None
     trainer_cfg = training_cfg.trainer
     assert trainer_cfg is not None
+    assert trainer_cfg.default_root_dir is not None
     split_files = list(Path(trainer_cfg.default_root_dir).glob("splits/*.json"))
     assert len(split_files) == 1, f"expected exactly one split file, found {split_files}"
     return split_files[0]
@@ -257,6 +258,7 @@ def test_evaluate_raises_without_configured_targets(
     trained_checkpoint_path: Path,
 ) -> None:
     inference_settings = _build_inference_settings(minimal_dataset, trained_checkpoint_path)
+    assert inference_settings.data is not None
     no_targets_settings = inference_settings.model_copy(
         update={"data": inference_settings.data.model_copy(update={"targets": ()})}
     )

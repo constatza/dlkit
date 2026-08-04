@@ -9,6 +9,7 @@ lives in `tests/integration/test_evaluate_cli_integration.py`.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, Mock, patch
 
 from typer.testing import CliRunner
@@ -39,7 +40,7 @@ class TestEvaluateCommandCheckpointSelection:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: object,
+        sample_settings: Any,
     ) -> None:
         mock_load_config.return_value = sample_settings
         mock_evaluate_api.return_value = _make_mock_evaluation_result()
@@ -65,7 +66,7 @@ class TestEvaluateCommandCheckpointSelection:
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
-        sample_settings: object,
+        sample_settings: Any,
     ) -> None:
         mock_load_config.return_value = sample_settings
         mock_evaluate_api.return_value = _make_mock_evaluation_result()
@@ -87,7 +88,7 @@ class TestEvaluateCommandCheckpointSelection:
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
-        sample_settings: object,
+        sample_settings: Any,
     ) -> None:
         mock_load_config.return_value = sample_settings
         mock_evaluate_api.return_value = _make_mock_evaluation_result()
@@ -105,7 +106,7 @@ class TestEvaluateCommandCheckpointSelection:
         mock_load_config: Mock,
         cli_runner: CliRunner,
         sample_config_path: Path,
-        sample_settings: object,
+        sample_settings: Any,
     ) -> None:
         mock_load_config.return_value = sample_settings
 
@@ -124,7 +125,7 @@ class TestEvaluateCommandCheckpointSelection:
         cli_runner: CliRunner,
         sample_config_path: Path,
         sample_checkpoint_path: Path,
-        sample_settings: object,
+        sample_settings: Any,
     ) -> None:
         mock_load_config.return_value = sample_settings
 

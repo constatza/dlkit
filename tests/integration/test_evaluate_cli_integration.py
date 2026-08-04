@@ -118,6 +118,7 @@ def _split_filepath(training_settings: TrainingJobConfig) -> Path:
     assert training_cfg is not None
     trainer_cfg = training_cfg.trainer
     assert trainer_cfg is not None
+    assert trainer_cfg.default_root_dir is not None
     split_files = list(Path(trainer_cfg.default_root_dir).glob("splits/*.json"))
     assert len(split_files) == 1, f"expected exactly one split file, found {split_files}"
     return split_files[0]
@@ -183,10 +184,12 @@ def evaluate_config_path(
 ) -> Path:
     """Write an InferenceJobConfig TOML file matching the trained checkpoint's shape."""
     _run_id, training_settings_with_checkpoint_and_mlflow = trained_cli_checkpoint
+    tracking_uri = training_settings_with_checkpoint_and_mlflow.tracking.uri
+    assert tracking_uri is not None
     config_content = _inference_config_toml(
         feature_path=minimal_dataset["features"],
         target_path=minimal_dataset["targets"],
-        tracking_uri=training_settings_with_checkpoint_and_mlflow.tracking.uri,
+        tracking_uri=tracking_uri,
         split_filepath=_split_filepath(training_settings_with_checkpoint_and_mlflow),
     )
     config_path = tmp_path / "evaluate.toml"
@@ -332,10 +335,12 @@ def evaluate_multirun_config_path(
 ) -> Path:
     """Write an InferenceJobConfig TOML file matching the sweep's model/data shape."""
     _parent_run_id, variant_settings = trained_cli_sweep
+    tracking_uri = variant_settings[0].tracking.uri
+    assert tracking_uri is not None
     config_content = _inference_config_toml(
         feature_path=minimal_dataset["features"],
         target_path=minimal_dataset["targets"],
-        tracking_uri=variant_settings[0].tracking.uri,
+        tracking_uri=tracking_uri,
         split_filepath=_split_filepath(variant_settings[0]),
     )
     config_path = tmp_path / "evaluate_multirun.toml"
