@@ -17,7 +17,7 @@ from typing import Any, cast
 
 import pytest
 
-from dlkit.common.checkpoint_source import RunCheckpoint
+from dlkit.common.checkpoint_source import CheckpointSource, RunCheckpoint
 from dlkit.common.errors import ConfigValidationError
 from dlkit.engine.workflows.multi_run import (
     ExistingRunsSource,
@@ -225,6 +225,18 @@ def _inference_settings(*, checkpoint: str, experiment_name: str) -> InferenceJo
     )
 
 
+def _experiment_name(spec: RunSpec) -> str:
+    """Narrow spec.settings.experiment; every settings object here sets it."""
+    assert spec.settings.experiment is not None
+    return spec.settings.experiment.name
+
+
+def _model_checkpoint(spec: RunSpec) -> Path | str | CheckpointSource | None:
+    """Narrow spec.settings.model; every settings object here sets it."""
+    assert spec.settings.model is not None
+    return spec.settings.model.checkpoint
+
+
 def test_existing_runs_source_shared_settings_only_checkpoint_varies(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -238,8 +250,8 @@ def test_existing_runs_source_shared_settings_only_checkpoint_varies(
 
     specs = expand_child_sources([source])
 
-    assert [s.settings.experiment.name for s in specs] == ["shared-exp", "shared-exp"]
-    assert [s.settings.model.checkpoint for s in specs] == [
+    assert [_experiment_name(s) for s in specs] == ["shared-exp", "shared-exp"]
+    assert [_model_checkpoint(s) for s in specs] == [
         RunCheckpoint(run_id="run-a"),
         RunCheckpoint(run_id="run-b"),
     ]
@@ -270,8 +282,8 @@ def test_existing_runs_source_callable_settings_vary_per_child(
 
     specs = expand_child_sources([source])
 
-    assert [s.settings.experiment.name for s in specs] == ["exp-run-a", "exp-run-b"]
-    assert [s.settings.model.checkpoint for s in specs] == [
+    assert [_experiment_name(s) for s in specs] == ["exp-run-a", "exp-run-b"]
+    assert [_model_checkpoint(s) for s in specs] == [
         RunCheckpoint(run_id="run-a"),
         RunCheckpoint(run_id="run-b"),
     ]

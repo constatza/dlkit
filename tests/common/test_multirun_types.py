@@ -11,6 +11,8 @@ def _describe(outcome: ChildOutcome[int]) -> str:
             return f"ok:{result}"
         case ChildFailure(status="failure", exception_type=exception_type):
             return f"error:{exception_type}"
+        case _:
+            raise AssertionError(f"unreachable: unexpected outcome {outcome!r}")
 
 
 def test_match_discriminates_child_success_by_status() -> None:

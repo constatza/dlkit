@@ -383,8 +383,6 @@ def _isolate_global_component_state():
         FactoryProvider.restore_for_testing(previous_factory_registry)
 
 
-# Import MLflow test fixtures
-from tests.fixtures.mlflow_fixtures import (  # noqa: E402,F401
-    _mlflow_isolation_paths,
-    mlflow_global_state_isolation,
-)
+# Register MLflow test fixtures as a pytest plugin rather than importing them
+# directly, so pytest's own module loader resolves the path.
+pytest_plugins = ["tests.fixtures.mlflow_fixtures"]

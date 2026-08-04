@@ -157,7 +157,9 @@ class TestModelComponentSettings:
 
         settings = ModelComponentSettings(**model_component_with_checkpoint_data)
 
-        assert settings.checkpoint is not None and Path(settings.checkpoint).name == "model.ckpt"
+        checkpoint = settings.checkpoint
+        assert isinstance(checkpoint, Path | str)
+        assert Path(checkpoint).name == "model.ckpt"
 
     def test_initialization_allows_extra_fields(self) -> None:
         """Test ModelComponentSettings allows extra fields (extra='allow')."""
@@ -228,19 +230,23 @@ class TestModelComponentSettings:
     def test_ffnn_config_can_resolve_plain_and_residual_constrained_variants(self) -> None:
         module = importlib.import_module("dlkit.domain.nn.ffnn")
 
-        residual = ModelComponentSettings(
-            name="EmbeddedFactorizedFFNN",
-            module_path="dlkit.domain.nn.ffnn",
-            hidden_size=8,
-            num_layers=2,
-            skip=True,
+        residual = ModelComponentSettings.model_validate(
+            {
+                "name": "EmbeddedFactorizedFFNN",
+                "module_path": "dlkit.domain.nn.ffnn",
+                "hidden_size": 8,
+                "num_layers": 2,
+                "skip": True,
+            }
         )
-        plain = ModelComponentSettings(
-            name="EmbeddedFactorizedFFNN",
-            module_path="dlkit.domain.nn.ffnn",
-            hidden_size=8,
-            num_layers=2,
-            skip=False,
+        plain = ModelComponentSettings.model_validate(
+            {
+                "name": "EmbeddedFactorizedFFNN",
+                "module_path": "dlkit.domain.nn.ffnn",
+                "hidden_size": 8,
+                "num_layers": 2,
+                "skip": False,
+            }
         )
 
         assert getattr(module, str(residual.name)).__name__ == "EmbeddedFactorizedFFNN"

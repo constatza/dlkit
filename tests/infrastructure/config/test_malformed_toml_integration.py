@@ -148,7 +148,7 @@ lr = 0.001
 name = "MSELoss"
 module_path = "torch.nn"
 """)
-        job = load_job(config)
+        job = load_job(config, run_type="train")
         assert job.experiment is not None
         assert job.experiment.name == "section_only"
         assert job.training is not None
