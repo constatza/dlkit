@@ -37,10 +37,10 @@ from .infrastructure.tracking import (
 )
 from .value_objects import (
     IConfigurationPersistence,
-    IExperimentTracker,
     IHyperparameterApplicator,
     IOptimizationBackendSession,
     IStudyRepository,
+    IStudyTracker,
     OptimizationDirection,
     OptimizationResult,
     Study,
@@ -362,7 +362,7 @@ class OptimizationOrchestrator:
         study_manager: StudyManager,
         trial_executor: TrialExecutor,
         optimization_backend_session: IOptimizationBackendSession,
-        experiment_tracker: IExperimentTracker | None = None,
+        study_tracker: IStudyTracker | None = None,
         config_persister: IConfigurationPersistence | None = None,
         hooks: LifecycleHooks | None = None,
     ):
@@ -372,14 +372,14 @@ class OptimizationOrchestrator:
             study_manager: Study lifecycle management service
             trial_executor: Trial execution service
             optimization_backend_session: Runtime optimization backend session
-            experiment_tracker: Optional experiment tracking
+            study_tracker: Optional study tracking
             config_persister: Optional configuration persistence
             hooks: Optional lifecycle hooks fired around trial/retrain training
         """
         self._study_manager = study_manager
         self._trial_executor = trial_executor
         self._optimization_backend_session = optimization_backend_session
-        self._experiment_tracker = experiment_tracker
+        self._study_tracker = study_tracker
         self._config_persister = config_persister
         self._hooks = hooks
 
@@ -395,7 +395,7 @@ class OptimizationOrchestrator:
     ) -> OptimizationResult:
         """Execute complete optimization workflow.
 
-        This service owns the experiment tracker context lifecycle: when a
+        This service owns the study tracker context lifecycle: when a
         tracker is configured, it is entered here, mirroring
         ``MultiRunOrchestrator.run_sweep``'s ``with self._tracker:``. Callers
         must pass an unentered tracker.
@@ -423,7 +423,7 @@ class OptimizationOrchestrator:
         )
 
         try:
-            tracker = self._experiment_tracker
+            tracker = self._study_tracker
             study_kwargs = {
                 "study_name": study_name,
                 "direction": direction,
@@ -568,9 +568,9 @@ class OptimizationOrchestrator:
         - Child runs for each trial
         - Final child run for best retrain
         """
-        if self._experiment_tracker is None:
+        if self._study_tracker is None:
             return self._execute_without_tracking(study, base_settings)
-        with self._experiment_tracker.create_study_run(study) as study_context:
+        with self._study_tracker.create_study_run(study) as study_context:
             # Track optimization duration
             start_time = time.time()
 
@@ -581,9 +581,7 @@ class OptimizationOrchestrator:
             for trial_number in range(study.target_trials):
                 trial = self._create_trial(study, trial_number)
 
-                with self._experiment_tracker.create_trial_run(
-                    trial, study_context
-                ) as trial_context:
+                with self._study_tracker.create_trial_run(trial, study_context) as trial_context:
                     study, trial, _trial_settings, _training_result = self._run_trial_iteration(
                         study, trial, base_settings, trial_context
                     )
@@ -594,7 +592,7 @@ class OptimizationOrchestrator:
             best_settings: SearchJobConfig | None = None
 
             if best_trial:
-                with self._experiment_tracker.create_best_retrain_run(
+                with self._study_tracker.create_best_retrain_run(
                     study, study_context
                 ) as retrain_context:
                     logger.info(
@@ -668,9 +666,9 @@ class OptimizationOrchestrator:
             )
             return settings, result
 
-        if self._experiment_tracker is None:
+        if self._study_tracker is None:
             raise WorkflowError(
-                "Best retrain run is active but no experiment tracker is configured",
+                "Best retrain run is active but no study tracker is configured",
                 {"stage": "best_retrain_execution"},
             )
 
@@ -678,7 +676,7 @@ class OptimizationOrchestrator:
             base_settings,
             best_trial.hyperparameters,
             run_context=retrain_context,
-            tracker=self._experiment_tracker.execution_tracker(),
+            tracker=self._study_tracker.execution_tracker(),
             tracking_uri=retrain_context.tracking_uri,
             hooks=self._hooks,
         )

@@ -17,7 +17,6 @@ from .hooks import (
     RunKind,
     SweepCompletedEvent,
 )
-from .overrides import ExecutionOverrides, OptimizationOverrides, TrainingOverrides
 from .results import (
     ChildFailure,
     ChildOutcome,
@@ -48,7 +47,6 @@ __all__ = [
     "ConvergenceResult",
     "DLKitError",
     "EvaluationResult",
-    "ExecutionOverrides",
     "FailurePolicy",
     "InferenceResult",
     "InputShapes",
@@ -58,7 +56,6 @@ __all__ = [
     "ModelStateError",
     "MultiRunResult",
     "OptimizationResult",
-    "OptimizationOverrides",
     "OutputShapes",
     "PluginError",
     "RunCreatedEvent",
@@ -69,7 +66,6 @@ __all__ = [
     "StrategyError",
     "SweepCompletedEvent",
     "TrainingResult",
-    "TrainingOverrides",
     "WorkflowError",
     "WorkflowResult",
 ]

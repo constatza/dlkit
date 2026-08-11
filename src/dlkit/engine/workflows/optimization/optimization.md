@@ -62,7 +62,7 @@ giving it the exact same plots/checkpoints/model-artifact/dataset-lineage loggin
 plain `train()` call gets. `execute_within_run` never opens its own MLflow run (nested
 run detection in `MLflowResourceManager` is per-tracker-instance, not global) — the
 caller must already hold an open run on the same tracker instance passed to
-`TrackingDecorator`; that's why `IExperimentTracker.execution_tracker()` exists, to
+`TrackingDecorator`; that's why `IStudyTracker.execution_tracker()` exists, to
 hand the underlying tracker across this boundary.
 
 There is no bespoke `ITrialRunContext`/`IStudyRunContext` hierarchy — run contexts are

@@ -196,7 +196,7 @@ class IPruningStrategy(ABC):
         raise NotImplementedError
 
 
-class IExperimentTracker(AbstractContextManager, ABC):
+class IStudyTracker(AbstractContextManager, ABC):
     """Abstraction for experiment tracking systems with guaranteed context management.
 
     This allows different tracking systems (MLflow, W&B, etc.) to be used

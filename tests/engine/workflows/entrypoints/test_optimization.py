@@ -45,7 +45,7 @@ class _StubOptimizationServiceFactory:
     def __init__(self, *args: object, **kwargs: object) -> None:
         del args, kwargs
 
-    def create_experiment_tracker(self, settings: SearchJobConfig, hooks: object = None) -> None:
+    def create_study_tracker(self, settings: SearchJobConfig, hooks: object = None) -> None:
         del settings, hooks
         return None
 

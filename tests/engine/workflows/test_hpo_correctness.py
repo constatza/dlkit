@@ -25,7 +25,7 @@ from dlkit.engine.workflows.optimization.services import (
     TrialExecutor,
 )
 from dlkit.engine.workflows.optimization.value_objects import (
-    IExperimentTracker,
+    IStudyTracker,
     OptimizationDirection,
     Study,
     Trial,
@@ -218,7 +218,7 @@ class _RecordingRunContext:
         return self._run_id
 
 
-class _TrackingAdapter(IExperimentTracker):
+class _TrackingAdapter(IStudyTracker):
     def __init__(self) -> None:
         self.study_context = _RecordingRunContext()
         self.trial_contexts: list[_RecordingRunContext] = []
@@ -389,7 +389,7 @@ def test_tracked_execution_samples_and_reports_once(
         study_manager=_make_study_manager(),
         trial_executor=cast(TrialExecutor, trial_executor),
         optimization_backend_session=cast(Any, backend_session),
-        experiment_tracker=tracker,
+        study_tracker=tracker,
     )
 
     result = orchestrator.execute_optimization(
@@ -439,7 +439,7 @@ def test_orchestrator_enters_and_exits_tracker_exactly_once_around_execution(
         study_manager=_make_study_manager(),
         trial_executor=cast(TrialExecutor, trial_executor),
         optimization_backend_session=cast(Any, backend_session),
-        experiment_tracker=tracker,
+        study_tracker=tracker,
     )
 
     orchestrator.execute_optimization(
@@ -471,7 +471,7 @@ def test_retrain_does_not_double_log_model_hyperparameters(
         study_manager=_make_study_manager(),
         trial_executor=cast(TrialExecutor, trial_executor),
         optimization_backend_session=cast(Any, backend_session),
-        experiment_tracker=tracker,
+        study_tracker=tracker,
     )
 
     result = orchestrator.execute_optimization(
@@ -518,7 +518,7 @@ def test_tracked_and_untracked_paths_share_terminal_state_handling(
         study_manager=_make_study_manager(),
         trial_executor=cast(TrialExecutor, tracked_executor),
         optimization_backend_session=cast(Any, tracked_backend),
-        experiment_tracker=_TrackingAdapter(),
+        study_tracker=_TrackingAdapter(),
     )
 
     untracked_result = untracked.execute_optimization(

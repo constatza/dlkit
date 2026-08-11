@@ -130,25 +130,25 @@ def test_runtime_entrypoint_does_not_own_tracker_or_backend_session_context() ->
     )
 
 
-def test_factory_orchestrator_forwards_hooks_to_experiment_tracker() -> None:
+def test_factory_orchestrator_forwards_hooks_to_study_tracker() -> None:
     source = inspect.getsource(OptimizationServiceFactory.create_optimization_orchestrator)
     tree = _parse_source(source)
 
     for node in ast.walk(tree):
         if isinstance(node, ast.Call) and _attribute_chain(node.func).endswith(
-            "create_experiment_tracker"
+            "create_study_tracker"
         ):
             keyword_names = {kw.arg for kw in node.keywords}
             assert "hooks" in keyword_names, (
                 "create_optimization_orchestrator must forward self._hooks to "
-                "create_experiment_tracker; otherwise LifecycleHooks passed to "
+                "create_study_tracker; otherwise LifecycleHooks passed to "
                 "OptimizationServiceFactory(hooks=...) silently never reach the "
                 "tracker the orchestrator builds internally."
             )
             return
 
     raise AssertionError(
-        "create_experiment_tracker call not found in create_optimization_orchestrator source"
+        "create_study_tracker call not found in create_optimization_orchestrator source"
     )
 
 

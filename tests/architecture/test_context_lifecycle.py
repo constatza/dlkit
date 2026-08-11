@@ -9,7 +9,7 @@ from dlkit.engine.workflows.optimization.infrastructure import (
     MLflowTrackingAdapter,
     NullTrackingAdapter,
 )
-from dlkit.engine.workflows.optimization.value_objects import IExperimentTracker, IStudyRepository
+from dlkit.engine.workflows.optimization.value_objects import IStudyRepository, IStudyTracker
 
 
 def _load_backend_session_protocol():
@@ -18,13 +18,13 @@ def _load_backend_session_protocol():
     return IOptimizationBackendSession
 
 
-class TestExperimentTrackerContract:
-    """Verify experiment trackers keep their explicit context-manager contract."""
+class TestStudyTrackerContract:
+    """Verify study trackers keep their explicit context-manager contract."""
 
-    def test_experiment_tracker_protocol_requires_context_manager(self):
-        """IExperimentTracker protocol requires AbstractContextManager."""
-        assert issubclass(IExperimentTracker, AbstractContextManager), (
-            "IExperimentTracker must inherit from AbstractContextManager to keep "
+    def test_study_tracker_protocol_requires_context_manager(self):
+        """IStudyTracker protocol requires AbstractContextManager."""
+        assert issubclass(IStudyTracker, AbstractContextManager), (
+            "IStudyTracker must inherit from AbstractContextManager to keep "
             "tracking setup and cleanup explicit."
         )
 

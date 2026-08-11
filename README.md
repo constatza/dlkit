@@ -203,9 +203,9 @@ For programmatic training:
 ```python
 from dlkit import train
 from dlkit.interfaces.api.domain import TrainingOverrides
-from dlkit.settings import load_settings
+from dlkit.settings import load_job
 
-settings = load_settings("train.toml")
+settings = load_job("train.toml")
 
 result = train(
     settings,
@@ -279,9 +279,9 @@ Or from Python:
 ```python
 from dlkit import optimize
 from dlkit.interfaces.api.domain import OptimizationOverrides
-from dlkit.settings import load_settings
+from dlkit.settings import load_job
 
-settings = load_settings("optimize.toml")
+settings = load_job("optimize.toml")
 
 result = optimize(
     settings,
@@ -357,9 +357,9 @@ Typical usage:
 ```python
 from dlkit import load_model, train
 from dlkit.interfaces.api.domain import TrainingOverrides
-from dlkit.settings import load_settings
+from dlkit.settings import load_job
 
-settings = load_settings("train.toml")
+settings = load_job("train.toml")
 result = train(settings, overrides=TrainingOverrides(epochs=10))
 
 with load_model(result.checkpoint_path, device="auto") as predictor:

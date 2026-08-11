@@ -28,13 +28,13 @@ from .models import (
 )
 from .protocols import (
     IConfigurationPersistence,
-    IExperimentTracker,
     IHyperparameterApplicator,
     IHyperparameterSampler,
     IObjectiveFunction,
     IOptimizationBackendSession,
     IPruningStrategy,
     IStudyRepository,
+    IStudyTracker,
     ITrialExecutor,
 )
 
@@ -54,7 +54,7 @@ __all__ = [
     "IOptimizationBackendSession",
     "IHyperparameterSampler",
     "IPruningStrategy",
-    "IExperimentTracker",
+    "IStudyTracker",
     "IConfigurationPersistence",
     "ITrialExecutor",
     "IObjectiveFunction",

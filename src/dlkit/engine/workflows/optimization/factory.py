@@ -29,9 +29,9 @@ from .services import (
 )
 from .value_objects import (
     IConfigurationPersistence,
-    IExperimentTracker,
     IOptimizationBackendSession,
     IStudyRepository,
+    IStudyTracker,
     OptimizationDirection,
 )
 
@@ -71,7 +71,7 @@ class OptimizationServiceFactory:
         build_factory: BuildFactory | None = None,
         study_repository: IStudyRepository | None = None,
         optimization_backend_session: IOptimizationBackendSession | None = None,
-        experiment_tracker: IExperimentTracker | None = None,
+        study_tracker: IStudyTracker | None = None,
         config_persister: IConfigurationPersistence | None = None,
         hooks: LifecycleHooks | None = None,
     ):
@@ -81,14 +81,14 @@ class OptimizationServiceFactory:
             build_factory: Training component factory
             study_repository: Study persistence implementation
             optimization_backend_session: Backend runtime coordination implementation
-            experiment_tracker: Experiment tracking implementation
+            study_tracker: Study tracking implementation
             config_persister: Configuration persistence implementation
             hooks: Optional lifecycle hooks fired around created runs
         """
         self._build_factory = build_factory or BuildFactory()
         self._study_repository_override = study_repository
         self._optimization_backend_session_override = optimization_backend_session
-        self._experiment_tracker_override = experiment_tracker
+        self._study_tracker_override = study_tracker
         self._config_persister_override = config_persister
         self._hooks = hooks
 
@@ -113,7 +113,7 @@ class OptimizationServiceFactory:
                 settings,
                 study_repository,
             )
-            experiment_tracker = self.create_experiment_tracker(settings, hooks=self._hooks)
+            study_tracker = self.create_study_tracker(settings, hooks=self._hooks)
             config_persister = self.create_config_persister(settings)
 
             # Create services
@@ -125,7 +125,7 @@ class OptimizationServiceFactory:
                 study_manager=study_manager,
                 trial_executor=trial_executor,
                 optimization_backend_session=optimization_backend_session,
-                experiment_tracker=experiment_tracker,
+                study_tracker=study_tracker,
                 config_persister=config_persister,
                 hooks=self._hooks,
             )
@@ -207,22 +207,22 @@ class OptimizationServiceFactory:
 
         return NullOptimizationBackendSession()
 
-    def create_experiment_tracker(
+    def create_study_tracker(
         self,
         settings: SearchJobConfig,
         hooks: LifecycleHooks | None = None,
-    ) -> IExperimentTracker | None:
-        """Create experiment tracker based on settings.
+    ) -> IStudyTracker | None:
+        """Create study tracker based on settings.
 
         Args:
             settings: Configuration settings
             hooks: Optional lifecycle hooks fired around created runs
 
         Returns:
-            Experiment tracker implementation
+            Study tracker implementation
         """
-        if self._experiment_tracker_override:
-            return self._experiment_tracker_override
+        if self._study_tracker_override:
+            return self._study_tracker_override
 
         # MLflow tracking is enabled when tracking.backend == "mlflow"
         is_mlflow = settings.tracking.backend == "mlflow"

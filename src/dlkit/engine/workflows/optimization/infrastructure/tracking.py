@@ -1,6 +1,6 @@
 """MLflow tracking adapter implementing proper nested run hierarchy.
 
-This adapter implements the IExperimentTracker protocol to provide proper
+This adapter implements the IStudyTracker protocol to provide proper
 nested MLflow run structure for Optuna optimization:
 - Parent run: Study
 - Child runs: Individual trials
@@ -22,7 +22,7 @@ from dlkit.engine.tracking.config_accessor import ConfigAccessor
 from dlkit.engine.tracking.interfaces import NullRunContext
 from dlkit.engine.tracking.metric_logger import MetricLogger, split_stage_filtered_metrics
 from dlkit.engine.workflows.optimization.value_objects import (
-    IExperimentTracker,
+    IStudyTracker,
     OptimizationResult,
     Study,
     Trial,
@@ -32,7 +32,7 @@ from dlkit.infrastructure.utils.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-class MLflowTrackingAdapter(IExperimentTracker):
+class MLflowTrackingAdapter(IStudyTracker):
     """MLflow adapter implementing proper nested run hierarchy for optimization.
 
     This adapter creates the proper Study → Trial → Best Retrain hierarchy
@@ -279,7 +279,7 @@ class MLflowTrackingAdapter(IExperimentTracker):
             )
 
 
-class NullTrackingAdapter(IExperimentTracker):
+class NullTrackingAdapter(IStudyTracker):
     """Null object implementation for when tracking is disabled.
 
     This eliminates conditional logic throughout the codebase by providing
