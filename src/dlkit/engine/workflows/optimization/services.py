@@ -21,6 +21,7 @@ from dlkit.engine.tracking.lightweight_execution import (
 )
 from dlkit.engine.workflows.factories.build_factory import BuildFactory
 from dlkit.infrastructure.config.job_config import SearchJobConfig
+from dlkit.infrastructure.utils.error_handling import raise_error
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 from ._trial_helpers import complete_trial, fail_trial, prune_trial
@@ -442,10 +443,12 @@ class OptimizationOrchestrator:
 
         except Exception as e:
             logger.error("Optimization workflow '{}' failed: {}", study_name, e)
-            raise WorkflowError(
-                f"Optimization failed: {e}",
-                {"stage": "optimization_orchestration", "study_name": study_name},
-            ) from e
+            raise_error(
+                f"Optimization failed for study {study_name!r}",
+                e,
+                error_class=WorkflowError,
+                stage="optimization_orchestration",
+            )
 
     def _report_and_record(self, study: Study, trial: Trial) -> Study:
         """Report trial result to the backend and append it to the study.

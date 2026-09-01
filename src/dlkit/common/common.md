@@ -12,7 +12,7 @@ the codebase.
 - thin structural protocols for settings contracts (no infrastructure imports)
 
 ## Current Contracts
-- Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`, `ForwardContractError`
+- Errors: `DLKitError`, `ConfigurationError`, `WorkflowError`, `StrategyError`, `ModelStateError`, `PluginError`, `ModelLoadingError`, `ForwardContractError`, `TrackingError`
 - Results: `TrainingResult`, `InferenceResult`, `EvaluationResult`, `OptimizationResult`, `ConvergenceResult`, `ConvergencePoint`, `MultiRunResult[T]`
 - Multirun type algebra: `WorkflowResult = TrainingResult | OptimizationResult | ConvergenceResult | EvaluationResult`;
   `ChildSuccess[T]` / `ChildFailure` / `type ChildOutcome[T] = ChildSuccess[T] | ChildFailure`

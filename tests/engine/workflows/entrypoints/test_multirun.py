@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from dlkit.common.errors import ConfigValidationError
+from dlkit.common.errors import ConfigValidationError, TrackingError
 from dlkit.common.hooks import ChildPlannedEvent, LifecycleHooks, RunCreatedEvent
 from dlkit.common.results import (
     ChildSuccess,
@@ -25,6 +25,7 @@ from dlkit.common.results import (
     TrainingResult,
     WorkflowResult,
 )
+from dlkit.engine.tracking.mlflow_client_factory import MLflowClientFactory
 from dlkit.engine.tracking.run_queries import find_child_run_ids
 from dlkit.engine.workflows.entrypoints.multirun import (
     _apply_defaults,
@@ -239,6 +240,27 @@ def test_run_multirun_spec_train_only_sweep(
         parent_run_id=result.parent_run_id, tracking_uri=result.tracking_uri
     )
     assert set(child_run_ids) == {outcome.run_id for outcome in result.children}
+
+
+def test_run_multirun_spec_preserves_tracking_error_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+    train_job_configs: tuple[TrainingJobConfig, TrainingJobConfig],
+) -> None:
+    """A TrackingError raised entering the sweep's parent tracker (unreachable
+    MLflow backend) must survive `_run_sweep`'s except block unflattened, not
+    get rewrapped as a generic WorkflowError -- otherwise the CLI's
+    TrackingError-specific suggestions never fire.
+    """
+    monkeypatch.setattr(MLflowClientFactory, "validate_client_connectivity", lambda client: False)
+    cfg_a, _cfg_b = train_job_configs
+    unreachable_cfg = cfg_a.patch({"tracking": {"uri": "http://unreachable.invalid:5000"}})
+    children = (RunSpec(id="a", label="a", settings=unreachable_cfg, run_name="variant-a"),)
+    spec = MultiRunSpec(
+        experiment_name="unreachable-sweep", parent_run_name="unreachable-parent", children=children
+    )
+
+    with pytest.raises(TrackingError):
+        run_multirun_spec(spec)
 
 
 # ---------------------------------------------------------------------------

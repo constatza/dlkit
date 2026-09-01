@@ -14,6 +14,7 @@ from dlkit.common import (
     ModelStateError,
     PluginError,
     StrategyError,
+    TrackingError,
     WorkflowError,
 )
 from dlkit.interfaces.cli.middleware.error_handler import (
@@ -145,6 +146,19 @@ class TestHandleApiError:
 
         mock_console.print.assert_called_once()
 
+    def test_handle_tracking_error(
+        self,
+        mock_console: Mock,
+    ) -> None:
+        """Test handling tracking errors (e.g. unreachable MLflow backend)."""
+        error = TrackingError(
+            "MLflow tracking backend unreachable at 'http://unreachable.invalid:5000'"
+        )
+
+        handle_api_error(error, mock_console)
+
+        mock_console.print.assert_called_once()
+
 
 class TestGetErrorSuggestions:
     """Test error suggestion generation for different error types."""
@@ -219,6 +233,16 @@ class TestGetErrorSuggestions:
         assert len(suggestions) > 0
         assert any("log" in suggestion.lower() for suggestion in suggestions)
         assert any("verbose" in suggestion.lower() for suggestion in suggestions)
+
+    def test_tracking_error_suggestions(self) -> None:
+        """Test suggestions for tracking backend errors."""
+        error = TrackingError("MLflow tracking backend unreachable")
+
+        suggestions = _get_error_suggestions(error)
+
+        assert len(suggestions) > 0
+        assert any("mlflow" in suggestion.lower() for suggestion in suggestions)
+        assert any("on_connectivity_failure" in suggestion for suggestion in suggestions)
 
 
 class TestFormatValidationError:

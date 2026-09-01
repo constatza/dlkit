@@ -11,6 +11,11 @@ training and optimization flows.
   (Optuna trials) that intentionally skip full artifact logging, plus
   `fire_post_training_hooks` for firing `LifecycleHooks` on that lightweight path
 - `mlflow_tracker.py`: MLflow-backed tracker
+- `mlflow_resource_manager.py`: client/run lifecycle manager. Owns
+  connectivity-failure handling (`TrackingSettings.on_connectivity_failure`)
+  and post-fallback tag bookkeeping.
+- `mlflow_client_factory.py`: client construction, connectivity probing, and
+  `get_or_create_experiment` (race-tolerant experiment lookup/creation).
 - `mlflow_run_context.py`: concrete run-context implementation
 - `binary_artifact.py`: binary-safe temp-file staging for bytes artifacts (e.g. plot PNGs)
 - `split_recovery.py`: `download_run_split()`, an explicit, user-invoked
@@ -148,6 +153,35 @@ training and optimization flows.
   `"multirun.status" = "failed"` under `FailurePolicy = "continue_mark_parent_failed"`
   once any child fails. See `dlkit.engine.workflows.entrypoints.entrypoints.md` for the
   sweep orchestration this supports.
+- `MLflowResourceManager._initialize_resources` treats a failed connectivity
+  probe as fatal by default (`TrackingSettings.on_connectivity_failure =
+  "raise"`, raising `TrackingError`) rather than logging a warning and
+  continuing against an unreachable backend — the latter used to silently
+  fall through to MLflow's own multi-minute default HTTP retry/backoff on
+  every subsequent call, which looked like a hang, not an error. Setting
+  `on_connectivity_failure = "fallback_local"` explicitly opts into tracking
+  locally instead (via `select_backend(probe=lambda: False)`, never the
+  original unreachable `uri`); the resulting run is tagged
+  `tracking.degraded_fallback`/`tracking.degraded_reason` so it's never
+  mistaken for one that reached the configured backend. A backend that's
+  already `LocalSqliteBackend` and unreachable always raises — there's no
+  meaningful fallback target from local. `MLflowTracker.get_tracking_uri()`/
+  `is_local()` delegate to `MLflowResourceManager`'s live `backend` property
+  rather than a snapshot taken at `__enter__`, so they reflect a mid-init
+  fallback correctly.
+- `MLflowClientFactory.get_or_create_experiment` tolerates losing a create
+  race against a concurrent creator (e.g. two processes pointed at the same
+  local SQLite backend): a `create_experiment` call that fails with
+  `MlflowException(error_code="RESOURCE_ALREADY_EXISTS")` re-fetches the
+  experiment by name instead of propagating the raw SQLAlchemy
+  `IntegrityError`-derived exception. Any other `MlflowException` still
+  propagates unchanged.
+- `raise_error` (`infrastructure.utils.error_handling`) re-raises a
+  `DLKitError` passed as `original_error` unchanged instead of wrapping it in
+  `error_class` — this is what lets a `TrackingError` (or any other typed
+  error) survive the several `except Exception: raise_error(...)` boundaries
+  between `with tracker:` and the CLI without being flattened into a generic
+  `WorkflowError`.
 - Metric stage identifiers (`dlkit.common.metric_stages.MetricStage`) flow as
   the enum end-to-end, from the Lightning wrapper's step logger through
   `MLflowEpochLogger` and `MetricLogger` — there is no string-typed stage

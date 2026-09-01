@@ -19,6 +19,7 @@ from dlkit.common import (
     ModelStateError,
     PluginError,
     StrategyError,
+    TrackingError,
     WorkflowError,
 )
 
@@ -125,12 +126,29 @@ def _workflow_error_suggestions(error: DLKitError) -> list[str]:
     return suggestions
 
 
+def _tracking_error_suggestions(error: DLKitError) -> list[str]:
+    """Build suggestions for tracking backend errors.
+
+    Args:
+        error: Tracking error instance.
+
+    Returns:
+        List of suggestion strings.
+    """
+    return [
+        "Check the MLflow tracking URI is reachable (VPN/firewall/server up)",
+        "Set tracking.on_connectivity_failure = 'fallback_local' to track "
+        "locally instead of failing when the backend is unreachable",
+    ]
+
+
 _ERROR_SUGGESTIONS: dict[type[DLKitError], Callable[[DLKitError], list[str]]] = {
     ConfigurationError: _configuration_error_suggestions,
     StrategyError: _strategy_error_suggestions,
     PluginError: _plugin_error_suggestions,
     ModelStateError: _model_state_error_suggestions,
     WorkflowError: _workflow_error_suggestions,
+    TrackingError: _tracking_error_suggestions,
 }
 
 

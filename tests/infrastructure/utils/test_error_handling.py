@@ -3,7 +3,7 @@
 import pytest
 from loguru import logger
 
-from dlkit.common.errors import ConfigurationError, StrategyError, WorkflowError
+from dlkit.common.errors import ConfigurationError, StrategyError, TrackingError, WorkflowError
 from dlkit.infrastructure.utils.error_handling import raise_error
 
 
@@ -36,6 +36,27 @@ def test_raise_error_accepts_any_dlkit_error_subclass() -> None:
     """`error_class` isn't limited to Workflow/Configuration -- any DLKitError works."""
     with pytest.raises(StrategyError):
         raise_error("Strategy selection failed", error_class=StrategyError)
+
+
+def test_raise_error_preserves_a_dlkit_error_unchanged() -> None:
+    """A `DLKitError` passed as `original_error` propagates unchanged -- it's already
+    the specific, actionable error a caller further up the stack needs, and wrapping
+    it in `error_class` would only discard that specificity.
+    """
+    original = TrackingError("MLflow tracking backend unreachable")
+
+    with pytest.raises(TrackingError) as exc_info:
+        raise_error("Training with tracking failed", original, error_class=WorkflowError)
+
+    assert exc_info.value is original
+
+
+def test_raise_error_still_wraps_non_dlkit_exceptions() -> None:
+    """The preservation rule only applies to `DLKitError` -- a plain exception is
+    still wrapped as before.
+    """
+    with pytest.raises(WorkflowError):
+        raise_error("Training execution failed", ValueError("boom"), error_class=WorkflowError)
 
 
 def test_raise_error_chains_original_error() -> None:

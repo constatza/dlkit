@@ -291,6 +291,13 @@ except Exception as e:
 **Exceptions Raised**:
 - `ImportError`: Module or object not found in `import_object`
 
+**`error_handling.raise_error(message, original_error=None, *, error_class=WorkflowError, stage=None)`**:
+the single sanctioned way to wrap-and-raise across `engine.workflows`/`engine.tracking`.
+If `original_error` is already a `DLKitError`, it's re-raised unchanged — `error_class`
+is ignored — rather than wrapped, so a specific error type (e.g. `TrackingError`) survives
+every `except Exception: raise_error(...)` boundary between where it's raised and the CLI.
+Only a non-`DLKitError` exception gets wrapped as `error_class`.
+
 ## Testing
 
 ### Test Coverage

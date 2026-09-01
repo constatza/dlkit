@@ -232,8 +232,6 @@ def _run_sweep(
             failure_policy=failure_policy,
         )
     except Exception as exc:
-        if isinstance(exc, WorkflowError):
-            raise
         raise_error("Multirun sweep failed", exc, error_class=WorkflowError)
 
 

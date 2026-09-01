@@ -62,6 +62,17 @@ factor 1) so a persistently-erroring tracking server can't turn every trial
 into a multi-second-to-multi-minute stall; `tracking.max_retries` is
 untouched by that scoping.
 
+`tracking.on_connectivity_failure` (`Literal["raise", "fallback_local"]`,
+default `"raise"`) governs what happens when the fast connectivity probe run
+at tracker init fails, before any of the above retry budgets are even
+reached. `"raise"` fails fast with a `TrackingError` naming the unreachable
+URI — the earlier behavior (log a warning and continue) let every subsequent
+call run against the unreachable backend under the full retry budget above,
+which is exactly the multi-minute stall this field now prevents by failing
+immediately instead. `"fallback_local"` explicitly opts into tracking
+locally instead of failing; see `dlkit.engine.tracking.tracking.md` for the
+fallback/tagging mechanics.
+
 ## Loading a Config
 
 ```python

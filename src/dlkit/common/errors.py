@@ -27,6 +27,10 @@ class WorkflowError(DLKitError):
     """Workflow execution error."""
 
 
+class TrackingError(DLKitError):
+    """Tracking backend connectivity or resource error."""
+
+
 class StrategyError(DLKitError):
     """Strategy selection or execution error."""
 

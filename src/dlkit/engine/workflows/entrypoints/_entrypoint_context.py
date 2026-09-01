@@ -82,12 +82,13 @@ class EntrypointContext:
     ) -> T:
         """Execute a workflow callback with path context and unified error handling.
 
-        A ``WorkflowError`` raised by ``workflow_fn`` propagates unchanged; any
-        other exception is wrapped via ``raise_error`` as ``error_class``.
+        A ``DLKitError`` raised by ``workflow_fn`` propagates unchanged (via
+        ``raise_error``'s own preservation rule); any other exception is
+        wrapped via ``raise_error`` as ``error_class``.
 
         Args:
             workflow_fn: Zero-arg callback performing the workflow's execution.
-            error_message: Message used when wrapping a non-``WorkflowError`` failure.
+            error_message: Message used when wrapping a non-``DLKitError`` failure.
             error_class: Exception type to raise for a wrapped failure.
 
         Returns:
@@ -96,6 +97,4 @@ class EntrypointContext:
         try:
             return self.run_with_path_context(workflow_fn)
         except Exception as exc:
-            if isinstance(exc, WorkflowError):
-                raise
             raise_error(error_message, exc, error_class=error_class)

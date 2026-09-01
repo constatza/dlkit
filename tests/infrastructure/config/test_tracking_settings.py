@@ -35,3 +35,23 @@ def test_tracking_settings_accepts_pt2_model_serialization_format() -> None:
 def test_tracking_settings_rejects_unknown_model_serialization_format() -> None:
     with pytest.raises(ValidationError):
         TrackingSettings.model_validate({"model_serialization_format": "onnx"})
+
+
+def test_tracking_settings_default_on_connectivity_failure_is_raise() -> None:
+    """Fail-fast is the safe default: an unattended run can't ask a human, and
+    silently falling back risks the run landing somewhere the user doesn't expect.
+    """
+    settings = TrackingSettings()
+
+    assert settings.on_connectivity_failure == "raise"
+
+
+def test_tracking_settings_accepts_fallback_local_on_connectivity_failure() -> None:
+    settings = TrackingSettings(on_connectivity_failure="fallback_local")
+
+    assert settings.on_connectivity_failure == "fallback_local"
+
+
+def test_tracking_settings_rejects_unknown_on_connectivity_failure() -> None:
+    with pytest.raises(ValidationError):
+        TrackingSettings.model_validate({"on_connectivity_failure": "retry"})

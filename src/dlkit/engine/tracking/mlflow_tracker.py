@@ -168,17 +168,30 @@ class MLflowTracker(IExperimentTracker):
     def get_tracking_uri(self) -> str | None:
         """Return the resolved tracking URI, or None if not initialized.
 
+        Delegates to the resource manager once one exists, since its backend
+        is the *effective* one — it may have changed from the one selected
+        in `__enter__` if connectivity failed and fell back to local
+        tracking. Falls back to the pre-entry `_backend` only when no
+        resource manager has been created yet.
+
         Returns:
             Tracking URI string or None.
         """
+        if self._resource_manager is not None:
+            return self._resource_manager.get_tracking_uri()
         return self._backend.tracking_uri() if self._backend is not None else None
 
     def is_local(self) -> bool:
         """Return True when using a local SQLite backend.
 
+        See `get_tracking_uri` for why this delegates to the resource
+        manager's effective backend rather than the pre-entry one.
+
         Returns:
-            True if the backend is ``LocalSqliteBackend``.
+            True if the effective backend is ``LocalSqliteBackend``.
         """
+        if self._resource_manager is not None:
+            return isinstance(self._resource_manager.backend, LocalSqliteBackend)
         return isinstance(self._backend, LocalSqliteBackend)
 
     def is_active(self) -> bool:

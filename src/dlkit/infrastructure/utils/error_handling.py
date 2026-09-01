@@ -9,7 +9,7 @@ import inspect
 import uuid
 from typing import NamedTuple, NoReturn
 
-from dlkit.common.errors import WorkflowError
+from dlkit.common.errors import DLKitError, WorkflowError
 from dlkit.infrastructure.utils.logging_config import get_logger
 
 # Global logger for error handling
@@ -73,6 +73,12 @@ def raise_error(
     property of what failed, which only the caller knows, not something to
     guess from the error message's wording.
 
+    A `DLKitError` passed as `original_error` is re-raised unchanged instead
+    of being wrapped in `error_class`: it's already the specific, actionable
+    error a caller further up the stack needs (e.g. a `TrackingError` from a
+    failed MLflow connectivity check) — wrapping it would only discard that
+    specificity. Only non-`DLKitError` exceptions get wrapped.
+
     Args:
         message: Error message describing what failed
         original_error: Original exception to chain (optional)
@@ -80,8 +86,12 @@ def raise_error(
         stage: Optional workflow stage to record in the error context
 
     Raises:
-        error_class: The exception type requested by the caller
+        DLKitError: `original_error` unchanged, if it already was one.
+        error_class: The exception type requested by the caller, otherwise.
     """
+    if isinstance(original_error, DLKitError):
+        raise original_error
+
     component, operation = _resolve_caller_context()
 
     # Generate correlation ID

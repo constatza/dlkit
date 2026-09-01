@@ -19,8 +19,12 @@
   `EntrypointContext.run(workflow_fn, error_message=..., error_class=WorkflowError)` is the
   single place all five entrypoints (`fit.py`, `training.py`, `optimization.py`,
   `convergence.py`, `evaluate.py`) route their workflow execution through: it runs
-  `workflow_fn` under `run_with_path_context`, re-raises a `WorkflowError` unchanged, and
-  wraps any other exception via `raise_error(error_message, exc, error_class=error_class)`.
+  `workflow_fn` under `run_with_path_context`, then calls
+  `raise_error(error_message, exc, error_class=error_class)` on any exception — which itself
+  re-raises `exc` unchanged when it's already a `DLKitError` (e.g. `TrackingError` from a
+  failed MLflow connectivity check), rather than flattening it into `error_class`. Only a
+  non-`DLKitError` exception actually gets wrapped. See
+  `dlkit.infrastructure.utils.utils.md` for `raise_error`'s preservation rule.
 - `training.py`: training entrypoint
 - `fit.py`: one-shot, non-gradient fit entrypoint (`FitJobConfig`). Unlike
   trainer-backed jobs, `FitJobConfig` has no `training.trainer.default_root_dir`

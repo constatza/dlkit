@@ -12,9 +12,11 @@ import mlflow
 import mlflow.tracking.fluent
 from mlflow import MlflowClient
 
+from dlkit.common.errors import TrackingError
 from dlkit.engine.tracking.backend import (
     LocalSqliteBackend,
     TrackingBackend,
+    select_backend,
 )
 from dlkit.infrastructure.config.tracking_settings import TrackingSettings
 from dlkit.infrastructure.io import url_resolver
@@ -24,6 +26,9 @@ from dlkit.infrastructure.utils.logging_config import (
 )
 
 from .mlflow_client_factory import MLflowClientFactory
+
+_DEGRADED_FALLBACK_TAG = "tracking.degraded_fallback"
+_DEGRADED_REASON_TAG = "tracking.degraded_reason"
 
 logger = get_logger(__name__)
 
@@ -100,6 +105,7 @@ class MLflowResourceManager:
         self._backend = backend
         self._state = MLflowResourceState()
         self._is_initialized = False
+        self._fallback_reason: str | None = None
 
     def __enter__(self) -> MLflowResourceManager:
         if self._is_initialized:
@@ -126,15 +132,61 @@ class MLflowResourceManager:
             set_mlflow_max_retries(self._config.max_retries)
         _register_sqlite_wal_listener()
 
-        tracking_uri = self._backend.tracking_uri()
-        artifact_uri = self._backend.artifact_uri()
-
-        self._ensure_local_storage_if_needed(artifact_uri)
-
+        self._ensure_local_storage_if_needed(self._backend.artifact_uri())
         with self._sqlite_bootstrap_log_suppressed(self._backend.scheme()):
-            self._state.client = MLflowClientFactory.create_client(tracking_uri=tracking_uri)
+            self._state.client = MLflowClientFactory.create_client(
+                tracking_uri=self._backend.tracking_uri()
+            )
             if not MLflowClientFactory.validate_client_connectivity(self._state.client):
-                logger.warning("MLflow client connectivity validation failed")
+                self._handle_connectivity_failure()
+
+    def _handle_connectivity_failure(self) -> None:
+        """React to a failed connectivity probe per `on_connectivity_failure`.
+
+        Raises by default: an unattended run can't ask a human, and silently
+        continuing against an unreachable backend risks minutes of silent
+        retrying (MLflow's own default HTTP retry/backoff) rather than a
+        prompt, actionable failure. Falling back to local tracking is an
+        explicit opt-in (`on_connectivity_failure = "fallback_local"`), and
+        the resulting run is tagged as degraded so it's never mistaken for
+        one that reached the configured backend.
+        """
+        original_uri = self._backend.tracking_uri()
+
+        if isinstance(self._backend, LocalSqliteBackend):
+            raise TrackingError(
+                f"MLflow local tracking backend unreachable at {original_uri!r} "
+                "(no fallback target — already local)."
+            )
+
+        policy = self._config.on_connectivity_failure if self._config is not None else "raise"
+        if policy == "raise":
+            raise TrackingError(
+                f"MLflow tracking backend unreachable at {original_uri!r}. "
+                "Check connectivity (VPN/firewall/server up), or set "
+                "tracking.on_connectivity_failure = 'fallback_local' to track "
+                "locally instead."
+            )
+
+        # policy == "fallback_local" — swap to a clean local SQLite backend.
+        # `uri=None` is deliberate: passing the original `uri` back in would
+        # just re-select the same unreachable backend. `probe=lambda: False`
+        # is deliberate too: land on a clean local SQLite backend, never
+        # coincidentally on an unrelated local server on 127.0.0.1:5000.
+        self._fallback_reason = f"tracking backend unreachable at {original_uri!r}"
+        logger.warning(
+            "MLflow tracking backend unreachable at {}; falling back to local "
+            "tracking per on_connectivity_failure='fallback_local'. Runs will "
+            "be tagged '{}'.",
+            original_uri,
+            _DEGRADED_FALLBACK_TAG,
+        )
+        self._backend = select_backend(probe=lambda: False)
+        self._ensure_local_storage_if_needed(self._backend.artifact_uri())
+        with self._sqlite_bootstrap_log_suppressed(self._backend.scheme()):
+            self._state.client = MLflowClientFactory.create_client(
+                tracking_uri=self._backend.tracking_uri()
+            )
 
     def _ensure_local_storage_if_needed(self, artifact_uri: str | None) -> None:
         match self._backend:
@@ -172,6 +224,11 @@ class MLflowResourceManager:
             return None
         return self._backend.tracking_uri()
 
+    @property
+    def backend(self) -> TrackingBackend:
+        """Return the effective backend — post-fallback, if one occurred."""
+        return self._backend
+
     def has_active_parent_run(self) -> bool:
         """Return whether the manager currently owns an active run stack."""
         with self._state.stack_lock:
@@ -195,13 +252,16 @@ class MLflowResourceManager:
             experiment_name: Experiment to associate the run with.
             run_name: Optional run name.
             nested: If True, creates a child run under the current parent.
-            tags: Optional tags to attach.
+            tags: Optional tags to attach. Merged with `tracking.degraded_*`
+                tags when this manager fell back to local tracking.
 
         Yields:
             ClientBasedRunContext: Active run context.
 
         Raises:
             RuntimeError: If not initialized.
+            TrackingError: If experiment creation raced against a concurrent
+                creator and the resulting experiment still can't be found.
         """
         if not self._is_initialized:
             raise RuntimeError("Resource manager not initialized")
@@ -224,6 +284,11 @@ class MLflowResourceManager:
             if nested and self._state.active_run_stack:
                 parent_run_id = self._state.active_run_stack[-1]
 
+        effective_tags = dict(tags) if tags else {}
+        if self._fallback_reason is not None:
+            effective_tags[_DEGRADED_FALLBACK_TAG] = "true"
+            effective_tags[_DEGRADED_REASON_TAG] = self._fallback_reason
+
         start_kwargs: dict[str, Any] = {
             "experiment_id": experiment_id,
             "run_name": run_name,
@@ -231,8 +296,8 @@ class MLflowResourceManager:
         }
         if parent_run_id:
             start_kwargs["parent_run_id"] = parent_run_id
-        if tags:
-            start_kwargs["tags"] = tags
+        if effective_tags:
+            start_kwargs["tags"] = effective_tags
 
         # Scoped tracking URI — set only for the duration of this run
         mlflow.set_tracking_uri(tracking_uri)

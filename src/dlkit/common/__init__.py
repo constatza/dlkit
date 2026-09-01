@@ -8,6 +8,7 @@ from .errors import (
     ModelStateError,
     PluginError,
     StrategyError,
+    TrackingError,
     WorkflowError,
 )
 from .hooks import (
@@ -65,6 +66,7 @@ __all__ = [
     "ShapeProvider",
     "StrategyError",
     "SweepCompletedEvent",
+    "TrackingError",
     "TrainingResult",
     "WorkflowError",
     "WorkflowResult",

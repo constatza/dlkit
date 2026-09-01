@@ -12,7 +12,9 @@ from mlflow.environment_variables import (
     MLFLOW_HTTP_REQUEST_MAX_RETRIES,
     MLFLOW_HTTP_REQUEST_TIMEOUT,
 )
+from mlflow.exceptions import MlflowException
 
+from dlkit.common.errors import TrackingError
 from dlkit.infrastructure.io.url_utils import parse_url
 from dlkit.infrastructure.utils.logging_config import get_logger
 
@@ -75,21 +77,39 @@ class MLflowClientFactory:
         experiment_name: str,
         artifact_location: str | None = None,
     ) -> str:
-        """Get experiment ID or create if it doesn't exist."""
-        logger.debug("Checking if experiment '%s' exists", experiment_name)
-        try:
-            logger.debug("Calling client.get_experiment_by_name('%s')", experiment_name)
-            experiment = client.get_experiment_by_name(experiment_name)
-            logger.debug("get_experiment_by_name returned: %s", experiment)
-            if experiment is not None:
-                logger.debug(f"Experiment exists with ID: {experiment.experiment_id}")
-                return experiment.experiment_id
-        except Exception as e:
-            logger.debug(f"get_experiment_by_name failed with: {type(e).__name__}: {e}")
+        """Get experiment ID or create if it doesn't exist.
 
-        # Create new experiment if not found
+        Races against a concurrent creator of the same experiment name (e.g.
+        a second process pointed at the same local SQLite backend): if
+        `create_experiment` loses that race, the store raises
+        `MlflowException(error_code="RESOURCE_ALREADY_EXISTS")` — that's
+        treated as "someone else just created it", not a failure, and the
+        winner's experiment id is fetched instead.
+
+        Raises:
+            TrackingError: The experiment is reported as already existing but
+                cannot actually be found — an unexpected, unresolvable state.
+        """
+        logger.debug("Checking if experiment '%s' exists", experiment_name)
+        experiment = client.get_experiment_by_name(experiment_name)
+        if experiment is not None:
+            logger.debug(f"Experiment exists with ID: {experiment.experiment_id}")
+            return experiment.experiment_id
+
         logger.debug("Creating new MLflow experiment: %s", experiment_name)
-        result = client.create_experiment(experiment_name, artifact_location=artifact_location)
+        try:
+            result = client.create_experiment(experiment_name, artifact_location=artifact_location)
+        except MlflowException as e:
+            if e.error_code != "RESOURCE_ALREADY_EXISTS":
+                raise
+            logger.debug("Lost the create race for '%s', re-fetching", experiment_name)
+            experiment = client.get_experiment_by_name(experiment_name)
+            if experiment is None:
+                raise TrackingError(
+                    f"Experiment {experiment_name!r} reported as already existing "
+                    "but could not be found"
+                ) from e
+            return experiment.experiment_id
         logger.debug("Experiment created with ID: %s", result)
         return result
 

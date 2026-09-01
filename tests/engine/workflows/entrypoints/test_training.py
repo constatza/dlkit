@@ -3,9 +3,10 @@
 ``train()`` is one of five entrypoints (``fit``, ``training``, ``optimization``,
 ``convergence``, ``evaluate``) that route their workflow execution through
 ``EntrypointContext.run()``: a raw exception from the orchestrator is wrapped
-as ``WorkflowError``, while a ``WorkflowError`` raised by the workflow itself
-propagates unchanged. These tests stub the orchestrator instead of running a
-real training pipeline, mirroring ``test_fit.py``'s pattern.
+as ``WorkflowError``, while any ``DLKitError`` raised by the workflow itself
+(``WorkflowError`` included) propagates unchanged. These tests stub the
+orchestrator instead of running a real training pipeline, mirroring
+``test_fit.py``'s pattern.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ from __future__ import annotations
 import pytest
 
 from dlkit.common import TrainingResult
-from dlkit.common.errors import WorkflowError
+from dlkit.common.errors import TrackingError, WorkflowError
 from dlkit.engine.workflows.entrypoints import training as training_module
 from dlkit.infrastructure.config.job_config import TrainingJobConfig
 
@@ -87,6 +88,21 @@ def test_train_reraises_workflow_error_unchanged(training_settings: TrainingJobC
     _StubOrchestrator.exception = original
 
     with pytest.raises(WorkflowError) as exc_info:
+        training_module.train(training_settings)
+
+    assert exc_info.value is original
+
+
+def test_train_reraises_any_dlkit_error_unchanged(training_settings: TrainingJobConfig) -> None:
+    """Not just WorkflowError -- any DLKitError raised by the workflow (e.g. a
+    TrackingError from a failed MLflow connectivity check) must survive
+    EntrypointContext.run()'s wrapping boundary unflattened, since the CLI's
+    per-type suggestion dispatch depends on seeing the real type.
+    """
+    original = TrackingError("MLflow tracking backend unreachable")
+    _StubOrchestrator.exception = original
+
+    with pytest.raises(TrackingError) as exc_info:
         training_module.train(training_settings)
 
     assert exc_info.value is original
