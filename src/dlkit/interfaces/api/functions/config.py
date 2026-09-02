@@ -42,16 +42,27 @@ def validate_config(
 
 def generate_template(
     template_type: TemplateKind = "training",
+    *,
+    model: str | None = None,
+    module_path: str | None = None,
 ) -> str:
     """Generate configuration template.
 
     Args:
-        template_type: Template kind (``"training"``, ``"inference"``, ``"mlflow"``, ``"optuna"``).
+        template_type: Template kind (``"training"``, ``"inference"``, ``"mlflow"``,
+            ``"search"``, ``"fit"``, ``"convergence"``, ``"multirun"``).
+        model: Optional model class name/path to introspect and layer in
+            (fills ``[model]`` fields and matching ``data.features``/``data.targets``
+            entries from the class's own constructor signature and
+            ``InputSpec``/``OutputSpec``, when declared).
+        module_path: Optional fallback module for resolving ``model``.
 
     Returns:
         TOML string for the requested template.
     """
-    return runtime_generate_template(template_type=template_type)
+    return runtime_generate_template(
+        template_type=template_type, model=model, module_path=module_path
+    )
 
 
 def validate_template(

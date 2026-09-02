@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
-TemplateKind = Literal["training", "inference", "mlflow", "optuna"]
+from dlkit.infrastructure.config._template_helpers import TemplateKind
+
+__all__ = ["TemplateKind", "generate_template", "validate_template"]
 
 
-def generate_template(template_type: TemplateKind = "training") -> str:
+def generate_template(
+    template_type: TemplateKind = "training",
+    *,
+    model: str | None = None,
+    module_path: str | None = None,
+) -> str:
     """Generate a TOML configuration template."""
     from dlkit.infrastructure.config._template_helpers import render_template
 
-    return render_template(template_type)
+    return render_template(template_type, model=model, module_path=module_path)
 
 
 def validate_template(

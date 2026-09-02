@@ -14,7 +14,7 @@ different options, so they are split into subcommands for clarity and ergonomics
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated, cast
+from typing import Annotated, cast, get_args
 
 import typer
 import yaml
@@ -174,18 +174,36 @@ def create_template(
     output_path: Annotated[Path, typer.Option("--output", "-o", help="Output path for template")],
     template_type: Annotated[
         str,
-        typer.Option("--type", "-t", help="Template type (training, inference, mlflow, optuna)"),
+        typer.Option(
+            "--type",
+            "-t",
+            help=f"Template type ({', '.join(get_args(TemplateKind))})",
+        ),
     ] = "training",
+    model: Annotated[
+        str | None,
+        typer.Option(
+            "--model",
+            "-m",
+            help="Model class name/path to introspect and layer into the template",
+        ),
+    ] = None,
+    module_path: Annotated[
+        str | None,
+        typer.Option("--module-path", help="Fallback module for resolving --model"),
+    ] = None,
 ) -> None:
     """Create a configuration template.
 
     Examples:
         dlkit config create --output config.toml --type training
         dlkit config create --output mlflow_config.toml --type mlflow
+        dlkit config create --output deeponet.toml --type training \\
+            --model FFNNDeepONet --module-path dlkit.domain.nn
     """
     try:
         # Use new API service instead of static templates
-        valid_types = ["training", "inference", "mlflow", "optuna"]
+        valid_types = list(get_args(TemplateKind))
 
         if template_type not in valid_types:
             console.print(f"[red]Unknown template type: {template_type}[/red]")
@@ -193,7 +211,9 @@ def create_template(
             raise typer.Exit(1)
 
         # Generate template using API
-        template_content = generate_template(cast(TemplateKind, template_type))
+        template_content = generate_template(
+            cast(TemplateKind, template_type), model=model, module_path=module_path
+        )
 
         # Write template to file
         with open(output_path, "w") as f:
@@ -229,10 +249,12 @@ def sync_templates(
         # Use API to generate templates instead of static ones
         targets: list[tuple[str, Path]] = [
             (generate_template("training"), root_dir / "example_config.toml"),
-            (generate_template("training"), root_dir / "config" / "templates" / "training.toml"),
-            (generate_template("inference"), root_dir / "config" / "templates" / "inference.toml"),
-            (generate_template("mlflow"), root_dir / "config" / "templates" / "mlflow.toml"),
-            (generate_template("optuna"), root_dir / "config" / "templates" / "optuna.toml"),
+        ] + [
+            (
+                generate_template(cast(TemplateKind, kind)),
+                root_dir / "config" / "templates" / f"{kind}.toml",
+            )
+            for kind in get_args(TemplateKind)
         ]
 
         has_drift = False
