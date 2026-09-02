@@ -16,6 +16,7 @@ from typing import cast
 import numpy as np
 import pytest
 import torch
+from pydantic import ValidationError
 
 from dlkit.infrastructure.config.data_entries import (
     PathBasedEntry,
@@ -530,3 +531,43 @@ class TestDataSettingsValuePreservation:
         assert len(list(cast("dict[str, torch.Tensor]", targets).keys())) == 1
         assert sample["features", "x"].shape == torch.Size([5])
         assert sample["targets", "y"].shape == torch.Size([1])
+
+
+class TestDataSettingsRoleInference:
+    """DataSettings infers data_role from features/targets placement.
+
+    An entry doesn't need to set data_role explicitly in data.features or
+    data.targets - it's implied by the containing list. Omitting it is
+    silently filled in; explicitly setting a conflicting role is rejected
+    instead of being silently discarded.
+    """
+
+    def test_omitted_role_inferred_as_feature(self, sample_numpy_array: np.ndarray):
+        """An entry with no data_role set becomes FEATURE when placed in features."""
+        entry = ValueEntry(name="x", value=sample_numpy_array)
+        ds_settings = DataSettings(features=(entry,))
+        assert ds_settings.features[0].data_role == DataRole.FEATURE
+
+    def test_omitted_role_inferred_as_target(self, sample_numpy_array: np.ndarray):
+        """An entry with no data_role set becomes TARGET when placed in targets."""
+        entry = ValueEntry(name="y", value=sample_numpy_array)
+        ds_settings = DataSettings(features=(), targets=(entry,))
+        assert ds_settings.targets[0].data_role == DataRole.TARGET
+
+    def test_explicit_matching_role_is_preserved(self, sample_numpy_array: np.ndarray):
+        """An entry that explicitly sets the correct role validates as-is."""
+        feat = ValueEntry(name="x", value=sample_numpy_array, data_role=DataRole.FEATURE)
+        ds_settings = DataSettings(features=(feat,))
+        assert ds_settings.features[0].data_role == DataRole.FEATURE
+
+    def test_explicit_conflicting_role_in_features_raises(self, sample_numpy_array: np.ndarray):
+        """A feature entry that explicitly sets data_role=TARGET is rejected, not coerced."""
+        feat = ValueEntry(name="x", value=sample_numpy_array, data_role=DataRole.TARGET)
+        with pytest.raises(ValidationError, match="explicitly sets data_role"):
+            DataSettings(features=(feat,))
+
+    def test_explicit_conflicting_role_in_targets_raises(self, sample_numpy_array: np.ndarray):
+        """A target entry that explicitly sets data_role=FEATURE is rejected, not coerced."""
+        targ = ValueEntry(name="y", value=sample_numpy_array, data_role=DataRole.FEATURE)
+        with pytest.raises(ValidationError, match="explicitly sets data_role"):
+            DataSettings(targets=(targ,))

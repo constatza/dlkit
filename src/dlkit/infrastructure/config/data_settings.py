@@ -91,6 +91,38 @@ def _infer_entry_format(entry: RawEntryItem) -> RawEntryItem:
     )
 
 
+def _resolve_entry_role(entry: AnyEntry, expected: DataRole, section: str) -> AnyEntry:
+    """Infer an entry's data_role from its containing section, or reject a conflict.
+
+    ``data.features``/``data.targets`` entries don't need to set ``data_role``
+    explicitly — it's implied by which list they're declared in. When it's
+    omitted, this fills in the implied role silently. When it's set explicitly
+    to something else, that's very likely a copy-paste mistake (e.g. a stray
+    ``data_role = "target"`` left on an entry moved into ``data.features``), so
+    it's rejected instead of being silently discarded.
+
+    Args:
+        entry: The entry being validated.
+        expected: The data role implied by the containing section.
+        section: Section name for the error message (``"features"`` or ``"targets"``).
+
+    Returns:
+        The entry, with ``data_role`` defaulted to ``expected`` when it wasn't set explicitly.
+
+    Raises:
+        ValueError: If the entry explicitly set a conflicting ``data_role``.
+    """
+    if entry.data_role == expected:
+        return entry
+    if "data_role" in entry.model_fields_set:
+        raise ValueError(
+            f"Entry '{entry.name}' explicitly sets data_role={entry.data_role.value!r}, "
+            f"but data.{section} entries must have data_role={expected.value!r}. "
+            f"Remove the explicit data_role or move the entry to the matching section."
+        )
+    return entry.model_copy(update={"data_role": expected})
+
+
 class DataModuleSelector(ComponentSettings):
     """Lightning DataModule class selector (replaces DATAMODULE.name/module_path).
 
@@ -181,23 +213,13 @@ class DataSettings(BasicSettings):
     @classmethod
     def _force_feature_role(cls, values: tuple[AnyEntry, ...]) -> tuple[AnyEntry, ...]:
         """Ensure all feature entries carry the FEATURE data role."""
-        return tuple(
-            v
-            if v.data_role == DataRole.FEATURE
-            else v.model_copy(update={"data_role": DataRole.FEATURE})
-            for v in values
-        )
+        return tuple(_resolve_entry_role(v, DataRole.FEATURE, "features") for v in values)
 
     @field_validator("targets", mode="after")
     @classmethod
     def _force_target_role(cls, values: tuple[AnyEntry, ...]) -> tuple[AnyEntry, ...]:
         """Ensure all target entries carry the TARGET data role."""
-        return tuple(
-            v
-            if v.data_role == DataRole.TARGET
-            else v.model_copy(update={"data_role": DataRole.TARGET})
-            for v in values
-        )
+        return tuple(_resolve_entry_role(v, DataRole.TARGET, "targets") for v in values)
 
     @model_validator(mode="after")
     def _validate_nested_paths(self) -> DataSettings:

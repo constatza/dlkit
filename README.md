@@ -5,7 +5,7 @@
 
 DLKit is a typed deep-learning workflow toolkit for training, optimization, and checkpoint-based inference on top of PyTorch and Lightning.
 
-[Installation](#installation) • [Quick Start](#quick-start) • [Configuration Model](#configuration-model) • [Training](#training) • [Optimization](#optimization) • [Inference](#inference) • [Python API](#python-api)
+[Installation](#installation) • [Quick Start](#quick-start) • [CLI Commands](#cli-commands) • [Configuration Model](#configuration-model) • [Training](#training) • [Optimization](#optimization) • [Inference](#inference) • [Python API](#python-api)
 
 ## Features
 
@@ -14,7 +14,8 @@ DLKit is a typed deep-learning workflow toolkit for training, optimization, and 
 - MLflow integration for run tracking and model registration.
 - Optuna integration for hyperparameter search.
 - Entry-based dataset configuration with explicit feature and target routing.
-- Support for staged and concurrent optimizer policies.
+- Support for staged and concurrent optimizer policies (including Muon).
+- Multirun sweeps and sample-size convergence studies as first-class workflows.
 
 ## Installation
 
@@ -66,53 +67,77 @@ uv run dlkit predict inference.toml path/to/model.ckpt
 
 If you installed the CLI with `uv tool install`, drop the `uv run` prefix.
 
+## CLI Commands
+
+| Command | Purpose |
+| --- | --- |
+| `dlkit train CONFIG.toml` | Train a model |
+| `dlkit predict CONFIG.toml CHECKPOINT` | Batch prediction from a checkpoint |
+| `dlkit evaluate CONFIG.toml CHECKPOINT` | Stats/plots for a checkpoint against a labeled split |
+| `dlkit evaluate-multirun CONFIG.toml` | Batch-evaluate every child run of a sweep |
+| `dlkit optimize CONFIG.toml --trials N` | Run an Optuna hyperparameter search |
+| `dlkit optimize status \| plot STUDY STORAGE` | Inspect or plot an Optuna study |
+| `dlkit converge CONFIG.toml` | Sample-size convergence study |
+| `dlkit multirun run \| validate CONFIG.toml` | Execute, or dry-run, a batch sweep of child configs |
+| `dlkit convert CHECKPOINT OUTPUT` | Export a checkpoint to ONNX |
+| `dlkit config validate \| show \| create \| sync-templates` | Config validation, inspection, and template generation |
+
+Run `dlkit --help` or `dlkit <command> --help` for full options. See the [CLI command reference](src/dlkit/interfaces/cli/commands/commands.md) for details.
+
 ## Configuration Model
 
-DLKit uses `SESSION.workflow` to select the runtime path:
+DLKit uses `run.type` to select the runtime path:
 
 - `train`
-- `optimize`
-- `inference`
+- `predict` (inference)
+- `search` (hyperparameter optimization)
+- `convergence` (sample-size convergence studies)
+- `multirun` (batch sweeps of child configs)
+- `fit` (one-shot, non-gradient model fits)
 
-The current dataset model is entry-based. Features and targets are declared with `[[DATASET.features]]` and `[[DATASET.targets]]` blocks instead of a single shorthand dataset path.
+The dataset model is entry-based. Features and targets are declared with `[[data.features]]` and `[[data.targets]]` blocks instead of a single shorthand dataset path.
 
 By default, DLKit maps named model-input features to `model.forward()` by keyword. If `x` and `z` are declared as named features, DLKit calls `model(x=x_tensor, z=z_tensor)`. Unnamed model-input features use positional dispatch.
 
 ### Minimal Training Config
 
 ```toml
-[SESSION]
-name = "my_training_session"
-workflow = "train"
+[run]
+type = "train"
 seed = 42
 precision = "32"
-root_dir = "./"
 
-[MODEL]
-name = "your.model.class"
+[experiment]
+name = "my_training_session"
 
-[TRAINING.trainer]
+[model]
+class = "your.model.class"
+
+[data]
+class = "FlexibleDataset"
+
+[[data.features]]
+name = "x"
+path = "features.npy"
+
+[[data.targets]]
+name = "y"
+path = "targets.npy"
+
+[data.splits]
+val = 0.15
+test = 0.15
+
+[training]
+loss = "mse"
+
+[training.trainer]
 max_epochs = 100
 accelerator = "auto"
 
-[DATAMODULE]
-name = "your.datamodule.class"
-
-[DATASET]
-name = "FlexibleDataset"
-root_dir = "./data"
-
-[[DATASET.features]]
-name = "x"
-path = "features.npy"
-data_role = "feature"
-field_role = "feature"
-
-[[DATASET.targets]]
-name = "y"
-path = "targets.npy"
-data_role = "target"
-field_role = "target"
+[training.optimizer]
+name = "AdamW"
+lr = 1e-3
 ```
 
 ### Entry Routing Example
@@ -120,27 +145,21 @@ field_role = "target"
 Use `model_input`, `loss_input`, and `write` when you need more than a plain feature or target:
 
 ```toml
-[[DATASET.features]]
+[[data.features]]
 name = "stiffness"
 path = "stiffness.npy"
-data_role = "feature"
 model_input = false
 loss_input = "K"
 
-[[DATASET.features]]
-name = "query_coords"
-path = "query_coords.npy"
-data_role = "feature"
-field_role = "target_coordinates"
-
-[[DATASET.targets]]
+[[data.targets]]
 name = "prediction"
 path = "targets.npy"
-data_role = "target"
 write = true
 ```
 
 `model_input = false` keeps an entry out of `model.forward()`. `loss_input = "K"` routes it into the loss function as a named kwarg. `write = true` marks an entry for prediction/latent writing during inference workflows.
+
+An entry's `data_role` (`feature`/`target`/`latent`/`auxiliary`) is inferred from which list it's declared in — `[[data.features]]` entries are always `feature`, `[[data.targets]]` entries are always `target` — so it never needs to be set explicitly here.
 
 Default `forward()` mapping rules:
 
@@ -153,11 +172,11 @@ Default `forward()` mapping rules:
 Keyword-dispatch example:
 
 ```toml
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "features_x.npy"
 
-[[DATASET.features]]
+[[data.features]]
 name = "z"
 path = "features_z.npy"
 ```
@@ -222,50 +241,49 @@ print(result.checkpoint_path)
 
 ## Optimization
 
-Optimization is a separate workflow selected with `SESSION.workflow = "optimize"` and an `[OPTUNA]` section.
+Optimization is a separate workflow selected with `run.type = "search"` and a `[search]` section.
 
-`[OPTUNA.model]` must define the hyperparameter search space and should mirror tunable fields from `[MODEL]`.
+`[search.space]` defines the hyperparameter search space. Each entry is keyed by a dotted config path (e.g. `model.hidden_size`, `training.optimizer.lr`) and a typed range object: `float`, `log_float`, `int`, `log_int`, or `categorical`.
 
 ```toml
-[SESSION]
-name = "search_run"
-workflow = "optimize"
+[run]
+type = "search"
 seed = 42
 precision = "32"
-root_dir = "./"
 
-[MODEL]
-name = "your.model.class"
+[experiment]
+name = "search_run"
 
-[OPTUNA]
-enabled = true
+[model]
+class = "your.model.class"
+
+[search]
 n_trials = 50
 study_name = "baseline_search"
 storage = "sqlite:///optuna.db"
 
-[OPTUNA.model]
-hidden_size = [64, 128, 256]
-num_layers = [2, 4, 6]
+[search.space]
+"model.hidden_size" = { type = "categorical", choices = [64, 128, 256] }
+"model.num_layers" = { type = "categorical", choices = [2, 4, 6] }
+"training.optimizer.lr" = { type = "log_float", low = 1e-4, high = 1e-2 }
 
-[TRAINING.trainer]
+[training]
+loss = "mse"
+
+[training.trainer]
 max_epochs = 25
 accelerator = "auto"
 
-[DATAMODULE]
-name = "your.datamodule.class"
+[data]
+class = "FlexibleDataset"
 
-[DATASET]
-name = "FlexibleDataset"
-
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "features.npy"
-data_role = "feature"
 
-[[DATASET.targets]]
+[[data.targets]]
 name = "y"
 path = "targets.npy"
-data_role = "target"
 ```
 
 Run it from the CLI:
@@ -298,28 +316,24 @@ print(result.best_trial)
 
 ### Config-Driven Batch Inference
 
-Inference configs use `SESSION.workflow = "inference"` and `MODEL.checkpoint`:
+Inference configs use `run.type = "predict"` and `model.checkpoint`:
 
 ```toml
-[SESSION]
-name = "my_inference_session"
-workflow = "inference"
+[run]
+type = "predict"
 seed = 42
 precision = "32"
-root_dir = "./"
 
-[MODEL]
-name = "your.model.class"
+[model]
+class = "your.model.class"
 checkpoint = "./model.ckpt"
 
-[DATASET]
-name = "FlexibleDataset"
+[data]
+class = "FlexibleDataset"
 
-[[DATASET.features]]
+[[data.features]]
 name = "x"
 path = "features.npy"
-data_role = "feature"
-field_role = "feature"
 ```
 
 Current CLI behavior still takes an explicit checkpoint argument, so use:
@@ -343,6 +357,7 @@ with load_model("path/to/model.ckpt", device="auto") as predictor:
 The top-level package exposes a curated workflow surface:
 
 - `train`
+- `evaluate`
 - `optimize`
 - `execute`
 - `load_model`
@@ -365,6 +380,20 @@ result = train(settings, overrides=TrainingOverrides(epochs=10))
 with load_model(result.checkpoint_path, device="auto") as predictor:
     output = predictor.predict(x=batch)
 ```
+
+### Top-Level Shim Modules
+
+Convenience re-export modules for common import paths, alongside the curated surface above:
+
+- `dlkit.nn` / `dlkit.gnn` — model and layer families
+- `dlkit.settings` — `load_job` and typed config models
+- `dlkit.errors` — the DLKit exception hierarchy
+- `dlkit.results` — workflow result value objects
+- `dlkit.io` — file I/O and path resolution helpers
+- `dlkit.config` — `load_training_config` / `load_inference_config` / `load_optimization_config`
+- `dlkit.inference` — checkpoint loading and prediction
+- `dlkit.mlflow` — MLflow tracking and model-registry helpers
+- `dlkit.registry` — `register_model` / `register_dataset`
 
 ## More Reference
 

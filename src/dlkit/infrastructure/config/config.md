@@ -397,6 +397,12 @@ settings = TrainingSettings(
 - `data.features[*].name` is the routing key for both dataset loading and model
   dispatch. Named features bind to `model.forward()` by keyword, so the entry
   name must match the forward parameter name.
+- `data.features[*]`/`data.targets[*]` entries don't need to set `data_role`
+  explicitly — `DataSettings` infers it from which list the entry is declared
+  in (`_force_feature_role`/`_force_target_role` in `data_settings.py`). An
+  entry that omits `data_role` gets it filled in silently; one that sets it
+  explicitly to something else raises a validation error instead of being
+  silently coerced.
 - `data.features[*]` and `data.targets[*]` may omit `format` for
   loadable path-based entries when the path suffix is informative. The config
   layer infers `.npy`, `.npz`, `.csv`, `.txt`, `.parquet`, `.h5`, `.hdf5`,
