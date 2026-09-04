@@ -92,7 +92,7 @@ def build_trainer(settings: JobConfig) -> Trainer | None:
                 {"stage": "trainer_build", "component": "trainer.default_root_dir"},
             )
         trainer_settings = _pin_lightning_local_outputs(trainer_settings, default_root_dir)
-    return trainer_settings.build(session=None)
+    return trainer_settings.build(session=settings.run)
 
 
 def _has_callback_named(trainer_settings: TrainerSettings, name: str) -> bool:

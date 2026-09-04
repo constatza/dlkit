@@ -14,11 +14,16 @@ path = "dlkit.infrastructure.seeding"
 depends_on = []
 
 [[modules]]
+path = "dlkit.infrastructure.compute"
+depends_on = []
+
+[[modules]]
 path = "dlkit.infrastructure"
 depends_on = [
     { path = "dlkit.common" },
     { path = "dlkit.infrastructure.precision" },
     { path = "dlkit.infrastructure.seeding" },
+    { path = "dlkit.infrastructure.compute" },
 ]
 
 [[modules]]

@@ -31,8 +31,13 @@ from lightning.pytorch import LightningModule, Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint
 from torch import nn
 
+from dlkit.infrastructure.config.compute_settings import (
+    KubeflowComputeSettings,
+    SlurmComputeSettings,
+)
 from dlkit.infrastructure.config.core.context import BuildContext
 from dlkit.infrastructure.config.core.factories import FactoryProvider
+from dlkit.infrastructure.config.run_settings import RunSettings
 from dlkit.infrastructure.config.trainer_settings import (
     CallbackSettings,
     LoggerSettings,
@@ -249,6 +254,146 @@ def test_default_style_checkpoint_bounds_files_to_one(tmp_path, train_val_test_d
 
     ckpt_files = list(Path(tmp_path).glob("*.ckpt"))
     assert len(ckpt_files) <= 1
+
+
+def test_devices_and_num_nodes_mirror_real_trainer_constructor_params():
+    """TrainerSettings.devices/num_nodes must stay named/shaped to match
+    Trainer.__init__ exactly, the same way accelerator/strategy/precision
+    already do — that's what lets them flow through the standard
+    settings-to-kwargs reflection pipeline with no special-casing."""
+    import inspect
+
+    params = inspect.signature(Trainer.__init__).parameters
+    assert "devices" in params
+    assert "num_nodes" in params
+
+
+def test_build_resolves_devices_and_num_nodes_from_compute_environment(monkeypatch):
+    """Unset compute.devices/num_nodes fall back to the resolved environment
+    (SLURM here) rather than Lightning's own defaults."""
+    monkeypatch.setenv("SLURM_NTASKS", "8")
+    monkeypatch.setenv("SLURM_NNODES", "2")
+    monkeypatch.setenv("SLURM_NTASKS_PER_NODE", "4")
+    captured_overrides: dict | None = None
+
+    def _fake_create(settings, ctx: BuildContext):
+        nonlocal captured_overrides
+        captured_overrides = ctx.overrides
+
+        class _Dummy:
+            pass
+
+        return _Dummy()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    TrainerSettings().build()
+
+    assert captured_overrides is not None
+    assert captured_overrides["devices"] == 4
+    assert captured_overrides["num_nodes"] == 2
+
+
+def test_build_explicit_trainer_devices_are_never_overridden_by_resolved_topology(monkeypatch):
+    """TrainerSettings.devices/num_nodes (mirroring Trainer's own constructor)
+    always win over the environment's resolved topology, even when SLURM env
+    vars suggest different values."""
+    monkeypatch.setenv("SLURM_NTASKS", "8")
+    monkeypatch.setenv("SLURM_NNODES", "2")
+    monkeypatch.setenv("SLURM_NTASKS_PER_NODE", "4")
+    captured_overrides: dict | None = None
+
+    def _fake_create(settings, ctx: BuildContext):
+        nonlocal captured_overrides
+        captured_overrides = ctx.overrides
+
+        class _Dummy:
+            pass
+
+        return _Dummy()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    session = RunSettings(compute=SlurmComputeSettings())
+    TrainerSettings(devices=1, num_nodes=1).build(session=session)
+
+    assert captured_overrides is not None
+    assert captured_overrides["devices"] == 1
+    assert captured_overrides["num_nodes"] == 1
+
+
+def test_build_omits_devices_and_num_nodes_when_environment_cannot_derive_them(monkeypatch):
+    """Under 'auto', a detected environment that can't derive topology (LSF
+    here) must leave devices/num_nodes out of overrides entirely so
+    Lightning's own defaults apply, rather than passing an explicit None that
+    could confuse Trainer construction. (Explicitly selecting `environment =
+    "lsf"` in config requires devices/num_nodes up front — see
+    test_compute_settings.py — so this scenario is reached via 'auto'
+    detecting LSF, not via an explicit LSFComputeSettings.)"""
+    monkeypatch.setenv("LSB_JOBID", "12345")
+    monkeypatch.setenv("LSB_DJOB_RANKFILE", "/tmp/dlkit-test-rankfile-does-not-need-to-exist")
+    monkeypatch.setenv("JSM_NAMESPACE_LOCAL_RANK", "0")
+    monkeypatch.setenv("JSM_NAMESPACE_SIZE", "4")
+    captured_overrides: dict | None = None
+
+    def _fake_create(settings, ctx: BuildContext):
+        nonlocal captured_overrides
+        captured_overrides = ctx.overrides
+
+        class _Dummy:
+            pass
+
+        return _Dummy()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    TrainerSettings().build()  # default session=None -> AutoComputeSettings()
+
+    assert captured_overrides is not None
+    assert "devices" not in captured_overrides
+    assert "num_nodes" not in captured_overrides
+    assert "plugins" not in captured_overrides
+
+
+def test_build_forwards_kubeflow_cluster_environment_as_a_plugin(monkeypatch):
+    from lightning.fabric.plugins.environments import KubeflowEnvironment
+
+    captured_overrides: dict | None = None
+
+    def _fake_create(settings, ctx: BuildContext):
+        nonlocal captured_overrides
+        captured_overrides = ctx.overrides
+
+        class _Dummy:
+            pass
+
+        return _Dummy()
+
+    monkeypatch.setattr(FactoryProvider, "create_component", staticmethod(_fake_create))
+
+    session = RunSettings(compute=KubeflowComputeSettings(devices=1, num_nodes=1))
+    TrainerSettings().build(session=session)
+
+    assert captured_overrides is not None
+    assert isinstance(captured_overrides["plugins"][0], KubeflowEnvironment)
+
+
+def test_build_uses_default_compute_settings_when_no_session_is_given():
+    """Without a session, compute topology resolves against defaults (auto ->
+    local, since no scheduler env vars are set), not an error."""
+    trainer = TrainerSettings(accelerator="cpu").build(session=None)
+
+    assert trainer.num_nodes == 1
+
+
+def test_build_passes_explicit_strategy_straight_through_to_real_trainer():
+    """strategy is a plain Lightning passthrough field — DLKit does not
+    select or validate it, it just has to reach the real Trainer unchanged."""
+    trainer = TrainerSettings(accelerator="cpu", strategy="ddp", devices=1, num_nodes=1).build(
+        session=None
+    )
+
+    assert type(trainer.strategy).__name__ == "DDPStrategy"
 
 
 def test_overfit_batches_leaves_the_test_split_unrestricted(train_val_test_dataloaders):

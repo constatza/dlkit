@@ -219,7 +219,7 @@ class VanillaExecutor(ITrainingExecutor):
         # fast_dev_run is a hard no-op) — neutralize both for this throwaway trainer only.
         tuning_trainer = trainer_settings.patch(
             {"overfit_batches": 0, "fast_dev_run": False}
-        ).build(session=None)
+        ).build(session=settings.run)
 
         tuning_controller = build_optimization_controller(
             cast(Any, model).model, tuning_plan.projected_policy

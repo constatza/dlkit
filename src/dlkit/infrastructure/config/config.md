@@ -15,6 +15,8 @@ workflow-specific config views, and component-setting models.
 
 Precision is documented in [`../precision/precision.md`](../precision/precision.md).
 Seeding is documented in [`../seeding/seeding.md`](../seeding/seeding.md).
+Compute topology (local/SLURM/torchrun/LSF/MPI/Kubeflow) is documented in
+[`../compute/compute.md`](../compute/compute.md).
 
 ## Current Structure
 
@@ -36,6 +38,7 @@ Seeding is documented in [`../seeding/seeding.md`](../seeding/seeding.md).
 - `tracking_settings.py`: `TrackingSettings`
 - `optimizer_policy.py`: `OptimizerPolicySettings`
 - `optimizer_component.py`: concrete optimizer and scheduler component settings
+- `compute_settings.py`: `ComputeEnvironmentSettings` (which compute environment to resolve against — nested under `RunSettings.compute`)
 
 ## Tracking Settings
 
@@ -72,6 +75,38 @@ which is exactly the multi-minute stall this field now prevents by failing
 immediately instead. `"fallback_local"` explicitly opts into tracking
 locally instead of failing; see `dlkit.engine.tracking.tracking.md` for the
 fallback/tagging mechanics.
+
+## Compute Topology
+
+`training.trainer.devices`/`.num_nodes`/`.strategy` are plain
+`TrainerSettings` fields mirroring `Trainer.__init__` directly (like
+`accelerator`/`precision` already do) — set them to force a value for this
+trainer. Leaving `devices`/`num_nodes` unset derives them from `run.compute`
+(`ComputeEnvironmentSettings`), a job-wide setting like `run.precision`/`run.seed` that
+says *which* runtime environment to resolve against (local process, SLURM,
+torchrun, ...) — not trainer-constructor config, so it lives on `RunSettings`
+rather than `TrainerSettings`. See [`../compute/compute.md`](../compute/compute.md)
+for what's automatic per environment and what still needs to be set
+explicitly (LSF/MPI/Kubeflow require `run.compute.devices`/`.num_nodes`
+directly, since those environments can't auto-derive them).
+
+```toml
+[run]
+type = "train"
+
+[run.compute]
+environment = "auto"   # or "local"/"slurm"/"torchelastic"/"lsf"/"mpi"/"kubeflow"
+
+[training.trainer]
+accelerator = "gpu"
+strategy = "ddp"
+```
+
+`engine.workflows.factories.build_strategy.build_trainer()` passes
+`settings.run` as `TrainerSettings.build()`'s `session` argument, which is
+how both `run.compute` and `run.precision` actually reach trainer
+construction in the real pipeline (not just in direct
+`TrainerSettings(...).build(session=...)` calls).
 
 ## Loading a Config
 

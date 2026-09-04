@@ -429,6 +429,47 @@ class TestVanillaExecutorLRTuning:
 
         model.temporarily_use_controller.assert_called_once_with(fake_tuning_controller)
 
+    def test_find_lr_builds_tuning_trainer_with_the_job_run_session(
+        self,
+        settings_with_lr_tuner: TrainingJobConfig,
+    ) -> None:
+        """The throwaway tuning Trainer must be built with session=settings.run,
+        not session=None - otherwise RUN.precision/RUN.compute silently stop
+        applying to the LR-range-test trainer, running the search under a
+        different precision/topology than actual training uses."""
+        import torch.nn as nn
+
+        from dlkit.engine.training.tuning.plans import SupportedLRTuningPlan
+        from dlkit.infrastructure.config.optimizer_component import AdamWSettings
+        from dlkit.infrastructure.config.optimizer_policy import OptimizerPolicySettings
+        from dlkit.infrastructure.config.trainer_settings import TrainerSettings
+
+        executor = VanillaExecutor()
+
+        model = MagicMock()
+        model.model = nn.Linear(2, 2)
+
+        tuning_plan = SupportedLRTuningPlan(
+            projected_policy=OptimizerPolicySettings(default_optimizer=AdamWSettings(lr=1e-3)),
+        )
+
+        with patch(
+            "dlkit.engine.training.optimization.controllers.build_optimization_controller",
+            return_value=MagicMock(requires_manual_optimization=False),
+        ):
+            with patch("dlkit.engine.training.tuning.lr_tuner.Tuner") as MockTuner:
+                MockTuner.return_value.lr_find.return_value.suggestion.return_value = 0.01
+                with patch.object(TrainerSettings, "build", return_value=MagicMock()) as build:
+                    executor._find_lr_with_projected_policy(
+                        model,
+                        None,
+                        settings_with_lr_tuner,
+                        tuning_plan,
+                        settings_with_lr_tuner.training.lr_tuner,
+                    )
+
+        build.assert_called_once_with(session=settings_with_lr_tuner.run)
+
     def test_find_lr_neutralizes_overfit_batches_and_fast_dev_run(
         self,
         settings_with_lr_tuner: TrainingJobConfig,

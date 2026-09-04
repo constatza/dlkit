@@ -13,6 +13,17 @@ Main Classes:
 """
 
 # Core infrastructure
+# Compute topology settings (discriminated union by environment)
+from .compute_settings import (
+    AutoComputeSettings,
+    ComputeEnvironmentSettings,
+    KubeflowComputeSettings,
+    LocalComputeSettings,
+    LSFComputeSettings,
+    MPIComputeSettings,
+    SlurmComputeSettings,
+    TorchElasticComputeSettings,
+)
 from .core import (
     BasicSettings,
     BuildContext,
@@ -115,6 +126,15 @@ __all__ = [
     # New settings classes
     "RunSettings",
     "RunType",
+    # Compute topology settings (discriminated union by environment)
+    "ComputeEnvironmentSettings",
+    "AutoComputeSettings",
+    "LocalComputeSettings",
+    "SlurmComputeSettings",
+    "TorchElasticComputeSettings",
+    "LSFComputeSettings",
+    "MPIComputeSettings",
+    "KubeflowComputeSettings",
     "ExperimentSettings",
     "DataSettings",
     "DataModuleSelector",

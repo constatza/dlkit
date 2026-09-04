@@ -114,6 +114,11 @@ class TrackingDecorator(ITrainingExecutor):
             raise TypeError(
                 f"TrackingDecorator.execute requires a JobConfig, got {type(settings).__name__}"
             )
+
+        if not self._is_tracking_owner(components):
+            logger.debug("Skipping MLflow tracking on non-zero rank")
+            return self._executor.execute(components, settings)
+
         # Configure the tracker before entering its context
         self._setup_tracking(settings)
 
@@ -323,6 +328,11 @@ class TrackingDecorator(ITrainingExecutor):
                 "TrackingDecorator.execute_within_run requires a JobConfig, "
                 f"got {type(settings).__name__}"
             )
+
+        if not self._is_tracking_owner(components):
+            logger.debug("Skipping MLflow tracking on non-zero rank")
+            return self._executor.execute(components, settings)
+
         is_local = self._tracker.is_local()
         tracked_components = self._with_artifact_policy(
             components,
@@ -336,6 +346,21 @@ class TrackingDecorator(ITrainingExecutor):
             run_context,
             tracking_uri,
         )
+
+    @staticmethod
+    def _is_tracking_owner(components: RuntimeComponents) -> bool:
+        """Return whether this process owns the MLflow run lifecycle.
+
+        Under multi-process execution (DDP etc.), every rank runs the same
+        tracking-decorated code path independently — only global rank 0 may
+        create/write to a run; every other rank must skip tracking entirely
+        and just train. Components without a trainer (or a trainer that
+        doesn't expose rank info) are always treated as the owner.
+        """
+        trainer = getattr(components, "trainer", None)
+        if trainer is None:
+            return True
+        return getattr(trainer, "is_global_zero", True)
 
     def _setup_tracking(
         self,

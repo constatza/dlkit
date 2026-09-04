@@ -62,6 +62,21 @@ training and optimization flows.
   `str` content is uploaded via MLflow's `log_text` (UTF-8 text); `bytes` content is routed through
   `binary_artifact.log_binary_artifact`, which stages it to a temp file in binary mode and uploads via
   `log_artifact` — `log_text` writes through a UTF-8 text handle and corrupts non-text bytes.
+- `TrackingDecorator._is_tracking_owner(components)` (a shared static helper)
+  is checked by **both** `execute()` and `execute_within_run()` — skipping
+  tracking entirely on any process where `components.trainer.is_global_zero`
+  is `False` (delegating straight to the wrapped executor instead), and
+  treating components with no trainer at all as always the owner. Under
+  multi-process execution (DDP, whether via local multi-GPU, SLURM,
+  torchrun, LSF, or MPI — see `dlkit.infrastructure.compute.compute.md`),
+  Lightning re-executes or independently launches the entire process per
+  rank, so every rank would otherwise call `mlflow.create_run`/`start_run`
+  redundantly (via `execute()`), or write conflicting metadata/callbacks/
+  metrics into the same already-open run (via `execute_within_run()` — the
+  HPO best-retrain/multirun-child path, where every rank shares one
+  caller-opened `run_context`, so double writes there are a correctness bug,
+  not just a duplicate run). Only rank 0 owns the MLflow run lifecycle
+  either way.
 - Training tracking is applied through `TrackingDecorator`. `execute()` owns opening
   the MLflow run; `execute_within_run(components, settings, *, run_context,
   tracking_uri=None)` runs the identical logging/callback/hook pipeline against a run

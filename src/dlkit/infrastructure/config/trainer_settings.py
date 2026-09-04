@@ -53,6 +53,9 @@ class TrainerSettings(ComponentSettings):
         callbacks (tuple[CallbackSettings, ...]): List of callbacks. Defaults to an empty tuple.
         logger (LoggerSettings): Logger settings. Defaults to an instance of LoggerSettings.
         accelerator (Literal["cpu", "cuda"]): Accelerator to use for training. Defaults to "cuda".
+        strategy (str | None): Lightning distributed strategy (e.g. "ddp"). Defaults to None.
+        devices (int | list[int] | Literal["auto"] | None): Devices per node. Defaults to None (derived).
+        num_nodes (int | None): Number of nodes. Defaults to None (derived).
     """
 
     name: str | Callable[..., Any] | dict[str, Any] | None = Field(
@@ -107,12 +110,41 @@ class TrainerSettings(ComponentSettings):
         description="Lightning precision parameter. If None, uses session precision strategy.",
     )
 
+    strategy: str | None = Field(
+        default=None,
+        description=(
+            "Lightning distributed strategy (e.g. 'ddp', 'fsdp', 'deepspeed'). "
+            "Passed straight through to Trainer — DLKit does not select or "
+            "validate strategies itself. If None, Lightning's own default "
+            "applies ('ddp' when multiple devices/nodes are resolved, "
+            "single-device otherwise)."
+        ),
+    )
+    devices: int | list[int] | Literal["auto"] | None = Field(
+        default=None,
+        description=(
+            "Lightning devices parameter. If None, derived from the resolved "
+            "compute environment (session.compute — see "
+            "dlkit.infrastructure.compute), or Lightning's own default."
+        ),
+    )
+    num_nodes: int | None = Field(
+        default=None,
+        description=(
+            "Lightning num_nodes parameter. If None, derived from the "
+            "resolved compute environment (session.compute), or Lightning's "
+            "own default (1)."
+        ),
+    )
+
     def build(self, session: RunSettings | None = None) -> Trainer:
         """Build PyTorch Lightning Trainer with precision resolution.
 
         Args:
-            session: Optional RunSettings to use as precision provider.
-                     If not provided, will use global default precision.
+            session: Optional RunSettings, used as precision provider and as
+                     the source of compute topology (session.compute). If not
+                     provided, uses global default precision and default
+                     (auto-detected) compute topology.
 
         Returns:
             Configured PyTorch Lightning Trainer instance.
@@ -149,17 +181,52 @@ class TrainerSettings(ComponentSettings):
 
         enable_progress_bar = should_enable_progress_bar()
 
+        # Resolve node/device topology with three-tier precedence:
+        # 1. This trainer's own explicit devices/num_nodes (mirrors Trainer's
+        #    own constructor directly, like accelerator/strategy/precision).
+        # 2. The compute environment's required fields (LSF/MPI/Kubeflow only
+        #    — those environments can't auto-derive, so their settings
+        #    classes require devices/num_nodes; see infrastructure.compute).
+        # 3. Auto-detected topology (local/SLURM/torchrun/etc.).
+        # session.compute lives on RunSettings, not here, because "which
+        # environment is this job running under" is job-wide config (like
+        # precision/seed), not trainer-construction config.
+        from dlkit.infrastructure.compute import resolve_compute_environment
+        from dlkit.infrastructure.config.compute_settings import AutoComputeSettings
+
+        compute = session.compute if session is not None else AutoComputeSettings()
+        topology = resolve_compute_environment(compute.environment)
+        # Only LSFComputeSettings/MPIComputeSettings/KubeflowComputeSettings
+        # declare devices/num_nodes at all (as required fields); every other
+        # environment class has neither, so getattr's default applies.
+        environment_devices = getattr(compute, "devices", None)
+        environment_num_nodes = getattr(compute, "num_nodes", None)
+
+        devices = self.devices
+        if devices is None:
+            devices = environment_devices if environment_devices is not None else topology.devices
+        num_nodes = self.num_nodes
+        if num_nodes is None:
+            num_nodes = (
+                environment_num_nodes if environment_num_nodes is not None else topology.num_nodes
+            )
+
+        overrides: dict[str, Any] = {
+            "callbacks": callbacks,
+            "logger": lightning_logger,
+            "precision": lightning_precision,
+            "enable_model_summary": False,
+            "enable_progress_bar": enable_progress_bar,
+        }
+        if devices is not None:
+            overrides["devices"] = devices
+        if num_nodes is not None:
+            overrides["num_nodes"] = num_nodes
+        if topology.cluster_environment is not None:
+            overrides["plugins"] = [topology.cluster_environment]
+
         # Build Trainer via factory with explicit overrides
         return FactoryProvider.create_component(
             self,
-            BuildContext(
-                mode="training",
-                overrides={
-                    "callbacks": callbacks,
-                    "logger": lightning_logger,
-                    "precision": lightning_precision,
-                    "enable_model_summary": False,
-                    "enable_progress_bar": enable_progress_bar,
-                },
-            ),
+            BuildContext(mode="training", overrides=overrides),
         )

@@ -7,8 +7,12 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 
+from dlkit.infrastructure.config.compute_settings import (
+    AutoComputeSettings,
+    ComputeEnvironmentSettings,
+)
 from dlkit.infrastructure.config.core.base_settings import BasicSettings
 from dlkit.infrastructure.precision.strategy import PrecisionStrategy
 
@@ -25,6 +29,9 @@ class RunSettings(BasicSettings):
         type: Workflow type (train, predict, search).
         seed: Global random seed.
         precision: Floating-point precision strategy.
+        compute: Which compute environment this job runs under (local
+            process, SLURM, torchrun, ...). Job-wide, like precision/seed —
+            not trainer-construction config.
         model: Optional path to a model profile TOML file.
         data: Optional path to a data profile TOML file.
         training: Optional path to a training profile TOML file.
@@ -35,6 +42,7 @@ class RunSettings(BasicSettings):
     type: RunType | None = None
     seed: int | None = None
     precision: PrecisionStrategy | None = None
+    compute: ComputeEnvironmentSettings = Field(default_factory=AutoComputeSettings)
     # Typed profile references — validated in load_job(), not here
     model: Path | None = None
     data: Path | None = None

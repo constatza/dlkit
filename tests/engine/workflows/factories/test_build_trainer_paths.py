@@ -19,6 +19,8 @@ def _make_trainer_job(
     callbacks: list[dict[str, Any]] | None = None,
     enable_checkpointing: bool | None = None,
     stopping: dict[str, Any] | None = None,
+    run: dict[str, Any] | None = None,
+    trainer_extra: dict[str, Any] | None = None,
 ) -> TrainingJobConfig:
     """Build a minimal TrainingJobConfig focused on trainer configuration.
 
@@ -29,12 +31,14 @@ def _make_trainer_job(
         callbacks: Callback dicts to include, or None for none.
         enable_checkpointing: Whether Lightning built-in checkpointing is enabled.
         stopping: Optional TRAINING.stopping overrides (monitor/direction/enabled/patience).
+        run: Optional RUN section overrides (merged over the {"type": "train"} default).
+        trainer_extra: Optional extra TRAINING.trainer fields (e.g. devices/num_nodes/strategy).
 
     Returns:
         TrainingJobConfig ready for ``build_trainer``.
     """
     root = default_root_dir or (str(tmp_path) if tmp_path is not None else None)
-    trainer_cfg: dict[str, Any] = {"accelerator": "cpu"}
+    trainer_cfg: dict[str, Any] = {"accelerator": "cpu", **(trainer_extra or {})}
     if root is not None:
         trainer_cfg["default_root_dir"] = root
     if logger_name is not None:
@@ -52,7 +56,7 @@ def _make_trainer_job(
 
     return TrainingJobConfig.model_validate(
         {
-            "run": {"type": "train"},
+            "run": {"type": "train", **(run or {})},
             "model": {"class": "Dummy"},
             "data": {"batch_size": 8, "num_workers": 0},
             "training": training_cfg,
@@ -137,6 +141,43 @@ def test_build_trainer_allows_noop_mode_without_default_root(
     checkpoint_callbacks = [cb for cb in callbacks if type(cb).__name__ == "ModelCheckpoint"]
     assert not checkpoint_callbacks
     assert not (tmp_path / "checkpoints").exists()
+
+
+# ---------------------------------------------------------------------------
+# build_trainer threads settings.run through as the session, so RUN.compute
+# (and RUN.precision) actually take effect in the real pipeline.
+# ---------------------------------------------------------------------------
+
+
+def test_build_trainer_applies_explicit_trainer_devices_and_num_nodes(tmp_path: Path) -> None:
+    """devices/num_nodes are plain TrainerSettings fields (mirroring Trainer's
+    own constructor) — build_trainer must forward them unchanged."""
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[],
+        trainer_extra={"devices": 1, "num_nodes": 1},
+    )
+
+    trainer = build_trainer(settings)
+
+    assert trainer is not None
+    assert trainer.num_nodes == 1
+
+
+def test_build_trainer_applies_run_compute_environment_selection(tmp_path: Path) -> None:
+    """run.compute selects which environment to resolve against; build_trainer
+    threads settings.run through as TrainerSettings.build()'s session so this
+    (and run.precision) actually take effect in the real pipeline."""
+    settings = _make_trainer_job(
+        default_root_dir=str(tmp_path),
+        callbacks=[],
+        run={"compute": {"environment": "local"}},
+    )
+
+    trainer = build_trainer(settings)
+
+    assert trainer is not None
+    assert trainer.num_nodes == 1
 
 
 # ---------------------------------------------------------------------------

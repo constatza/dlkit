@@ -218,6 +218,95 @@ def build_components():
     )
 
 
+@pytest.fixture
+def build_components_non_zero_rank(build_components):
+    """Same components as build_components, but the trainer reports it is
+    not global rank 0 (simulating one of several DDP processes)."""
+    build_components.trainer.is_global_zero = False
+    return build_components
+
+
+@pytest.fixture
+def build_components_without_trainer():
+    """RuntimeComponents with no trainer at all (e.g. a non-training path)."""
+
+    @dataclass(frozen=True, slots=True)
+    class DummyModel:
+        pass
+
+    return RuntimeComponents(
+        model=cast("Any", DummyModel()),
+        datamodule=Mock(),
+        trainer=None,
+        meta={},
+    )
+
+
+def test_tracking_decorator_skips_tracking_on_non_zero_rank(
+    mock_executor, mock_tracker, mlflow_settings, build_components_non_zero_rank
+):
+    """Only global rank 0 owns the MLflow run lifecycle. Every other rank in
+    a multi-process job (DDP etc.) must skip tracking entirely to avoid
+    duplicate/conflicting run creation, but still run training."""
+    decorator = TrackingDecorator(mock_executor, mock_tracker)
+
+    result = decorator.execute(build_components_non_zero_rank, mlflow_settings)
+
+    assert mock_tracker.created_runs == []
+    mock_executor.execute.assert_called_once_with(build_components_non_zero_rank, mlflow_settings)
+    assert isinstance(result, TrainingResult)
+
+
+def test_tracking_decorator_tracks_when_no_trainer_is_present(
+    mock_executor, mock_tracker, mlflow_settings, build_components_without_trainer
+):
+    """The rank-zero guard must not block tracking when there is no trainer
+    to check (e.g. components built outside a training path)."""
+    decorator = TrackingDecorator(mock_executor, mock_tracker)
+
+    decorator.execute(build_components_without_trainer, mlflow_settings)
+
+    assert len(mock_tracker.created_runs) == 1
+
+
+def test_tracking_decorator_execute_within_run_skips_tracking_on_non_zero_rank(
+    mock_executor, mock_tracker, mlflow_settings, build_components_non_zero_rank
+):
+    """execute_within_run (the HPO best-retrain / multirun-child path) must
+    apply the same rank-zero guard as execute — every rank shares the same
+    already-open run_context, so a non-zero rank writing metadata/callbacks/
+    metrics into it would conflict with rank 0's writes, not just duplicate
+    run creation."""
+    decorator = TrackingDecorator(mock_executor, mock_tracker)
+
+    result = decorator.execute_within_run(
+        build_components_non_zero_rank,
+        mlflow_settings,
+        run_context=mock_tracker.run_context,
+    )
+
+    assert mock_tracker.run_context.logged_metrics == {}
+    assert mock_tracker.run_context.logged_params == {}
+    mock_executor.execute.assert_called_once_with(build_components_non_zero_rank, mlflow_settings)
+    assert isinstance(result, TrainingResult)
+
+
+def test_tracking_decorator_execute_within_run_tracks_on_rank_zero(
+    mock_executor, mock_tracker, mlflow_settings, build_components
+):
+    """Sanity check for the guard above: rank 0 (the default mock trainer)
+    still gets full execute_within_run logging, not accidentally skipped."""
+    decorator = TrackingDecorator(mock_executor, mock_tracker)
+
+    decorator.execute_within_run(
+        build_components,
+        mlflow_settings,
+        run_context=mock_tracker.run_context,
+    )
+
+    assert mock_tracker.run_context.logged_params["metric_status"] == "ok"
+
+
 def test_tracking_decorator_single_responsibility(
     mock_executor, mock_tracker, mlflow_settings, build_components
 ):
