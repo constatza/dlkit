@@ -120,7 +120,7 @@ model = DualPathFFNN(
     hidden_size=128,
     num_layers=3,
     n_modes=16,
-    merge="add",   # or "concat"
+    merge="add",  # or "concat"
 )
 ```
 

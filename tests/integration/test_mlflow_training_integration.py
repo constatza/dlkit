@@ -81,15 +81,17 @@ def _expected_tracking_uri(result: Any | None = None) -> str:
     return mlflow.get_tracking_uri()
 
 
-def _artifact_path_from_uri(uri: str) -> Path:
+def _artifact_path_from_uri(uri: str | None) -> Path:
     """Convert an artifact URI to a local filesystem path.
 
     Args:
-        uri: Artifact URI string.
+        uri: Artifact URI string. MLflow types this as optional, but a run
+            in this test suite always has one set.
 
     Returns:
         Local Path derived from the URI.
     """
+    assert uri is not None, "Expected the run to have an artifact_uri set"
     parsed_uri = urlparse(uri)
     return Path(url2pathname(parsed_uri.path))
 

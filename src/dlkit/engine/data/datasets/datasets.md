@@ -366,12 +366,14 @@ To add new array formats (HDF5, Zarr, Parquet):
 
 2. Register in `_LOADER_MAP`:
    ```python
-   _LOADER_MAP = MappingProxyType({
-       ".npy": np.load,
-       ".npz": _load_npz,
-       ".h5": _load_hdf5,  # New format
-       # ...
-   })
+   _LOADER_MAP = MappingProxyType(
+       {
+           ".npy": np.load,
+           ".npz": _load_npz,
+           ".h5": _load_hdf5,  # New format
+           # ...
+       }
+   )
    ```
 
 3. FlexibleDataset automatically supports the new format!

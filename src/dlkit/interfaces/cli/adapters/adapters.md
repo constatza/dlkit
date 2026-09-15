@@ -76,7 +76,6 @@ settings = load_config(Path("config.toml"))
 
 # With workflow override
 training_settings = load_config(Path("config.toml"), run_type="train")
-
 ```
 
 **Implementation Notes**:

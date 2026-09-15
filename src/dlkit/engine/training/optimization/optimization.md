@@ -273,13 +273,9 @@ program = OptimizerPolicySettings(
     )
 )
 
-program = OptimizerPolicySettings(
-    default_optimizer=MuonSettings(lr=0.02)
-)
+program = OptimizerPolicySettings(default_optimizer=MuonSettings(lr=0.02))
 
-program = OptimizerPolicySettings(
-    default_optimizer=BatchedMuonSettings(lr=0.02)
-)
+program = OptimizerPolicySettings(default_optimizer=BatchedMuonSettings(lr=0.02))
 
 program = OptimizerPolicySettings(
     stages=(

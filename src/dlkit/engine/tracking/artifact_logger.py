@@ -400,8 +400,11 @@ class ArtifactLogger:
             result: Training result (not currently used but kept for extensibility)
         """
         accessor = ConfigAccessor(settings)
+        # get_extras() always returns None under the new config schema (see its
+        # docstring) - the block below is dead pending that deprecation's
+        # completion, not a bug; ty correctly flags it as unreachable.
         extras = accessor.get_extras()
-        if not extras:
+        if not extras:  # ty: ignore[redundant-condition]
             logger.debug("No EXTRAS configuration found")
             return
 

@@ -94,12 +94,14 @@ cae = SkipCAE1d(in_channels=32, in_length=100, latent_channels=8, latent_size=64
 # Entry-based construction (used by the build factory)
 input_shapes = {"x": (32, 100)}
 output_shapes = {"y": (32, 100)}
-cae = SkipCAE1d.from_entries(input_shapes, output_shapes, latent_channels=8, latent_size=64, num_layers=3)
+cae = SkipCAE1d.from_entries(
+    input_shapes, output_shapes, latent_channels=8, latent_size=64, num_layers=3
+)
 
 x = torch.randn(16, 32, 100)  # (batch, channels, timesteps)
-latent = cae.encode(x)        # Shape: (16, 64)
+latent = cae.encode(x)  # Shape: (16, 64)
 reconstructed = cae.decode(latent)  # Shape: (16, 32, 100)
-output = cae(x)               # Equivalent to decode(encode(x))
+output = cae(x)  # Equivalent to decode(encode(x))
 ```
 
 **Implementation Notes**:

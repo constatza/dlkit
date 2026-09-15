@@ -43,8 +43,8 @@ gated on `kind == "model"` inside `_make_register` (other kinds are
 untouched):
 
 ```python
-input_spec = getattr(target, "InputSpec", None)      # must exist
-field_names = frozenset(input_spec.model_fields)      # may be empty
+input_spec = getattr(target, "InputSpec", None)  # must exist
+field_names = frozenset(input_spec.model_fields)  # may be empty
 # if non-empty, every field name must match a forward() parameter
 ```
 

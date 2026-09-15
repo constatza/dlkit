@@ -113,8 +113,8 @@ construction in the real pipeline (not just in direct
 ```python
 from dlkit.infrastructure.config.factories import load_job
 
-job = load_job("config.toml")                # type inferred from run.type
-job = load_job(["base.toml", "local.toml"]) # merged left-to-right
+job = load_job("config.toml")  # type inferred from run.type
+job = load_job(["base.toml", "local.toml"])  # merged left-to-right
 job = load_job("config.toml", run_type="train")  # override type
 ```
 
@@ -405,9 +405,7 @@ settings = TrainingSettings(
 )
 
 settings = TrainingSettings(
-    optimizer=OptimizerPolicySettings(
-        default_optimizer=BatchedMuonSettings(lr=0.02)
-    )
+    optimizer=OptimizerPolicySettings(default_optimizer=BatchedMuonSettings(lr=0.02))
 )
 ```
 

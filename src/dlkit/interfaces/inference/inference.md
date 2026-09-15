@@ -62,8 +62,8 @@ updating weights. It is a fourth workflow entrypoint, on equal footing with
 from dlkit.interfaces.inference import evaluate
 
 result = evaluate(inference_settings)
-result.metrics      # {"mae": ..., "rmse": ..., "r2": ...}
-result.figures       # {"parity_plot": Figure, "residual_plot": Figure, ...}
+result.metrics  # {"mae": ..., "rmse": ..., "r2": ...}
+result.figures  # {"parity_plot": Figure, "residual_plot": Figure, ...}
 ```
 
 Requires `settings.data.targets` to be configured (there is no plot without
@@ -109,10 +109,10 @@ mechanism:
 from dlkit.interfaces.api.functions.core import evaluate_multirun
 
 batch = evaluate_multirun(inference_settings, parent_run_id="parent-run-id")
-batch.parent_run_id   # the new evaluate-sweep's own parent run id
+batch.parent_run_id  # the new evaluate-sweep's own parent run id
 for outcome in batch.children:
-    outcome.run_id       # the checkpoint-source child run, once tagged
-    outcome.result        # EvaluationResult for that child (on ChildSuccess)
+    outcome.run_id  # the checkpoint-source child run, once tagged
+    outcome.result  # EvaluationResult for that child (on ChildSuccess)
 ```
 
 Returns `MultiRunResult[ChildOutcome[WorkflowResult]]` — the same shape every

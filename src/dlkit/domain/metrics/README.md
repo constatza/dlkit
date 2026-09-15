@@ -41,8 +41,8 @@ Relative error: **mean(‖pred − target‖ₚ / ‖target‖ₚ)** per sample.
 from dlkit.domain.metrics import RelativeVectorNormError
 
 metric = RelativeVectorNormError(norm_ord=2, vector_dim=-1, eps=1e-8)
-metric.update(preds, targets)   # preds/targets: (B, ..., D)
-value = metric.compute()        # scalar
+metric.update(preds, targets)  # preds/targets: (B, ..., D)
+value = metric.compute()  # scalar
 ```
 
 | Parameter | Default | Meaning |
@@ -61,8 +61,8 @@ Absolute error in a given norm: **mean(‖pred − target‖ₚ)** per sample.
 from dlkit.domain.metrics import AbsoluteVectorNormError
 
 metric = AbsoluteVectorNormError(norm_ord=2, vector_dim=-1)
-metric.update(preds, targets)   # (B, ..., D)
-value = metric.compute()        # scalar
+metric.update(preds, targets)  # (B, ..., D)
+value = metric.compute()  # scalar
 ```
 
 ---
@@ -76,10 +76,10 @@ sequential predictions.
 from dlkit.domain.metrics import TemporalDerivativeError
 
 velocity_err = TemporalDerivativeError(n=1, derivative_dim=1)
-accel_err    = TemporalDerivativeError(n=2, derivative_dim=1)
+accel_err = TemporalDerivativeError(n=2, derivative_dim=1)
 
 velocity_err.update(preds, targets)  # preds/targets: (B, T, D), T >= n+1
-value = velocity_err.compute()       # scalar
+value = velocity_err.compute()  # scalar
 ```
 
 | Parameter | Default | Meaning |
@@ -117,7 +117,7 @@ from dlkit.domain.metrics import RelativeEnergyNormError
 
 metric = RelativeEnergyNormError(eps=1e-8)
 metric.update(preds, targets, matrix)  # same shapes as EnergyNormError
-value = metric.compute()               # scalar
+value = metric.compute()  # scalar
 ```
 
 ---
@@ -130,26 +130,23 @@ new metrics. Import directly from `dlkit.domain.metrics`:
 ```python
 from dlkit.domain.metrics import (
     # Composable building blocks
-    compute_error_vectors,         # preds - target
-    compute_vector_norm,           # ‖tensor‖ₚ along dim
-    safe_divide,                   # a / (b + eps)
-    apply_aggregation,             # reduce with any callable
-
+    compute_error_vectors,  # preds - target
+    compute_vector_norm,  # ‖tensor‖ₚ along dim
+    safe_divide,  # a / (b + eps)
+    apply_aggregation,  # reduce with any callable
     # Vector metrics (return scalar by default)
     relative_vector_norm_error,  # configurable ord, dim, aggregator
-    relative_l1_error,           # ord=1 partial
-    relative_l2_error,           # ord=2 partial
-    relative_linf_error,         # ord=inf partial
-
+    relative_l1_error,  # ord=1 partial
+    relative_l2_error,  # ord=2 partial
+    relative_linf_error,  # ord=inf partial
     # Energy norm primitives
-    compute_quadratic_form,        # vᵀ A v per sample → (B,)
-    compute_energy_norm,           # sqrt(vᵀ A v) per sample → (B,)
-
+    compute_quadratic_form,  # vᵀ A v per sample → (B,)
+    compute_energy_norm,  # sqrt(vᵀ A v) per sample → (B,)
     # Temporal metrics
-    compute_temporal_derivative,   # nth finite difference (B,T,D) → (B,T-n,D)
-    temporal_derivative_error,     # MSE of nth derivative
-    first_derivative_error,        # n=1 partial
-    second_derivative_error,       # n=2 partial
+    compute_temporal_derivative,  # nth finite difference (B,T,D) → (B,T-n,D)
+    temporal_derivative_error,  # MSE of nth derivative
+    first_derivative_error,  # n=1 partial
+    second_derivative_error,  # n=2 partial
 )
 ```
 

@@ -40,12 +40,14 @@ from dataclasses import dataclass
 import numpy as np
 from matplotlib.figure import Figure
 
+
 @dataclass(frozen=True)
 class MyGenerator:
     name: str = "my_plot"
 
-    def generate(self, predictions: np.ndarray, targets: np.ndarray) -> Figure:
-        ...  # return a matplotlib Figure; caller closes it
+    def generate(
+        self, predictions: np.ndarray, targets: np.ndarray
+    ) -> Figure: ...  # return a matplotlib Figure; caller closes it
 ```
 
 The class does not need to inherit from anything — `IFigureGenerator` is a

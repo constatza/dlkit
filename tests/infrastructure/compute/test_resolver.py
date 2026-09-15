@@ -54,4 +54,4 @@ def test_kubeflow_only_reachable_via_explicit_override():
 
 def test_unknown_override_raises_value_error():
     with pytest.raises(ValueError, match="Unknown compute environment"):
-        resolve_compute_environment("pbs")  # type: ignore[arg-type]
+        resolve_compute_environment("pbs")  # ty: ignore[invalid-argument-type]

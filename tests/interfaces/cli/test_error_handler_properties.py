@@ -60,7 +60,7 @@ def missing_field_validation_error() -> pydantic.ValidationError:
 def invalid_type_validation_error() -> pydantic.ValidationError:
     """A real pydantic ValidationError produced by a field of the wrong type."""
     try:
-        _RequiredFieldModel(name="ok", count="not-an-int")  # ty: ignore[invalid-argument-type]
+        _RequiredFieldModel(name="ok", count="not-an-int")
     except pydantic.ValidationError as exc:
         return exc
     raise AssertionError("Expected a pydantic.ValidationError")

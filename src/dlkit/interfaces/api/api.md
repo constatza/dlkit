@@ -40,13 +40,17 @@ from dlkit.interfaces.api.domain import (
 )
 
 training_result = train(settings, overrides=TrainingOverrides(epochs=50, batch_size=64))
-optimization_result = optimize(settings, overrides=OptimizationOverrides(trials=25, study_name="search"))
+optimization_result = optimize(
+    settings, overrides=OptimizationOverrides(trials=25, study_name="search")
+)
 convergence_result = converge(settings, overrides=ConvergenceOverrides(repeats=3))
 result = execute(settings, overrides=ExecutionOverrides(run_name="baseline"))
 
 from dlkit.interfaces.api import run_multirun_config
 
-sweep_result = run_multirun_config(multirun_settings)  # MultiRunResult[ChildOutcome[WorkflowResult]]
+sweep_result = run_multirun_config(
+    multirun_settings
+)  # MultiRunResult[ChildOutcome[WorkflowResult]]
 ```
 
 `run_multirun_config()`/`run_multirun_spec()` accept an `mlflow: bool = False`

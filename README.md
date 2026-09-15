@@ -25,8 +25,7 @@ Install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) first if
 
 PyTorch is selected through extras and is not installed by default. Choose exactly one accelerator extra:
 
-- `cu130` for CUDA 13.0
-- `cu128` for CUDA 12.8
+- `cuda` for CUDA 13.2
 - `cpu` for CPU-only installs
 
 ### Add To A Project
@@ -34,20 +33,20 @@ PyTorch is selected through extras and is not installed by default. Choose exact
 Use this when you want `import dlkit` inside an application or library.
 
 ```bash
-uv add "dlkit[cu130] @ git+https://github.com/constatza/dlkit.git"
+uv add "dlkit[cuda] @ git+https://github.com/constatza/dlkit.git"
 ```
 
-Replace `cu130` with `cu128` or `cpu` if you need a different build.
+Replace `cuda` with `cpu` if you need a CPU-only build.
 
 ### Install The CLI As A Tool
 
 Use this when you only want the `dlkit` command for config-driven workflows.
 
 ```bash
-uv tool install "dlkit[cu130] @ git+https://github.com/constatza/dlkit.git"
+uv tool install "dlkit[cuda] @ git+https://github.com/constatza/dlkit.git"
 ```
 
-Replace `cu130` with `cu128` or `cpu` if you need a different build.
+Replace `cuda` with `cpu` if you need a CPU-only build.
 
 ## Quick Start
 
@@ -182,8 +181,7 @@ path = "features_z.npy"
 ```
 
 ```python
-def forward(self, x, z):
-    ...
+def forward(self, x, z): ...
 ```
 
 DLKit dispatches these as `model(x=x_tensor, z=z_tensor)`.
@@ -201,8 +199,7 @@ features = [
 ```
 
 ```python
-def forward(self, x, z):
-    ...
+def forward(self, x, z): ...
 ```
 
 Because these model-input entries are unnamed, DLKit uses positional dispatch and calls `model(x_tensor, z_tensor)`.

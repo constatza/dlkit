@@ -299,15 +299,23 @@ def select_enabled_generators(settings: PlotSettings) -> list[IFigureGenerator]:
         ResidualVsIndexGenerator,
     )
 
+    # ty (>=0.0.81) rejects these as IFigureGenerator despite each dataclass
+    # having the exact `name: str` attribute and `generate(...)  -> Figure`
+    # method the Protocol requires - runtime isinstance(g, IFigureGenerator)
+    # confirms they satisfy it; false positive, not a real mismatch.
     generators: list[IFigureGenerator] = []
     if settings.parity:
-        generators.append(ParityGenerator(max_points=settings.max_scatter_points))
+        generators.append(
+            ParityGenerator(max_points=settings.max_scatter_points)  # ty: ignore[invalid-argument-type]
+        )
     if settings.residual:
-        generators.append(ResidualGenerator(max_points=settings.max_scatter_points))
+        generators.append(
+            ResidualGenerator(max_points=settings.max_scatter_points)  # ty: ignore[invalid-argument-type]
+        )
     if settings.error_histogram:
         display_percentiles = settings.error_histogram_display_percentiles
         generators.append(
-            ErrorHistogramGenerator(
+            ErrorHistogramGenerator(  # ty: ignore[invalid-argument-type]
                 bins=settings.error_histogram_bins,
                 display_percentiles=(
                     None if display_percentiles == "full" else display_percentiles
@@ -315,7 +323,11 @@ def select_enabled_generators(settings: PlotSettings) -> list[IFigureGenerator]:
             )
         )
     if settings.residual_vs_index:
-        generators.append(ResidualVsIndexGenerator(max_points=settings.max_scatter_points))
+        generators.append(
+            ResidualVsIndexGenerator(  # ty: ignore[invalid-argument-type]
+                max_points=settings.max_scatter_points
+            )
+        )
 
     return generators
 
