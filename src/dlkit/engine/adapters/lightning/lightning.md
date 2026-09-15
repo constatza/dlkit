@@ -405,9 +405,9 @@ checkpoint["dlkit_metadata"] = {
     },
     "entry_configs": [{"name": "x", "class_name": "Feature", "transforms": [...]}, ...],
     "shape_summary": {"in_shapes": [[32]], "out_shapes": [[8]]},
-    "feature_names": ["x"],          # model-input entry names (for inference transform lookup)
-    "forward_arg_map": {"x": "x"},   # {kwarg_name: feature_name}; empty dict = positional dispatch
-    "predict_target_key": "y",        # target whose inverse transform is applied at predict time
+    "feature_names": ["x"],  # model-input entry names (for inference transform lookup)
+    "forward_arg_map": {"x": "x"},  # {kwarg_name: feature_name}; empty dict = positional dispatch
+    "predict_target_key": "y",  # target whose inverse transform is applied at predict time
     "model_family": "dlkit_nn",
     "target_names": ["y"],
 }

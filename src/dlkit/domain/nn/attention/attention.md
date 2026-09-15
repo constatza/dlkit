@@ -237,13 +237,15 @@ import torch.nn as nn
 class DeepAttentionNetwork(nn.Module):
     def __init__(self, embed_dim: int, num_layers: int = 3):
         super().__init__()
-        self.layers = nn.ModuleList([
-            SelfAttentionBlock(embed_dim=embed_dim, num_heads=4) for _ in range(num_layers)
-        ])
-        self.norms = nn.ModuleList([
-            nn.LayerNorm([embed_dim, 100])  # Assuming timesteps=100
-            for _ in range(num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [SelfAttentionBlock(embed_dim=embed_dim, num_heads=4) for _ in range(num_layers)]
+        )
+        self.norms = nn.ModuleList(
+            [
+                nn.LayerNorm([embed_dim, 100])  # Assuming timesteps=100
+                for _ in range(num_layers)
+            ]
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         for attention, norm in zip(self.layers, self.norms):

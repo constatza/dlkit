@@ -56,8 +56,7 @@ dev = [
 [project.optional-dependencies]
 # Explicit accelerator selection is required for torch resolution.
 cpu = ["torch>=2.8.0, <3.0"]
-cu128 = ["torch>=2.8.0, <3.0"]
-cu130 = ["torch>=2.8.0, <3.0"]
+cuda = ["torch>=2.8.0, <3.0"]
 
 [project.scripts]
 dlkit = "dlkit.interfaces.cli:cli_main"
@@ -72,16 +71,14 @@ build-backend = "uv_build"
 conflicts = [
     [
         { extra = "cpu" },
-        { extra = "cu128" },
-        { extra = "cu130" },
+        { extra = "cuda" },
     ],
 ]
 
 [tool.uv.sources]
 torch = [
   { index = "pytorch-cpu", extra = "cpu" },
-  { index = "pytorch-cu128", extra = "cu128" },
-  { index = "pytorch-cu130", extra = "cu130" },
+  { index = "pytorch-cuda", extra = "cuda" },
 ]
 
 [[tool.uv.index]]
@@ -91,14 +88,8 @@ explicit = true
 
 
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url  = "https://download.pytorch.org/whl/cu128"
-explicit = true
-
-
-[[tool.uv.index]]
-name = "pytorch-cu130"
-url  = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-cuda"
+url  = "https://download.pytorch.org/whl/cu132"
 explicit = true
 
 

@@ -69,7 +69,7 @@ DLKit does **not** replace Lightning's precision handling — it augments it:
 from dlkit.infrastructure.precision import precision_override, PrecisionStrategy
 
 with precision_override(PrecisionStrategy.TRUE_16):
-    result = predictor.predict(x)   # runs under float16 context
+    result = predictor.predict(x)  # runs under float16 context
 ```
 
 Each thread gets its own override stack via `threading.local()`.

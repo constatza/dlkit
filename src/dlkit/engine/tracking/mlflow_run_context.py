@@ -198,11 +198,14 @@ class ClientBasedRunContext(IRunContext):
         """
         # Convert to MLflow batch format
         from mlflow.entities import Metric, Param, RunTag
+        from mlflow.utils.time import get_current_time_millis
 
         batch_metrics = []
         if metrics:
             for key, value, step in metrics:
-                batch_metrics.append(Metric(key, value, timestamp=None, step=step))
+                batch_metrics.append(
+                    Metric(key, value, timestamp=get_current_time_millis(), step=step)
+                )
 
         batch_params = []
         if params:

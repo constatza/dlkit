@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 
 import torch
+import typer
 from typer.testing import CliRunner
 
 from dlkit.common import ConfigurationError
@@ -131,6 +132,12 @@ class TestPredictCommand:
         mock_load_config.assert_called_once()
 
 
+def _predict_param_is_required(name: str) -> bool:
+    """Whether the registered CLI parameter of ``predict_app`` with this name is required."""
+    command = typer.main.get_command(predict_app)
+    return next(p for p in command.params if p.name == name).required
+
+
 class TestPredictMainCallback:
     def test_infer_without_args_shows_missing_argument_error(
         self,
@@ -139,7 +146,7 @@ class TestPredictMainCallback:
         result = cli_runner.invoke(predict_app, [])
 
         assert result.exit_code == 2
-        assert "Missing argument 'CONFIG_PATH'" in result.stderr
+        assert _predict_param_is_required("config_path")
 
     def test_infer_without_checkpoint_shows_missing_argument_error(
         self,
@@ -149,7 +156,7 @@ class TestPredictMainCallback:
         result = cli_runner.invoke(predict_app, [str(sample_config_path)])
 
         assert result.exit_code == 2
-        assert "Missing argument 'CHECKPOINT'" in result.stderr
+        assert _predict_param_is_required("checkpoint")
 
     @patch("dlkit.interfaces.cli.commands.predict._run_inference_impl")
     def test_infer_direct_invocation(

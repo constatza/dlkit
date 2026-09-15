@@ -162,6 +162,6 @@ and inverse traversal in reverse order.
 from dlkit.domain.transforms import TransformChain, StandardScaler, PCA
 
 chain = TransformChain([StandardScaler(), PCA(n_components=32)])
-chain.fit(train_data)      # fits each FittableTransform in order
-output = chain(train_data) # applies all transforms sequentially
+chain.fit(train_data)  # fits each FittableTransform in order
+output = chain(train_data)  # applies all transforms sequentially
 ```
