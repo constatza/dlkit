@@ -9,6 +9,8 @@ import numpy as np
 import pytest
 
 from dlkit.engine.tracking.dataset_sources import (
+    FINGERPRINT_HEX_LENGTH,
+    MLFLOW_MAX_DIGEST_LENGTH,
     compute_sources_fingerprint,
     iter_entries,
     path_entries,
@@ -43,7 +45,10 @@ class TestFingerprint:
 
     def test_missing_and_remote_sources_do_not_raise(self) -> None:
         digest = compute_sources_fingerprint(["s3://bucket/key", "/no/such/file"])
-        assert len(digest) == 64
+        assert len(digest) == FINGERPRINT_HEX_LENGTH
+
+    def test_digest_fits_mlflow_limit(self) -> None:
+        assert len(compute_sources_fingerprint(["/a"])) <= MLFLOW_MAX_DIGEST_LENGTH
 
     def test_rewritten_file_changes_digest(self, npy_file: Path) -> None:
         before = compute_sources_fingerprint([str(npy_file)])

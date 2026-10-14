@@ -22,6 +22,12 @@ from dlkit.infrastructure.config.job_config import JobConfig
 
 type _WorkflowSettings = JobConfig
 
+# MLflow's REST store rejects a dataset digest longer than this (file/SQLite stores don't
+# check, so the failure only shows up against a tracking server).
+MLFLOW_MAX_DIGEST_LENGTH = 36
+# 128 bits of SHA-256: ample for change detection, and within MLflow's limit.
+FINGERPRINT_HEX_LENGTH = 32
+
 
 def _append_unique_path(paths: list[str], candidate: Any) -> None:
     """Append candidate to paths if it is a non-empty path-like value."""
@@ -68,9 +74,10 @@ def compute_sources_fingerprint(sources: list[str] | tuple[str, ...]) -> str:
     """Content-independent digest of source paths plus their size and mtime.
 
     Order-independent. Detects a rewritten file at an unchanged path without reading it.
+    Truncated to ``FINGERPRINT_HEX_LENGTH`` so it is a valid MLflow dataset digest.
     """
     payload = json.dumps(sorted(_source_stamp(source) for source in sources), separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:FINGERPRINT_HEX_LENGTH]
 
 
 @runtime_checkable

@@ -53,7 +53,8 @@ training and optimization flows.
   captured even when structured logging declines.
 - `dataset_sources.py`: `iter_entries`/`path_entries` (the single view of configured
   entries and which are file-backed), `DatasetSourceCollector`, and
-  `compute_sources_fingerprint` (sha256 over sorted source path + size + mtime_ns;
+  `compute_sources_fingerprint` (sha256 over sorted source path + size + mtime_ns,
+  truncated to 32 hex chars because the MLflow REST store rejects digests over 36;
   metadata only, shared with the manifest artifact).
 - `dataset_payload.py`: `EntryNumpyPayloadBuilder` (in-memory entries only).
 - `dataset_strategies.py`: `LineageRecord`, the `Logged | Declined` outcome, the
