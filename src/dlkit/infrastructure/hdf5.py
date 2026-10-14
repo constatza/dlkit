@@ -47,6 +47,7 @@ class Hdf5LazyReader:
             ds = f[dataset_path]
             self._n_samples: int = ds.shape[0]
             self._sample_shape: tuple[int, ...] = tuple(ds.shape[1:])
+            self._dtype: np.dtype = ds.dtype
 
     def _ds(self) -> Any:
         """Return the open HDF5 dataset, opening the file on first access.
@@ -113,6 +114,15 @@ class Hdf5LazyReader:
             Tuple of ints.
         """
         return self._sample_shape
+
+    @property
+    def dtype(self) -> np.dtype:
+        """On-disk element dtype, probed at construction alongside shape.
+
+        Returns:
+            NumPy dtype.
+        """
+        return self._dtype
 
     def get_item(self, idx: int) -> torch.Tensor:
         """Return a single sample cast to the configured precision dtype.

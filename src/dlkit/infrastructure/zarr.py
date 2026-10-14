@@ -44,6 +44,11 @@ class ILazyReader(Protocol):
         """Shape of a single sample (all dims after axis 0)."""
         ...
 
+    @property
+    def dtype(self) -> np.dtype:
+        """On-disk element dtype."""
+        ...
+
 
 class ZarrLazyReader:
     """Lazy indexed reader for a native zarr array.
@@ -93,6 +98,11 @@ class ZarrLazyReader:
     def sample_shape(self) -> tuple[int, ...]:
         """Shape of a single sample (all dims after axis 0)."""
         return tuple(self._arr.shape[1:])
+
+    @property
+    def dtype(self) -> np.dtype:
+        """On-disk element dtype."""
+        return self._arr.dtype
 
     def get_item(self, idx: int) -> torch.Tensor:
         """Return a single sample tensor, cast to the configured precision dtype.

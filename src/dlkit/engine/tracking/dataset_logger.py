@@ -6,14 +6,14 @@ Extracted from MLflowTracker so the tracker focuses on run lifecycle only.
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
 
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.utils.logging_config import get_logger
 
-from .dataset_lineage import DatasetSourceCollector, StructuredDatasetLogger
+from .dataset_sources import DatasetSourceCollector, compute_sources_fingerprint
+from .dataset_strategies import Declined, LineageRecord, Logged, StructuredDatasetLogger
 from .interfaces import IRunContext
 
 type _WorkflowSettings = JobConfig
@@ -67,24 +67,25 @@ class DatasetLogger:
                 "No dataset found in datamodule, continuing with settings-driven lineage logging"
             )
 
-        dataset_name = self._resolve_dataset_name(settings)
-        structured_logger = StructuredDatasetLogger()
-        if structured_logger.log(
-            dataset=dataset,
-            run_context=run_context,
-            settings=settings,
-            dataset_name=dataset_name,
-            sources=sources,
+        record = LineageRecord(
+            name=self._resolve_dataset_name(settings),
+            sources=tuple(sources),
             tags=tags,
-        ):
-            return True
-
-        logger.warning(
-            "Structured MLflow dataset logging unavailable for dataset class '{}' "
-            "and current config payload; manifest artifact fallback will be used.",
-            type(dataset).__name__ if dataset is not None else "None",
         )
-        return False
+        outcome = StructuredDatasetLogger().log(
+            dataset=dataset, run_context=run_context, settings=settings, record=record
+        )
+        match outcome:
+            case Logged():
+                return True
+            case Declined(reason=reason):
+                logger.warning(
+                    "Structured MLflow dataset logging unavailable for dataset class '{}' "
+                    "({}); manifest artifact fallback will be used.",
+                    type(dataset).__name__ if dataset is not None else "None",
+                    reason,
+                )
+                return False
 
     def _resolve_dataset_name(self, settings: _WorkflowSettings) -> str:
         ds = settings.data
@@ -121,8 +122,7 @@ class DatasetLogger:
         structured_logged: bool,
     ) -> None:
         try:
-            fingerprint_payload = json.dumps(sorted(sources), separators=(",", ":"))
-            fingerprint = hashlib.sha256(fingerprint_payload.encode("utf-8")).hexdigest()
+            fingerprint = compute_sources_fingerprint(sources)
 
             manifest = {
                 "dataset_name": self._resolve_dataset_name(settings),

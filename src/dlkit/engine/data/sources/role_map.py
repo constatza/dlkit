@@ -22,7 +22,8 @@ import torch
 from dlkit.common.errors import BatchComplianceError
 from dlkit.common.sources import ArraySource
 from dlkit.infrastructure.config.entry_factories import AnyEntry, is_feature, is_target
-from dlkit.infrastructure.config.entry_protocols import IValueBased, PathBasedEntry
+from dlkit.infrastructure.config.entry_protocols import IValueBased
+from dlkit.infrastructure.config.entry_types import PathBasedEntry
 from dlkit.infrastructure.precision.service import PrecisionService
 
 from ._helpers import _require_name

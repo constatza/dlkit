@@ -14,11 +14,6 @@ from .config import (
 from .index import load_split_indices
 from .path_resolver import PathResolver
 from .tables import read_table
-from .tensor_entries import (
-    TensorDataEntry,
-    convert_totensor_entries,
-    to_tensor_entry,
-)
 from .writers import IWriter, JsonWriter, TomlWriter, WriterFactory, YamlWriter
 
 __all__ = [
@@ -26,10 +21,6 @@ __all__ = [
     "load_array",
     "read_table",
     "load_split_indices",
-    # Tensor entries
-    "TensorDataEntry",
-    "to_tensor_entry",
-    "convert_totensor_entries",
     # Low-level config utilities
     "load_config",
     "load_raw_config",

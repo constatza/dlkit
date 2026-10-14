@@ -8,16 +8,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import h5py
 import numpy as np
 import pandas as pd
 import pytest
+import zarr
 
 from dlkit.common.hooks import ParamValue
 from dlkit.engine.tracking.dataset_logger import DatasetLogger
 from dlkit.engine.tracking.interfaces import IRunContext
 from dlkit.infrastructure.config.data_roles import DataRole
 from dlkit.infrastructure.config.data_settings import DataSettings
-from dlkit.infrastructure.config.entry_types import NpyEntry
+from dlkit.infrastructure.config.entry_types import Hdf5Entry, NpyEntry, ValueEntry, ZarrEntry
 from dlkit.infrastructure.config.enums import DatasetFamily
 from dlkit.infrastructure.config.job_config import JobConfig
 from dlkit.infrastructure.config.run_settings import RunSettings
@@ -168,9 +170,12 @@ def job_with_empty_data() -> JobConfig:
     )
 
 
-def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(
+def test_logs_pointer_dataset_for_unsupported_runtime_dataset(
     job_with_entries: JobConfig,
 ) -> None:
+    """NpyEntry features/targets are path-based, so they fall through to the
+    pointer-only MetaDataset strategy (not from_numpy) even though the runtime
+    dataset object itself doesn't support tabular logging either."""
     run_context = _DatasetRunContext()
     tracker = DatasetLogger()
 
@@ -181,6 +186,7 @@ def test_logs_structured_entry_dataset_for_unsupported_runtime_dataset(
 
     assert len(run_context.logged_datasets) == 1
     assert run_context.logged_datasets[0]["context"] == "training"
+    assert type(run_context.logged_datasets[0]["dataset"]).__name__ == "MetaDataset"
     assert len(run_context.manifests) == 1
     manifest = run_context.manifests[0]
     assert manifest["dataset_name"] == "CustomDataset"
@@ -240,6 +246,126 @@ def test_collects_graph_sources_from_dataset_settings_fields(tmp_path: Path) -> 
     manifest = run_context.manifests[0]
     assert manifest["source_count"] == 3
     assert run_context.tags["dataset_source_count"] == "3"
+
+
+def test_logs_pointer_dataset_for_hdf5_features_no_eager_load(tmp_path: Path) -> None:
+    """End-to-end: Hdf5Entry features/targets log via the pointer-only MetaDataset path.
+
+    Originally reported bug: `_load_hdf5() missing 1 required positional argument:
+    'array_key'`, raised from eagerly materializing Hdf5Entry for lineage logging.
+    The fix isn't "pass array_key correctly" -- it's "never eagerly read a path-based
+    entry's file content just to log lineage, regardless of format." This exercises
+    the real production path end-to-end: DatasetLogger.log_dataset_to_run ->
+    StructuredDatasetLogger -> (EntryStructuredDatasetLoggingStrategy declines because
+    the features are path-based) -> PointerDatasetLoggingStrategy -> real
+    mlflow.data.meta_dataset.MetaDataset -> run_context.log_dataset. No mocking.
+    """
+    x = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    y = np.array([[0.0], [1.0]], dtype=np.float32)
+    h5_path = tmp_path / "data.h5"
+    with h5py.File(h5_path, "w") as f:
+        grp = f.create_group("arrays")
+        grp.create_dataset("x", data=x)
+        grp.create_dataset("y", data=y)
+
+    job = JobConfig(
+        run=RunSettings(type="train"),
+        data=DataSettings.model_validate({"class": "CustomDataset"}).model_copy(
+            update={
+                "features": (
+                    Hdf5Entry(
+                        name="features",
+                        path=h5_path,
+                        group="arrays",
+                        key="x",
+                        data_role=DataRole.FEATURE,
+                        lazy=False,
+                    ),
+                ),
+                "targets": (
+                    Hdf5Entry(
+                        name="targets",
+                        path=h5_path,
+                        group="arrays",
+                        key="y",
+                        data_role=DataRole.TARGET,
+                        lazy=False,
+                    ),
+                ),
+            }
+        ),
+    )
+    run_context = _DatasetRunContext()
+    tracker = DatasetLogger()
+
+    datamodule = SimpleNamespace(dataset=SimpleNamespace())
+    tracker.log_dataset_to_run(datamodule, run_context, job)
+
+    assert len(run_context.logged_datasets) == 1
+    logged = run_context.logged_datasets[0]
+    assert logged["context"] == "training"
+    mlflow_dataset = logged["dataset"]
+    assert type(mlflow_dataset).__name__ == "MetaDataset"
+    assert str(h5_path) in mlflow_dataset.source.uri
+    assert mlflow_dataset.digest  # path-based fingerprint, not mlflow's own content hash
+
+    manifest = run_context.manifests[0]
+    assert manifest["structured_mlflow_dataset_logged"] is True
+
+
+def test_logs_pointer_dataset_for_zarr_features(tmp_path: Path) -> None:
+    """End-to-end: a zarr-backed feature also logs via the pointer-only MetaDataset path."""
+    store_path = tmp_path / "x.zarr"
+    z = zarr.open_array(str(store_path), mode="w", shape=(2, 2), chunks=(1, 2), dtype="float32")
+    z[:] = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+
+    job = JobConfig(
+        run=RunSettings(type="train"),
+        data=DataSettings.model_validate({"class": "CustomDataset"}).model_copy(
+            update={
+                "features": (ZarrEntry(name="x", path=store_path, data_role=DataRole.FEATURE),),
+                "targets": (),
+            }
+        ),
+    )
+    run_context = _DatasetRunContext()
+    tracker = DatasetLogger()
+
+    datamodule = SimpleNamespace(dataset=SimpleNamespace())
+    tracker.log_dataset_to_run(datamodule, run_context, job)
+
+    assert len(run_context.logged_datasets) == 1
+    mlflow_dataset = run_context.logged_datasets[0]["dataset"]
+    assert type(mlflow_dataset).__name__ == "MetaDataset"
+    assert str(store_path) in mlflow_dataset.source.uri
+
+
+def test_logs_structured_numpy_dataset_for_in_memory_value_entries() -> None:
+    """In-memory ValueEntry features/targets still log via real mlflow.data.from_numpy --
+    there's no file to avoid reading, so the richer schema/profile record is kept."""
+    x = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    y = np.array([[0.0], [1.0]], dtype=np.float32)
+
+    job = JobConfig(
+        run=RunSettings(type="train"),
+        data=DataSettings.model_validate({"class": "CustomDataset"}).model_copy(
+            update={
+                "features": (ValueEntry(name="features", value=x, data_role=DataRole.FEATURE),),
+                "targets": (ValueEntry(name="targets", value=y, data_role=DataRole.TARGET),),
+            }
+        ),
+    )
+    run_context = _DatasetRunContext()
+    tracker = DatasetLogger()
+
+    datamodule = SimpleNamespace(dataset=SimpleNamespace())
+    tracker.log_dataset_to_run(datamodule, run_context, job)
+
+    assert len(run_context.logged_datasets) == 1
+    mlflow_dataset = run_context.logged_datasets[0]["dataset"]
+    assert type(mlflow_dataset).__name__ == "NumpyDataset"
+    np.testing.assert_array_equal(mlflow_dataset.features["features"], x)
+    np.testing.assert_array_equal(mlflow_dataset.targets["targets"], y)
 
 
 def test_logs_structured_tabular_dataset_when_dataframe_available(

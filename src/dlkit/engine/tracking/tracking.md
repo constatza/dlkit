@@ -47,8 +47,40 @@ training and optimization flows.
   then points the model's checkpoint override at the result.
 - `backend.py`, `discovery.py`, `uri_resolver.py`: explicit backend selection and URI helpers
 - `naming.py`: experiment/study naming helpers
+- `dataset_logger.py`: `DatasetLogger.log_dataset_to_run` — orchestrates structured
+  MLflow dataset logging plus an always-on JSON manifest artifact fallback
+  (source paths + content-independent fingerprint + tags), so lineage is
+  captured even when structured logging declines.
+- `dataset_sources.py`: `iter_entries`/`path_entries` (the single view of configured
+  entries and which are file-backed), `DatasetSourceCollector`, and
+  `compute_sources_fingerprint` (sha256 over sorted source path + size + mtime_ns;
+  metadata only, shared with the manifest artifact).
+- `dataset_payload.py`: `EntryNumpyPayloadBuilder` (in-memory entries only).
+- `dataset_strategies.py`: `LineageRecord`, the `Logged | Declined` outcome, the
+  `IDatasetLoggingStrategy` strategies (`Entry`, `Tabular`, `Pointer`) and the
+  `StructuredDatasetLogger` chain that backs `dataset_logger.py` — see Notes below.
 
 ## Notes
+- Dataset lineage logging never reads a path-based Feature/Target entry's file
+  content. `EntryNumpyPayloadBuilder` only materializes already-in-memory
+  `IValueBased` values; if *any* feature/target is path-based (`.npy`, `.npz`,
+  HDF5, zarr, ...) it declines entirely rather than emit a record with that entry
+  missing. Such datasets fall through to `PointerDatasetLoggingStrategy`, which logs
+  a real `mlflow.data.meta_dataset.MetaDataset` from the source path and a
+  metadata-based digest. MLflow's own `NumpyDataset`/`PandasDataset` digest calls
+  `ndarray.flatten()` / `df.map(type)` on the whole object, so it must not run on
+  disk-backed data.
+- Digest policy: the in-memory strategies (`Entry`, `Tabular`) let MLflow compute its
+  own content digest, so a data change at an unchanged path is still detected. Only the
+  pointer strategy uses `LineageRecord.digest` (path + size + mtime_ns).
+- `LazyReaderSchemaBuilder` attaches a tensor schema to the pointer dataset only when
+  every file-backed entry opens as an `ILazyReader` (`ZarrLazyReader`,
+  `Hdf5LazyReader`, which probe shape/dtype metadata-only). Otherwise no schema is
+  attached, since a partial schema would misdescribe the dataset.
+- Strategy contract: return `Logged`, or `Declined(reason)` when not applicable; raise
+  on genuine failure and never catch. `StructuredDatasetLogger` is the single error
+  boundary and turns a raise into `Declined`, so a failing strategy never stops the
+  ones after it.
 - Tracking scalar param maps use `ParamValue = str | int | float | bool`.
   The hook layer and the `engine.artifacts` boundary each define this same
   scalar sum type because `dlkit.engine.artifacts` is intentionally isolated in
