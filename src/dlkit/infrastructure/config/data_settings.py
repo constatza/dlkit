@@ -6,8 +6,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from pydantic import AliasChoices, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic.types import NonNegativeInt, PositiveInt
+from pydantic_settings import SettingsConfigDict
 
 from dlkit.infrastructure.config.core.base_settings import BasicSettings, ComponentSettings
 from dlkit.infrastructure.config.data_entries import AnyEntry
@@ -139,7 +140,7 @@ class DataModuleSelector(ComponentSettings):
         module_path: Python module path where the class is defined.
     """
 
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    model_config = SettingsConfigDict(frozen=True, populate_by_name=True)
 
     name: str | Callable[..., Any] | None = Field(default="ArrayDataModule", alias="class")
     module_path: str | None = None
@@ -169,7 +170,7 @@ class DataSettings(BasicSettings):
         module: Lightning DataModule class selector.
     """
 
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    model_config = SettingsConfigDict(frozen=True, populate_by_name=True)
 
     # Dataset class selector
     name: str | None = Field(default=None, alias="class")

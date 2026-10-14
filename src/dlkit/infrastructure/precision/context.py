@@ -6,7 +6,7 @@ Thread-safe precision context management for runtime overrides.
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Protocol, runtime_checkable
 
@@ -94,7 +94,7 @@ class PrecisionContext:
             del self._local.override
 
     @contextmanager
-    def precision_override(self, precision: PrecisionStrategy) -> Iterator[None]:
+    def precision_override(self, precision: PrecisionStrategy) -> Generator[None]:
         """Context manager for temporary precision override.
 
         Args:
@@ -122,7 +122,7 @@ class PrecisionContext:
 
     @classmethod
     @contextmanager
-    def override(cls, precision: PrecisionStrategy) -> Iterator[PrecisionContext]:
+    def override(cls, precision: PrecisionStrategy) -> Generator[PrecisionContext]:
         """Class-level context manager for precision override.
 
         Args:
@@ -185,7 +185,7 @@ def current_precision_override() -> PrecisionStrategy | None:
 
 
 @contextmanager
-def precision_override(precision: PrecisionStrategy) -> Iterator[None]:
+def precision_override(precision: PrecisionStrategy) -> Generator[None]:
     """Global precision override context manager.
 
     Convenience function for temporary precision overrides using the global context.

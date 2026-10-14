@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 
 from mlflow import MlflowClient
@@ -119,7 +119,7 @@ def _temporary_request_settings(
     timeout: int,
     max_retries: int,
     backoff_factor: int,
-) -> Iterator[None]:
+) -> Generator[None]:
     """Temporarily override MLflow HTTP request behaviour for fast validation.
 
     MLflow's defaults favour resiliency (large timeouts and exponential

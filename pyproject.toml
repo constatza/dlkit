@@ -16,9 +16,9 @@ dependencies = [
     "pydantic<3.0.0,>=2.7.4",
     "lightning<3.0.0,>=2.3.2",
     "mlflow>=3.0,<4.0",
-    "optuna<5,>=4",
+    "optuna>=5,<6",
     "loguru>=0.7.3",
-    "polars>=1.4.1,<2.0.0",
+    "polars>=1.4.1,<3.0",
     "pytorch-forecasting>=1.3.0",
     "psutil>=7.0.0",
     "torchmetrics>=1.7.1",
@@ -40,7 +40,7 @@ dependencies = [
 dev = [
     "hypothesis>=6.138.7",
     "prek",
-    "pytest<9.0.0,>=8.2.2",
+    "pytest>=9,<10",
     "pytest-cov>=7.0.0",
     "pytest-memray>=1.7; sys_platform != 'win32'",
     "pytest-mock>=3.14.0",
@@ -48,7 +48,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "ruff>=0.13.1",
     "tach>=0.34.0",
-    "ty>=0.0.1a21",
+    "ty>=0.0.87",
     "vulture>=2.14",
 ]
 
@@ -164,6 +164,9 @@ python-platform = "all"
 [tool.ty.rules]
 redundant-cast = "error"
 unused-type-ignore-comment = "error"
+# ty flags every torch.nn.Module.forward override and every narrowed pydantic
+# field as a mutable-attribute override; both are intended, idiomatic overrides.
+invalid-mutable-override = "ignore"
 
 [tool.ty.src]
 respect-ignore-files = true

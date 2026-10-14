@@ -52,7 +52,7 @@ class ModelOutputSpec:
         Returns:
             List starting with ``prediction_key`` followed by ``latent_keys``.
         """
-        return cast(list[NestedKey], [self.prediction_key, *self.latent_keys])
+        return [self.prediction_key, *self.latent_keys]
 
 
 class TensorDictModelInvoker:
@@ -98,9 +98,7 @@ class TensorDictModelInvoker:
         self._out_keys = self._output_spec.all_out_keys()
         n_pos: int = len(in_keys)
         kwarg_names: list[str] = list((kwarg_in_keys or {}).keys())
-        all_in_keys: list[NestedKey] = cast(
-            list[NestedKey], in_keys + list((kwarg_in_keys or {}).values())
-        )
+        all_in_keys: list[NestedKey] = in_keys + list((kwarg_in_keys or {}).values())
         self._model_cell: list[nn.Module | None] = [None]
 
         cell = self._model_cell

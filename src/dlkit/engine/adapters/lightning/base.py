@@ -7,7 +7,7 @@ is a pure Lightning coordinator.
 
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, cast
 
@@ -492,7 +492,7 @@ class CoreLightningWrapper(LightningModule, ABC):
         return self._optimization_controller.configure_optimizers()
 
     @contextmanager
-    def temporarily_use_controller(self, controller: IOptimizationController) -> Iterator[None]:
+    def temporarily_use_controller(self, controller: IOptimizationController) -> Generator[None]:
         """Temporarily swap in `controller`, restoring the original controller and
         `automatic_optimization` on exit — even on error.
 

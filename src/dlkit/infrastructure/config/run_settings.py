@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
@@ -105,7 +105,7 @@ class RunSettings(BasicSettings):
 
 
 @contextmanager
-def apply_run_context(run: RunSettings, *, workers: bool = True) -> Iterator[int]:
+def apply_run_context(run: RunSettings, *, workers: bool = True) -> Generator[int]:
     """Seed global RNG state and apply a run's precision override for a block.
 
     Kept as a standalone function rather than a ``RunSettings`` method: the

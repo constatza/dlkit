@@ -67,7 +67,7 @@ class _GATv2ConvAdapter(nn.Module):
                 f"({heads}) when concat=True"
             )
         per_head_out = out_channels // heads if concat else out_channels
-        self.conv = GATv2Conv(
+        self.conv = GATv2Conv(  # ty: ignore[call-non-callable]
             in_channels=in_channels,
             out_channels=per_head_out,
             heads=heads,
@@ -138,7 +138,7 @@ class _GCNConvAdapter(nn.Module):
             )
         self.residual = residual
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-        self.conv = GCNConv(
+        self.conv = GCNConv(  # ty: ignore[call-non-callable]
             in_channels,
             out_channels,
             improved=improved,
@@ -216,7 +216,7 @@ class _SAGEConvAdapter(nn.Module):
             )
         self.residual = residual
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-        self.conv = SAGEConv(
+        self.conv = SAGEConv(  # ty: ignore[call-non-callable]
             in_channels,
             out_channels,
             aggr=aggr,

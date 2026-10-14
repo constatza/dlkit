@@ -53,6 +53,8 @@ def canonicalize_file_uri(uri: str) -> str:
     except ValidationError:
         return stripped
 
+    if url.path is None:
+        return stripped
     canonical_path = canonicalize_file_path(url.path)
     return f"file://{_path_component_for_file_uri(canonical_path)}"
 
@@ -64,6 +66,8 @@ def normalize_file_uri(uri: str, root_dir: Path) -> str | None:
     except ValidationError:
         return None
 
+    if url.path is None:
+        return None
     canonical_path = canonicalize_file_path(url.path)
     resolved_path_str = _resolve_canonical_path_str(canonical_path, root_dir)
     return f"file://{_path_component_for_file_uri(resolved_path_str)}"

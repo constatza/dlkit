@@ -13,7 +13,7 @@ data, uses the metadata-based ``LineageRecord.digest``.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
@@ -100,7 +100,7 @@ class IDatasetLoggingStrategy(Protocol):
 
 
 @contextmanager
-def _quiet_source_warning() -> Iterator[None]:
+def _quiet_source_warning() -> Generator[None]:
     """Silence MLflow's ambiguous-dataset-source warning for plain file paths."""
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message=_AMBIGUOUS_SOURCE_WARNING, category=UserWarning)
@@ -242,7 +242,7 @@ class PointerDatasetLoggingStrategy:
         schema = self._schema_builder.build(settings)
 
         with _quiet_source_warning():
-            pointer_dataset = MetaDataset(
+            pointer_dataset = MetaDataset(  # ty: ignore[call-non-callable]
                 resolve_dataset_source(record.source),
                 name=record.name,
                 digest=record.digest,

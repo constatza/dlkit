@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -116,7 +116,7 @@ def create_mlflow_client(tracking_uri: str | None = None) -> MlflowClient:
 @contextmanager
 def tracking_uri_context(
     tracking_uri: str | None, ctx: ITrackingContext | None = None
-) -> Iterator[None]:
+) -> Generator[None]:
     """Temporarily override MLflow tracking URI while loading models.
 
     Args:
